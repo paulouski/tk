@@ -1,12 +1,19 @@
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Tk.Filters;
 
-/// <summary>Compact git status: group by status, truncate untracked.</summary>
-public sealed class GitStatusFilter : IOutputFilter
+/// <summary>Compact git status with a count-first agent-friendly format.</summary>
+public sealed partial class GitStatusFilter : IOutputFilter
 {
-    private const int MaxUntracked = 20;
-    private const int MaxPerSection = 25;
+    private readonly DetailLevel _detailLevel;
+    private readonly int _maxTopPaths;
+
+    public GitStatusFilter(DetailLevel detailLevel)
+    {
+        _detailLevel = detailLevel;
+        _maxTopPaths = detailLevel == DetailLevel.More ? 12 : 5;
+    }
 
     public string Apply(string raw, int exitCode)
     {
@@ -15,15 +22,16 @@ public sealed class GitStatusFilter : IOutputFilter
         var lines = raw.Split('\n').Select(l => l.TrimEnd('\r')).Where(l => !string.IsNullOrWhiteSpace(l)).ToArray();
 
         if (lines.Length == 0)
-            return $"{Ansi.Green("ok")} git status: clean\n";
+            return "ok status st=0 mod=0 untr=0\n";
+
+        if (LooksLikePorcelain(lines))
+            return FormatPorcelain(lines);
 
         var staged = new List<string>();
         var modified = new List<string>();
         var untracked = new List<string>();
-        var other = new List<string>();
         string? branch = null;
 
-        // Track which section we're in by watching header lines
         var section = Section.None;
 
         foreach (var line in lines)
@@ -54,12 +62,6 @@ public sealed class GitStatusFilter : IOutputFilter
                 line.StartsWith("no changes added"))
                 continue;
 
-            if (line.StartsWith("nothing to commit"))
-            {
-                other.Add(line);
-                continue;
-            }
-
             var trimmed = line.Trim();
             if (string.IsNullOrEmpty(trimmed)) continue;
 
@@ -79,32 +81,97 @@ public sealed class GitStatusFilter : IOutputFilter
             }
         }
 
+        return FormatSummary(branch, staged, modified, untracked);
+    }
+
+    private string FormatSummary(string? branch, List<string> staged, List<string> modified, List<string> untracked)
+    {
+        var clean = staged.Count == 0 && modified.Count == 0 && untracked.Count == 0;
         var sb = new StringBuilder();
-        if (branch != null)
-            sb.AppendLine($"[{branch}]");
+        sb.Append(clean ? "ok status" : "status");
+        sb.Append($" st={staged.Count} mod={modified.Count} untr={untracked.Count}");
+        if (!string.IsNullOrWhiteSpace(branch))
+            sb.Append($" br={SanitizeBranch(branch)}");
+        sb.AppendLine();
 
-        AppendSection(sb, Ansi.Green("Staged"), staged, MaxPerSection);
-        AppendSection(sb, Ansi.Yellow("Modified"), modified, MaxPerSection);
-        AppendSection(sb, Ansi.Dim("Untracked"), untracked, MaxUntracked);
+        var top = new List<string>();
+        top.AddRange(staged.Select(p => $"s:{p}"));
+        top.AddRange(modified.Select(p => $"m:{p}"));
+        top.AddRange(untracked.Select(p => $"u:{p}"));
+        if (top.Count > 0)
+            sb.AppendLine($"top={string.Join(",", top.Take(_maxTopPaths))}");
 
-        foreach (var o in other)
-            sb.AppendLine(o);
-
-        if (sb.Length == 0 || (branch != null && sb.ToString().Trim() == $"[{branch}]"))
-            return $"{Ansi.Green("ok")} git status: clean ({branch})\n";
+        if (_detailLevel == DetailLevel.More)
+        {
+            AppendSection(sb, "staged", staged);
+            AppendSection(sb, "modified", modified);
+            AppendSection(sb, "untracked", untracked);
+        }
 
         return sb.ToString();
     }
 
-    private static void AppendSection(StringBuilder sb, string title, List<string> items, int max)
+    private static bool LooksLikePorcelain(string[] lines) =>
+        lines.Any(line => line.StartsWith("## "))
+        || lines.All(line => line.Length >= 3 && PorcelainStatusRe().IsMatch(line));
+
+    private string FormatPorcelain(string[] lines)
     {
-        if (items.Count == 0) return;
-        sb.AppendLine($"{title} ({items.Count}):");
-        foreach (var item in items.Take(max))
-            sb.AppendLine($"  {item}");
-        if (items.Count > max)
-            sb.AppendLine(Ansi.Dim($"  ... +{items.Count - max} more"));
+        string? branch = null;
+        var staged = new List<string>();
+        var modified = new List<string>();
+        var untracked = new List<string>();
+
+        foreach (var line in lines)
+        {
+            if (line.StartsWith("## "))
+            {
+                branch = line["## ".Length..].Trim();
+                continue;
+            }
+
+            if (line.Length < 4)
+                continue;
+
+            var x = line[0];
+            var y = line[1];
+            var path = line[3..].Trim();
+            if (string.IsNullOrWhiteSpace(path))
+                continue;
+
+            if (x == '?' && y == '?')
+            {
+                untracked.Add(path);
+                continue;
+            }
+
+            if (x != ' ' && x != '?')
+                staged.Add(path);
+            if (y != ' ' && y != '?')
+                modified.Add(path);
+        }
+
+        return FormatSummary(branch, staged, modified, untracked);
     }
+
+    private static void AppendSection(StringBuilder sb, string title, List<string> items)
+    {
+        if (items.Count == 0)
+            return;
+
+        sb.AppendLine($"{title}:");
+        foreach (var item in items)
+            sb.AppendLine($"  {item}");
+    }
+
+    private static string SanitizeBranch(string branch)
+    {
+        var branchOnly = branch.Split("...", 2, StringSplitOptions.None)[0].Trim();
+        return branchOnly.Replace(' ', '_');
+    }
+
+    [GeneratedRegex(@"^(?:\?\?|!!|[ MARCUD][ MARCUD])\s")]
+    private static partial Regex PorcelainStatusRe();
 
     private enum Section { None, Staged, Modified, Untracked }
 }

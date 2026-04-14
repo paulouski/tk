@@ -335,7 +335,7 @@ public static partial class LogFileFilter
     private static string FormatEntries(List<LogEntry> entries, string filePath)
     {
         if (entries.Count == 0)
-            return $"{Ansi.Green("ok")} log {Path.GetFileName(filePath)}: no notable entries\n";
+            return $"ok log n=0 file={Path.GetFileName(filePath)}\n";
 
         var sb = new StringBuilder();
         var fileName = Path.GetFileName(filePath);
@@ -343,10 +343,10 @@ public static partial class LogFileFilter
         var warnCount = entries.Count(e => e.Level == "warn");
         var infoCount = entries.Count(e => e.Level == "info");
 
-        sb.Append($"log {fileName}: {entries.Count} entries");
-        if (errorCount > 0) sb.Append(Ansi.Red($", {errorCount} errors"));
-        if (warnCount > 0) sb.Append(Ansi.Yellow($", {warnCount} warnings"));
-        if (infoCount > 0) sb.Append($", {infoCount} info");
+        sb.Append($"log n={entries.Count} file={fileName}");
+        if (errorCount > 0) sb.Append($" e={errorCount}");
+        if (warnCount > 0) sb.Append($" w={warnCount}");
+        if (infoCount > 0) sb.Append($" i={infoCount}");
         sb.AppendLine();
         sb.AppendLine(Ansi.Dim("---"));
 

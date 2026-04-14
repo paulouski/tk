@@ -38,6 +38,28 @@ public sealed partial class DotnetBuildFilter : IOutputFilter
                 continue;
             }
 
+            // Extract tool diagnostics: "MSBUILD : error MSB1009: message"
+            var toolMatch = ToolDiagnosticRe().Match(line);
+            if (toolMatch.Success)
+            {
+                var diag = new Diagnostic(
+                    File: toolMatch.Groups["source"].Value.Trim(),
+                    Line: 0,
+                    Column: 0,
+                    Kind: toolMatch.Groups["kind"].Value.ToLowerInvariant(),
+                    Code: toolMatch.Groups["code"].Value,
+                    Message: toolMatch.Groups["msg"].Value.Trim(),
+                    Project: ""
+                );
+
+                if (diag.Kind == "error")
+                    errors.Add(diag);
+                else
+                    warnings.Add(diag);
+
+                continue;
+            }
+
             // Extract project build lines: "ProjectName -> output.dll"
             var projMatch = ProjectBuildRe().Match(line);
             if (projMatch.Success)
@@ -60,14 +82,21 @@ public sealed partial class DotnetBuildFilter : IOutputFilter
 
         var sb = new StringBuilder();
         var status = succeeded ? Ansi.Green("ok") : Ansi.Red("FAIL");
-        var projectCount = Math.Max(projects.Count, 1);
+        var projectCount = projects.Count;
 
-        sb.Append($"{status} dotnet build: {projectCount} projects, {realErrors.Count} errors, {realWarnings.Count} warnings");
-        if (totalNuget > 0)
-            sb.Append($", {totalNuget} NuGet vulns");
+        sb.Append($"{status} build p={projectCount}");
+        if (!succeeded || realErrors.Count > 0 || realWarnings.Count > 0 || totalNuget > 0)
+        {
+            sb.Append($" e={realErrors.Count} w={realWarnings.Count}");
+            if (totalNuget > 0)
+                sb.Append($" nu={totalNuget}");
+        }
         if (duration != null)
-            sb.Append($" ({duration})");
+            sb.Append($" t={duration}");
         sb.AppendLine();
+
+        if (!succeeded && realErrors.Count == 0 && realWarnings.Count == 0)
+            AppendRawTail(sb, lines, 12);
 
         // Errors (grouped by code)
         if (realErrors.Count > 0)
@@ -222,11 +251,30 @@ public sealed partial class DotnetBuildFilter : IOutputFilter
     [GeneratedRegex(@"^(?<file>[^\r\n(]+)\((?<line>\d+),(?<col>\d+)\):\s*(?<kind>error|warning)\s+(?<code>[A-Za-z]*\d*)\s*:\s*(?<msg>[^\[]+?)(?<proj>\[[^\]]*\])?\s*$")]
     private static partial Regex DiagnosticRe();
 
+    [GeneratedRegex(@"^(?<source>.+?)\s*:\s*(?<kind>error|warning)\s+(?<code>[A-Za-z]*\d+)\s*:\s*(?<msg>.+)$")]
+    private static partial Regex ToolDiagnosticRe();
+
     [GeneratedRegex(@"^\s+(.+?)\s+->\s+")]
     private static partial Regex ProjectBuildRe();
 
     [GeneratedRegex(@"Time Elapsed\s+(\S+)")]
     private static partial Regex DurationRe();
+
+    private static void AppendRawTail(StringBuilder sb, string[] lines, int maxLines)
+    {
+        var tail = lines
+            .Select(l => l.TrimEnd())
+            .Where(l => !string.IsNullOrWhiteSpace(l))
+            .TakeLast(maxLines)
+            .ToArray();
+
+        if (tail.Length == 0)
+            return;
+
+        sb.AppendLine(Ansi.Dim("--- raw tail ---"));
+        foreach (var line in tail)
+            sb.AppendLine($"  {line}");
+    }
 
     private record Diagnostic(string File, int Line, int Column, string Kind, string Code, string Message, string Project);
 

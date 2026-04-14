@@ -20,7 +20,7 @@ if ($userPath -notlike "*$installDir*") {
     Write-Host "PATH already contains $installDir" -ForegroundColor Green
 }
 
-# Install Claude Code instructions
+# Install global Claude and AGENTS instructions
 & $exe init
 
 Write-Host ""

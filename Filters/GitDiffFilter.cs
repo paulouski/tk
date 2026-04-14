@@ -6,18 +6,31 @@ namespace Tk.Filters;
 /// <summary>Compact git diff/show: stat summary + truncated hunks.</summary>
 public sealed partial class GitDiffFilter : IOutputFilter
 {
-    private const int MaxHunkLines = 120;
-    private const int MaxFileDiffs = 30;
+    private readonly int _maxTopFiles;
+    private readonly int _maxPreviewFiles;
+    private readonly int _maxPreviewHunks;
+    private readonly int _maxLinesPerHunk;
+    private readonly int _maxChangedLines;
+
+    public GitDiffFilter(DetailLevel detailLevel)
+    {
+        var more = detailLevel == DetailLevel.More;
+        _maxTopFiles = more ? 6 : 3;
+        _maxPreviewFiles = more ? 6 : 3;
+        _maxPreviewHunks = more ? 14 : 6;
+        _maxLinesPerHunk = more ? 8 : 4;
+        _maxChangedLines = more ? 42 : 18;
+    }
 
     public string Apply(string raw, int exitCode)
     {
         if (exitCode != 0) return raw;
-        if (string.IsNullOrWhiteSpace(raw)) return $"{Ansi.Green("ok")} git diff: no changes\n";
+        if (string.IsNullOrWhiteSpace(raw)) return "ok diff f=0\n";
 
         var lines = raw.Split('\n').Select(l => l.TrimEnd('\r')).ToArray();
         var fileDiffs = new List<FileDiff>();
         FileDiff? current = null;
-        var hunkLineCount = 0;
+        Hunk? currentHunk = null;
 
         foreach (var line in lines)
         {
@@ -26,7 +39,7 @@ public sealed partial class GitDiffFilter : IOutputFilter
             {
                 current = new FileDiff(ExtractFileName(line));
                 fileDiffs.Add(current);
-                hunkLineCount = 0;
+                currentHunk = null;
                 continue;
             }
 
@@ -42,8 +55,8 @@ public sealed partial class GitDiffFilter : IOutputFilter
             // Hunk header
             if (line.StartsWith("@@"))
             {
-                hunkLineCount = 0;
-                current.HunkCount++;
+                currentHunk = new Hunk(FormatHunkHeader(current.Name, line));
+                current.Hunks.Add(currentHunk);
                 continue;
             }
 
@@ -60,49 +73,80 @@ public sealed partial class GitDiffFilter : IOutputFilter
             }
 
             // Count additions/deletions
-            if (line.StartsWith("+")) current.Additions++;
-            else if (line.StartsWith("-")) current.Deletions++;
-
-            // Keep hunk lines (limited)
-            hunkLineCount++;
-            if (hunkLineCount <= MaxHunkLines)
-                current.Lines.Add(line);
+            if (line.StartsWith("+"))
+            {
+                current.Additions++;
+                AddChangedLine(currentHunk, line);
+            }
+            else if (line.StartsWith("-"))
+            {
+                current.Deletions++;
+                AddChangedLine(currentHunk, line);
+            }
         }
 
         var sb = new StringBuilder();
         var totalAdd = fileDiffs.Sum(f => f.Additions);
         var totalDel = fileDiffs.Sum(f => f.Deletions);
-        sb.AppendLine($"git diff: {fileDiffs.Count} files, {Ansi.Green($"+{totalAdd}")} {Ansi.Red($"-{totalDel}")}");
-        sb.AppendLine(Ansi.Dim("---"));
+        var totalBinary = fileDiffs.Count(f => f.IsBinary);
+        sb.Append($"diff f={fileDiffs.Count} +{totalAdd} -{totalDel}");
+        if (totalBinary > 0)
+            sb.Append($" bin={totalBinary}");
+        sb.AppendLine();
 
-        foreach (var f in fileDiffs.Take(MaxFileDiffs))
+        var ranked = fileDiffs
+            .OrderByDescending(f => f.Additions + f.Deletions)
+            .ThenBy(f => f.Name, StringComparer.Ordinal)
+            .ToList();
+
+        if (ranked.Count > 0)
         {
-            var tag = f.IsNew ? Ansi.Green(" (new)") : f.IsDeleted ? Ansi.Red(" (deleted)") : f.IsBinary ? Ansi.Dim(" (binary)") : "";
-            sb.AppendLine($"{f.Name}{tag}  {Ansi.Green($"+{f.Additions}")} {Ansi.Red($"-{f.Deletions}")}");
+            var top = string.Join(",",
+                ranked.Take(_maxTopFiles).Select(FormatTopFile));
+            sb.AppendLine($"top={top}");
         }
-        if (fileDiffs.Count > MaxFileDiffs)
-            sb.AppendLine(Ansi.Dim($"... +{fileDiffs.Count - MaxFileDiffs} more files"));
 
-        // Show hunks for files with changes (limited)
-        var totalLinesShown = 0;
-        const int globalMaxLines = 400;
-        foreach (var f in fileDiffs.Where(f => f.Lines.Count > 0).Take(MaxFileDiffs))
+        var previewFiles = ranked
+            .Where(f => f.Hunks.Count > 0)
+            .Take(_maxPreviewFiles)
+            .ToList();
+
+        var hunksShown = 0;
+        var changedLinesShown = 0;
+
+        foreach (var file in previewFiles)
         {
-            if (totalLinesShown >= globalMaxLines) break;
-
-            sb.AppendLine();
-            sb.AppendLine(Ansi.Dim($"--- {f.Name} ---"));
-            var remaining = globalMaxLines - totalLinesShown;
-            foreach (var line in f.Lines.Take(remaining))
+            foreach (var hunk in file.Hunks)
             {
-                var colored = line.StartsWith("+") ? Ansi.Green(line)
-                    : line.StartsWith("-") ? Ansi.Red(line)
-                    : line;
-                sb.AppendLine(colored);
-                totalLinesShown++;
+                if (hunksShown >= _maxPreviewHunks || changedLinesShown >= _maxChangedLines)
+                    break;
+
+                sb.AppendLine(hunk.Header);
+                hunksShown++;
+
+                foreach (var line in hunk.ChangedLines)
+                {
+                    if (changedLinesShown >= _maxChangedLines)
+                        break;
+
+                    var colored = line.StartsWith("+") ? Ansi.Green(line) : Ansi.Red(line);
+                    sb.AppendLine(colored);
+                    changedLinesShown++;
+                }
             }
-            if (f.Lines.Count > remaining)
-                sb.AppendLine(Ansi.Dim($"  ... +{f.Lines.Count - remaining} more lines in this file"));
+
+            if (hunksShown >= _maxPreviewHunks || changedLinesShown >= _maxChangedLines)
+                break;
+        }
+
+        var hiddenFiles = ranked.Count - previewFiles.Count;
+        var hiddenHunks = ranked.Sum(f => f.Hunks.Count) - hunksShown;
+        if (hiddenFiles > 0 || hiddenHunks > 0)
+        {
+            var parts = new List<string>();
+            if (hiddenFiles > 0) parts.Add($"{hiddenFiles} files");
+            if (hiddenHunks > 0) parts.Add($"{hiddenHunks} hunks");
+            sb.AppendLine(Ansi.Dim($"+{string.Join(", ", parts)} more"));
         }
 
         return sb.ToString();
@@ -118,15 +162,69 @@ public sealed partial class GitDiffFilter : IOutputFilter
     [GeneratedRegex(@"diff --git a/(.+?) b/")]
     private static partial Regex FileNameRe();
 
+    [GeneratedRegex(@"^@@ -(?<oldStart>\d+)(?:,(?<oldCount>\d+))? \+(?<newStart>\d+)(?:,(?<newCount>\d+))? @@")]
+    private static partial Regex HunkHeaderRe();
+
+    private void AddChangedLine(Hunk? hunk, string line)
+    {
+        if (hunk == null || hunk.ChangedLines.Count >= _maxLinesPerHunk)
+            return;
+
+        hunk.ChangedLines.Add(TruncateChangedLine(line));
+    }
+
+    private static string TruncateChangedLine(string line)
+    {
+        const int max = 120;
+        return line.Length > max ? line[..max] + "..." : line;
+    }
+
+    private static string FormatTopFile(FileDiff diff)
+    {
+        var name = Path.GetFileName(diff.Name);
+        var suffix = new StringBuilder();
+        if (diff.IsNew) suffix.Append("*new");
+        if (diff.IsDeleted)
+        {
+            if (suffix.Length > 0) suffix.Append('|');
+            suffix.Append("del");
+        }
+        if (diff.IsBinary)
+        {
+            if (suffix.Length > 0) suffix.Append('|');
+            suffix.Append("bin");
+        }
+
+        var baseText = $"{name}(+{diff.Additions} -{diff.Deletions})";
+        return suffix.Length == 0 ? baseText : $"{baseText}[{suffix}]";
+    }
+
+    private static string FormatHunkHeader(string fileName, string rawHeader)
+    {
+        var match = HunkHeaderRe().Match(rawHeader);
+        if (!match.Success)
+            return $"@@ {Path.GetFileName(fileName)}";
+
+        var newStart = int.Parse(match.Groups["newStart"].Value);
+        var newCount = int.TryParse(match.Groups["newCount"].Value, out var parsed) ? parsed : 1;
+        var range = newCount <= 1 ? $"{newStart}" : $"{newStart}-{newStart + newCount - 1}";
+        return $"@@ {Path.GetFileName(fileName)} {range}";
+    }
+
     private class FileDiff(string name)
     {
         public string Name { get; } = name;
         public int Additions { get; set; }
         public int Deletions { get; set; }
-        public int HunkCount { get; set; }
         public bool IsBinary { get; set; }
         public bool IsNew { get; set; }
         public bool IsDeleted { get; set; }
-        public List<string> Lines { get; } = [];
+        public List<Hunk> Hunks { get; } = [];
+    }
+
+    private class Hunk(string header)
+    {
+        public string Header { get; } = header;
+        public List<string> ChangedLines { get; } = [];
     }
 }

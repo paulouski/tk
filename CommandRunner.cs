@@ -7,17 +7,18 @@ public static class CommandRunner
     public static async Task<(int ExitCode, string Stdout, string Stderr)> RunAsync(string[] args)
     {
         var command = args[0];
-        var arguments = args.Length > 1 ? string.Join(' ', args[1..].Select(EscapeArg)) : "";
 
         var psi = new ProcessStartInfo
         {
             FileName = command,
-            Arguments = arguments,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
+
+        foreach (var arg in args.Skip(1))
+            psi.ArgumentList.Add(arg);
 
         // Force English output for dotnet CLI
         if (command.Equals("dotnet", StringComparison.OrdinalIgnoreCase))
@@ -33,7 +34,4 @@ public static class CommandRunner
 
         return (process.ExitCode, await stdoutTask, await stderrTask);
     }
-
-    private static string EscapeArg(string arg) =>
-        arg.Contains(' ') || arg.Contains('"') ? $"\"{arg.Replace("\"", "\\\"")}\"" : arg;
 }

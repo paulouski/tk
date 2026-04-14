@@ -61,29 +61,37 @@ public sealed partial class DotnetTestFilter : IOutputFilter
         }
 
         var sb = new StringBuilder();
-        var hasFailures = failed > 0 || failedTests.Count > 0;
+        var commandFailed = exitCode != 0;
+        var hasFailures = commandFailed || failed > 0 || failedTests.Count > 0;
         var status = hasFailures ? Ansi.Red("FAIL") : Ansi.Green("ok");
 
-        if (total == 0 && failedTests.Count == 0)
+        if (commandFailed && total == 0 && failedTests.Count == 0)
         {
-            // No test results found
-            sb.Append($"{status} dotnet test: completed");
+            sb.Append($"{status} test e=1");
+        }
+        else if (total == 0 && failedTests.Count == 0)
+        {
+            sb.Append($"{status} test");
         }
         else if (hasFailures)
         {
-            sb.Append($"{status} dotnet test: {passed} passed, {failed} failed, {skipped} skipped");
+            sb.Append($"{status} test pass={passed} fail={failed}");
+            if (skipped > 0) sb.Append($" skip={skipped}");
         }
         else
         {
-            sb.Append($"ok dotnet test: {passed} passed");
-            if (skipped > 0) sb.Append($", {skipped} skipped");
+            sb.Append($"ok test pass={passed}");
+            if (skipped > 0) sb.Append($" skip={skipped}");
         }
 
         if (projectCount > 0)
-            sb.Append($" in {projectCount} projects");
+            sb.Append($" p={projectCount}");
         if (duration != null)
-            sb.Append($" ({duration})");
+            sb.Append($" t={duration}");
         sb.AppendLine();
+
+        if (commandFailed && failedTests.Count == 0)
+            AppendRawTail(sb, lines, 12);
 
         // Show failed tests
         if (failedTests.Count > 0)
@@ -114,6 +122,22 @@ public sealed partial class DotnetTestFilter : IOutputFilter
 
     [GeneratedRegex(@"Time Elapsed\s+(\S+)")]
     private static partial Regex DurationRe();
+
+    private static void AppendRawTail(StringBuilder sb, string[] lines, int maxLines)
+    {
+        var tail = lines
+            .Select(l => l.TrimEnd())
+            .Where(l => !string.IsNullOrWhiteSpace(l))
+            .TakeLast(maxLines)
+            .ToArray();
+
+        if (tail.Length == 0)
+            return;
+
+        sb.AppendLine(Ansi.Dim("--- raw tail ---"));
+        foreach (var line in tail)
+            sb.AppendLine($"  {line}");
+    }
 
     private class FailedTest(string name)
     {

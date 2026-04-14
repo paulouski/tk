@@ -2,67 +2,181 @@ namespace Tk;
 
 public static class ClaudeInit
 {
-    private const string Marker = "<!-- tk-instructions -->";
+    private const string ClaudeMarker = "<!-- tk-global-claude -->";
+    private const string AgentsMarker = "<!-- tk-global-agents -->";
+    private const string EndMarker = "<!-- /tk-global -->";
 
-    private const string Instructions = $"""
-        {Marker}
-        # Token Killer (tk)
+    private const string ClaudeInstructions = $"""
+        {ClaudeMarker}
+        ## tk Global Compact Workflow
 
-        `tk` is a CLI proxy that filters noisy command output to save context tokens. Use `tk` for routine commands where filtered output is sufficient. If you need full unfiltered output (e.g. debugging a build issue, reading exact error details), call the command directly without `tk`.
+        Prefer `tk` for noisy commands and repo exploration when exact raw output is not required.
 
-        ### Commands
+        Use:
+        - `tk changes`
+        - `tk tree`
+        - `tk files`
+        - `tk focus <query> [path]`
+        - `tk focus <query> [path] --files-only`
+        - `tk view <file>`
+        - `tk dotnet build|test|restore`
+        - `tk git status|diff|log`
+        - `tk log <file>`
 
-        ```bash
-        # .NET -- NuGet dedup, CS warning grouping, compact summary (99% savings)
-        tk dotnet build
-        tk dotnet test
-        tk dotnet restore
+        Escalate detail as:
+        - default `tk ...`
+        - `tk --more ...`
+        - `tk --raw ...`
 
-        # Git -- compact output (60-80% savings)
-        tk git status
-        tk git log
-        tk git diff
-        tk git show
+        Compact keys:
+        - `p=projects`, `t=time`, `e=errors`, `w=warnings`, `i=info`
+        - `nu=NuGet vulnerabilities`, `pass=passed`, `fail=failed`, `skip=skipped`
+        - `st=staged`, `mod=modified`, `untr=untracked`, `f=files`, `d=directories`, `m=matches`
+        - `n=count`, `top=top items`, `br=branch`, `up=up to date`, `file=file`
 
-        # Service logs -- strips startup noise, deduplicates, errors+warnings only (95%+ savings)
-        tk log <file>              # filtered (default)
-        tk log <file> --errors     # errors only
-        tk log <file> --last 10    # last N entries
-        tk log <file> --all        # raw (no filtering)
-        ```
+        If compact output is enough to choose the next step, do not rerun raw.
+        If compact output is ambiguous, try `--more`.
+        If exact original output is needed, use `--raw`.
+        {EndMarker}
+        """;
 
-        Any other command passes through unfiltered: `tk some-command args...`
-        <!-- /tk-instructions -->
+    private const string AgentsInstructions = $"""
+        {AgentsMarker}
+        # tk Global Agent Preset
+
+        Use `tk` as the default compact interface for repo exploration, search, and noisy command output.
+
+        Prefer:
+        - `tk changes`
+        - `tk tree`
+        - `tk files`
+        - `tk focus <query> [path]`
+        - `tk focus <query> [path] --files-only`
+        - `tk view <file>`
+        - `tk dotnet build|test|restore`
+        - `tk git status|diff|log`
+        - `tk log <file>`
+
+        Escalation order:
+        1. `tk ...`
+        2. `tk --more ...`
+        3. `tk --raw ...`
+
+        Stable compact keys:
+        - `p`, `t`, `e`, `w`, `i`, `nu`
+        - `pass`, `fail`, `skip`
+        - `st`, `mod`, `untr`
+        - `f`, `d`, `m`, `n`
+        - `top`, `br`, `up`, `file`
+
+        If compact output is sufficient to choose the next action, do not rerun the raw command.
+        If `tk` emits a raw tail fallback, treat it as parser uncertainty and inspect more carefully.
+        {EndMarker}
         """;
 
     public static int Run()
     {
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var claudeDir = Path.Combine(home, ".claude");
-        var claudeMd = Path.Combine(claudeDir, "CLAUDE.md");
+        var home = ResolveHomeDirectory();
 
-        // Check if already installed
-        if (File.Exists(claudeMd))
+        var targets = new[]
         {
-            var existing = File.ReadAllText(claudeMd);
-            if (existing.Contains(Marker))
+            new InstallTarget(
+                Path.Combine(home, ".claude", "CLAUDE.md"),
+                ClaudeMarker,
+                ClaudeInstructions,
+                "Claude global instructions"),
+            new InstallTarget(
+                Path.Combine(home, ".codex", "AGENTS.md"),
+                AgentsMarker,
+                AgentsInstructions,
+                "global AGENTS instructions")
+        };
+
+        var failures = new List<string>();
+        foreach (var target in targets)
+        {
+            try
             {
-                Console.WriteLine("tk instructions already present in " + claudeMd);
-                return 0;
+                UpsertInstructions(target);
+            }
+            catch (Exception ex)
+            {
+                failures.Add($"{target.Path}: {ex.Message}");
+                Console.Error.WriteLine($"tk init failed for {target.Path}: {ex.Message}");
             }
         }
 
-        // Ensure directory exists
-        Directory.CreateDirectory(claudeDir);
+        if (failures.Count == 0)
+            Console.WriteLine("tk global instructions installed.");
+        else if (failures.Count < targets.Length)
+            Console.WriteLine("tk global instructions installed with partial failures.");
+        else
+            Console.WriteLine("tk global instructions install failed.");
 
-        // Append instructions
-        var content = File.Exists(claudeMd) ? File.ReadAllText(claudeMd) : "";
-        var separator = content.Length > 0 && !content.EndsWith('\n') ? "\n\n" : "\n";
-        if (content.Length == 0) separator = "";
+        foreach (var target in targets)
+            Console.WriteLine($"  {target.Label}: {target.Path}");
 
-        File.WriteAllText(claudeMd, content + separator + Instructions.Trim() + "\n");
-
-        Console.WriteLine("tk instructions added to " + claudeMd);
-        return 0;
+        return failures.Count == 0 ? 0 : 1;
     }
+
+    private static void UpsertInstructions(InstallTarget target)
+    {
+        var directory = Path.GetDirectoryName(target.Path);
+        if (!string.IsNullOrEmpty(directory))
+            Directory.CreateDirectory(directory);
+
+        var existing = File.Exists(target.Path) ? File.ReadAllText(target.Path) : "";
+        var updated = ReplaceMarkedBlock(existing, target.Marker, target.Instructions.Trim());
+
+        if (updated == existing)
+        {
+            Console.WriteLine($"tk instructions already up to date in {target.Path}");
+            return;
+        }
+
+        File.WriteAllText(target.Path, updated);
+        Console.WriteLine($"tk instructions updated in {target.Path}");
+    }
+
+    private static string ReplaceMarkedBlock(string content, string marker, string block)
+    {
+        var start = content.IndexOf(marker, StringComparison.Ordinal);
+        if (start >= 0)
+        {
+            var end = content.IndexOf(EndMarker, start, StringComparison.Ordinal);
+            if (end >= 0)
+            {
+                end += EndMarker.Length;
+                var prefix = content[..start].TrimEnd();
+                var suffix = content[end..].TrimStart('\r', '\n');
+                return JoinSections(prefix, block, suffix);
+            }
+        }
+
+        return JoinSections(content.TrimEnd(), block, "");
+    }
+
+    private static string JoinSections(string prefix, string block, string suffix)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(prefix)) parts.Add(prefix);
+        parts.Add(block);
+        if (!string.IsNullOrWhiteSpace(suffix)) parts.Add(suffix);
+        return string.Join("\n\n", parts) + "\n";
+    }
+
+    private static string ResolveHomeDirectory()
+    {
+        var home = Environment.GetEnvironmentVariable("HOME");
+        if (!string.IsNullOrWhiteSpace(home) && Path.IsPathRooted(home))
+            return home;
+
+        var userProfile = Environment.GetEnvironmentVariable("USERPROFILE");
+        if (!string.IsNullOrWhiteSpace(userProfile) && Path.IsPathRooted(userProfile))
+            return userProfile;
+
+        return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    }
+
+    private sealed record InstallTarget(string Path, string Marker, string Instructions, string Label);
 }
