@@ -64,10 +64,13 @@ tk git commit            # ultra-compact
 
 # Repo navigation
 tk tree                  # shallow repo tree with directory/file counts
+tk tree --code          # code-focused tree: trims docs/assets/generated noise
 tk files                 # compact key-file inventory
+tk files --code         # code-focused inventory: entrypoints/interfaces/configs first
 tk files --changed       # changed files only
 tk files --ext cs        # files filtered by extension
 tk focus CommandRunner   # code-first repo search with top files + samples
+tk focus CommandRunner . --code  # strict code-only search
 tk focus CommandRunner tk --files-only  # only likely files, no sample lines
 tk focus Refit . --docs # docs/specs/guides only
 tk focus Refit . --all  # include docs/logs/other in the ranking

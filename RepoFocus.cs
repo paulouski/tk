@@ -5,23 +5,6 @@ namespace Tk;
 
 public static class RepoFocus
 {
-    private static readonly HashSet<string> IgnoredDirectories = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".git", "bin", "obj", "node_modules", ".idea", ".vs", "dist", "coverage"
-    };
-
-    private static readonly HashSet<string> CodeExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".cs", ".csproj", ".sln", ".props", ".targets", ".fs", ".vb",
-        ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
-        ".json", ".yml", ".yaml", ".xml", ".sql", ".ps1", ".sh", ".bicep"
-    };
-
-    private static readonly HashSet<string> DocExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".md", ".txt", ".adoc", ".rst"
-    };
-
     public static async Task<(int ExitCode, string Output)> RunAsync(string query, string path, string[] flags, CliOptions cliOptions)
     {
         if (string.IsNullOrWhiteSpace(query))
@@ -49,6 +32,12 @@ public static class RepoFocus
                 args.Add($"!{glob}");
                 args.Add("--glob");
                 args.Add($"!{glob}/**");
+            }
+
+            foreach (var glob in new[] { "*.g.cs", "*.generated.cs", "*.designer.cs", "*.AssemblyInfo.cs", "GlobalUsings.g.cs" })
+            {
+                args.Add("--glob");
+                args.Add($"!{glob}");
             }
 
             args.Add(query);
@@ -113,7 +102,7 @@ public static class RepoFocus
 
         foreach (var directory in Directory.GetDirectories(path))
         {
-            if (IgnoredDirectories.Contains(Path.GetFileName(directory)))
+            if (!RepoScope.ShouldIncludeDirectory(directory, includeIgnored: false, codeFocused: false))
                 continue;
 
             foreach (var file in EnumerateFiles(directory))
@@ -318,7 +307,6 @@ public static class RepoFocus
     private static FocusKind Classify(string relativePath)
     {
         var normalized = relativePath.Replace('\\', '/');
-        var extension = Path.GetExtension(relativePath);
 
         if (normalized.Contains("/logs/", StringComparison.OrdinalIgnoreCase) ||
             normalized.EndsWith(".log", StringComparison.OrdinalIgnoreCase))
@@ -329,13 +317,12 @@ public static class RepoFocus
         if (normalized.StartsWith("_local/", StringComparison.OrdinalIgnoreCase) ||
             normalized.StartsWith("docs/", StringComparison.OrdinalIgnoreCase) ||
             normalized.StartsWith(".claude/", StringComparison.OrdinalIgnoreCase) ||
-            DocExtensions.Contains(extension) ||
-            Path.GetFileName(relativePath).Equals("README.md", StringComparison.OrdinalIgnoreCase))
+            RepoScope.IsDocFile(relativePath))
         {
             return FocusKind.Docs;
         }
 
-        if (CodeExtensions.Contains(extension))
+        if (RepoScope.IsCodeFile(relativePath))
             return FocusKind.Code;
 
         return FocusKind.Other;
@@ -403,7 +390,7 @@ public static class RepoFocus
                 scope = FocusScope.All;
             else if (set.Contains("--docs"))
                 scope = FocusScope.Docs;
-            else if (set.Contains("--code-only"))
+            else if (set.Contains("--code-only") || set.Contains("--code"))
                 scope = FocusScope.CodeOnly;
 
             return new FocusOptions(

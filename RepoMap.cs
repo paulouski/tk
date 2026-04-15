@@ -5,11 +5,6 @@ namespace Tk;
 
 public static class RepoMap
 {
-    private static readonly HashSet<string> IgnoredDirectories = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".git", "bin", "obj", "node_modules", ".idea", ".vs", "dist", "coverage"
-    };
-
     public static string RenderTree(string[] args, CliOptions cliOptions)
     {
         var path = args.FirstOrDefault(a => !a.StartsWith('-')) ?? ".";
@@ -18,15 +13,18 @@ public static class RepoMap
         if (!Directory.Exists(path))
             return $"tk tree: {path}: no such directory\n";
 
+        var codeFocused = flags.Contains("--code");
         var includeIgnored = cliOptions.Raw || flags.Contains("--all");
         var maxDepth = ParseDepth(flags) ?? (cliOptions.Raw ? 5 : cliOptions.DetailLevel == DetailLevel.More ? 3 : 2);
         var topFiles = cliOptions.Raw ? 12 : cliOptions.DetailLevel == DetailLevel.More ? 8 : 5;
-        var root = BuildNode(path, includeIgnored, currentDepth: 0, maxDepth);
+        var root = BuildNode(path, includeIgnored, codeFocused, currentDepth: 0, maxDepth);
         var directoryCount = CountDirectories(root) - 1;
         var fileCount = CountFiles(root);
 
         var sb = new StringBuilder();
-        sb.AppendLine($"tree d={Math.Max(directoryCount, 0)} f={fileCount} depth={maxDepth}");
+        sb.AppendLine(codeFocused
+            ? $"tree code d={Math.Max(directoryCount, 0)} f={fileCount} depth={maxDepth}"
+            : $"tree d={Math.Max(directoryCount, 0)} f={fileCount} depth={maxDepth}");
         sb.AppendLine($"{Path.GetFileName(Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))}/");
 
         foreach (var child in root.Directories)
@@ -47,6 +45,7 @@ public static class RepoMap
             return $"tk files: {path}: no such directory\n";
 
         var changedOnly = flags.Contains("--changed");
+        var codeFocused = flags.Contains("--code");
         var extension = ParseExtension(flags);
         var top = ParseTop(flags) ?? (cliOptions.Raw ? 50 : cliOptions.DetailLevel == DetailLevel.More ? 20 : 8);
         List<string> files;
@@ -57,15 +56,18 @@ public static class RepoMap
         }
         else
         {
-            files = EnumerateFiles(path, includeIgnored: cliOptions.Raw).ToList();
+            files = EnumerateFiles(path, includeIgnored: cliOptions.Raw, codeFocused).ToList();
         }
 
         if (!string.IsNullOrEmpty(extension))
             files = files.Where(f => string.Equals(Path.GetExtension(f), extension, StringComparison.OrdinalIgnoreCase)).ToList();
 
+        if (codeFocused)
+            files = files.Where(RepoScope.IsCodeFile).ToList();
+
         var relative = files
             .Select(f => MakeRelative(path, f))
-            .OrderBy(ScoreFile)
+            .OrderBy(f => RepoScope.ScoreFile(f, codeFocused))
             .ThenBy(f => f, StringComparer.Ordinal)
             .ToList();
 
@@ -78,7 +80,7 @@ public static class RepoMap
             .ToList();
 
         var sb = new StringBuilder();
-        sb.Append($"files n={relative.Count}");
+        sb.Append(codeFocused ? $"files code n={relative.Count}" : $"files n={relative.Count}");
         if (!string.IsNullOrEmpty(extension))
             sb.Append($" ext={extension.TrimStart('.')}");
         if (changedOnly)
@@ -102,23 +104,31 @@ public static class RepoMap
         return sb.ToString();
     }
 
-    private static DirectoryNode BuildNode(string path, bool includeIgnored, int currentDepth, int maxDepth)
+    private static DirectoryNode BuildNode(string path, bool includeIgnored, bool codeFocused, int currentDepth, int maxDepth)
     {
         var node = new DirectoryNode(path);
 
         var directories = Directory.GetDirectories(path)
-            .Where(d => includeIgnored || !IgnoredDirectories.Contains(Path.GetFileName(d)))
+            .Where(d => RepoScope.ShouldIncludeDirectory(d, includeIgnored, codeFocused))
             .OrderBy(d => d, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        foreach (var file in Directory.GetFiles(path).OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
+        foreach (var file in Directory.GetFiles(path)
+            .Where(f => RepoScope.ShouldIncludeFile(f, codeFocused))
+            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
+        {
             node.Files.Add(file);
+        }
 
         if (currentDepth >= maxDepth)
             return node;
 
         foreach (var directory in directories)
-            node.Directories.Add(BuildNode(directory, includeIgnored, currentDepth + 1, maxDepth));
+        {
+            var child = BuildNode(directory, includeIgnored, codeFocused, currentDepth + 1, maxDepth);
+            if (!codeFocused || child.Files.Count > 0 || child.Directories.Count > 0)
+                node.Directories.Add(child);
+        }
 
         return node;
     }
@@ -137,17 +147,22 @@ public static class RepoMap
     private static int CountFiles(DirectoryNode node) =>
         node.Files.Count + node.Directories.Sum(CountFiles);
 
-    private static IEnumerable<string> EnumerateFiles(string path, bool includeIgnored)
+    private static IEnumerable<string> EnumerateFiles(string path, bool includeIgnored, bool codeFocused)
     {
         foreach (var file in Directory.GetFiles(path))
+        {
+            if (!RepoScope.ShouldIncludeFile(file, codeFocused))
+                continue;
+
             yield return file;
+        }
 
         foreach (var directory in Directory.GetDirectories(path))
         {
-            if (!includeIgnored && IgnoredDirectories.Contains(Path.GetFileName(directory)))
+            if (!RepoScope.ShouldIncludeDirectory(directory, includeIgnored, codeFocused))
                 continue;
 
-            foreach (var file in EnumerateFiles(directory, includeIgnored))
+            foreach (var file in EnumerateFiles(directory, includeIgnored, codeFocused))
                 yield return file;
         }
     }
@@ -183,22 +198,6 @@ public static class RepoMap
     {
         var relative = Path.GetRelativePath(basePath, fullPath);
         return PathUtils.StripPrefix(relative, "");
-    }
-
-    private static int ScoreFile(string path)
-    {
-        var fileName = Path.GetFileName(path);
-        var depth = path.Count(c => c is '/' or '\\');
-        var score = depth * 10 + path.Length;
-
-        if (fileName.Equals("README.md", StringComparison.OrdinalIgnoreCase)) score -= 30;
-        if (fileName.EndsWith(".sln", StringComparison.OrdinalIgnoreCase)) score -= 25;
-        if (fileName.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)) score -= 20;
-        if (fileName.Equals("Program.cs", StringComparison.OrdinalIgnoreCase)) score -= 20;
-        if (fileName.StartsWith("index.", StringComparison.OrdinalIgnoreCase)) score -= 12;
-        if (fileName.StartsWith("main.", StringComparison.OrdinalIgnoreCase)) score -= 12;
-
-        return score;
     }
 
     private static string TopGroup(string relativePath)

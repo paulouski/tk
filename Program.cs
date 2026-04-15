@@ -26,9 +26,9 @@ if (commandArgs.Length == 0 || commandArgs[0] is "--help" or "-h" or "--version"
     Console.WriteLine("  tk find <path> [flags]         Find with path prefix stripped");
     Console.WriteLine("  tk view <file[:a-b]>           File card or exact numbered line range");
     Console.WriteLine("  tk changes                     Repo status card for agent startup");
-    Console.WriteLine("  tk tree [path]                 Repo tree with compact depth and counts");
-    Console.WriteLine("  tk files [path]                Key files and top directories");
-    Console.WriteLine("  tk focus <query> [path]        Code-first search; use --docs/--all/--code-only");
+    Console.WriteLine("  tk tree [path]                 Repo tree with compact depth and counts; add --code");
+    Console.WriteLine("  tk files [path]                Key files and top directories; add --code");
+    Console.WriteLine("  tk focus <query> [path]        Code-first search; use --code/--docs/--all");
     Console.WriteLine("  tk dotnet build|test|restore   .NET build output (NuGet dedup, CS grouping)");
     Console.WriteLine("  tk git status|log|diff|show    Git compact output");
     Console.WriteLine("  tk log <file>                  Filter service log (errors/warnings only)");
