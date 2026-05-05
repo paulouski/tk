@@ -9,6 +9,7 @@
     <RootNamespace>Tk</RootNamespace>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>false</SelfContained>
+    <DefaultItemExcludes>$(DefaultItemExcludes);Tk.Tests/**</DefaultItemExcludes>
   </PropertyGroup>
 
 </Project>
