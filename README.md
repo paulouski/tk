@@ -76,6 +76,10 @@ tk focus Refit . --docs # docs/specs/guides only
 tk focus Refit . --all  # include docs/logs/other in the ranking
 tk focus "RunAsync(" tk  # same, scoped to a path
 
+# Quality gate
+tk quality .                     # dotnet build + dotnet format verify
+tk quality . --test-filter Onboarding  # add targeted tests
+
 # File reading
 tk view src/Program.cs          # compact file card: line count, symbols, hot ranges
 tk view src/Program.cs:40-90    # numbered exact range
