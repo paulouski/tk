@@ -1,12 +1,22 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using Tk.Common;
 using Tk.Filters;
 
-namespace Tk;
+namespace Tk.Commands;
 
-public static class QualityCommand
+public sealed class QualityCommand : ICommand
 {
-    public static async Task<(int ExitCode, string Output)> RunAsync(string[] args)
+    public string Name => "quality";
+
+    public async Task<int> RunAsync(CommandContext ctx)
+    {
+        var (exitCode, output) = await RunQualityAsync(ctx.Args, ctx.Process);
+        ctx.Out.Write(output);
+        return exitCode;
+    }
+
+    private static async Task<(int ExitCode, string Output)> RunQualityAsync(string[] args, IProcessRunner runner)
     {
         var options = QualityOptions.Parse(args);
         var root = Path.GetFullPath(options.Path);
@@ -15,7 +25,7 @@ public static class QualityCommand
 
         var target = ResolveDotnetTarget(root);
         var qualityTargets = FindQualityTargets(root);
-        var changeSet = await LoadChangedFilesAsync(root);
+        var changeSet = await LoadChangedFilesAsync(root, runner);
         var sb = new StringBuilder();
         var exitCode = 0;
 
@@ -42,7 +52,7 @@ public static class QualityCommand
             var buildArgs = new List<string> { "dotnet", "build", target };
             AddQualityTargets(buildArgs, qualityTargets);
 
-            var build = await RunQualityBuildAsync(buildArgs.ToArray(), changeSet, options.ShowAll);
+            var build = await RunQualityBuildAsync(buildArgs.ToArray(), changeSet, options.ShowAll, runner);
             sb.Append(build.Output);
             if (build.EffectiveExitCode != 0)
                 exitCode = build.ExitCode;
@@ -54,7 +64,7 @@ public static class QualityCommand
 
         if (options.Format)
         {
-            var format = await RunFormatAsync(target, changeSet, options.ShowAll);
+            var format = await RunFormatAsync(target, changeSet, options.ShowAll, runner);
             sb.Append(format.Output);
             if (format.EffectiveExitCode != 0 && exitCode == 0)
                 exitCode = format.ExitCode;
@@ -73,7 +83,7 @@ public static class QualityCommand
                 testArgs.Add(options.TestFilter);
             }
 
-            var test = await RunFilteredAsync(testArgs.ToArray(), new DotnetTestFilter());
+            var test = await RunFilteredAsync(testArgs.ToArray(), new DotnetTestFilter(), runner);
             sb.Append(test.Output);
             if (test.ExitCode != 0 && exitCode == 0)
                 exitCode = test.ExitCode;
@@ -86,20 +96,21 @@ public static class QualityCommand
         return (exitCode, sb.ToString());
     }
 
-    private static async Task<(int ExitCode, string Output)> RunFilteredAsync(string[] args, IOutputFilter filter)
+    private static async Task<(int ExitCode, string Output)> RunFilteredAsync(string[] args, IOutputFilter filter, IProcessRunner runner)
     {
-        var (exitCode, stdout, stderr) = await CommandRunner.RunAsync(args);
-        var raw = Combine(stdout, stderr);
+        var (exitCode, stdout, stderr) = await runner.RunAsync(args);
+        var raw = ProcessOutput.Combine(stdout, stderr);
         return (exitCode, filter.Apply(raw, exitCode));
     }
 
     private static async Task<QualityStepResult> RunQualityBuildAsync(
         string[] args,
         ChangeSet changeSet,
-        bool showAll)
+        bool showAll,
+        IProcessRunner runner)
     {
-        var (exitCode, stdout, stderr) = await CommandRunner.RunAsync(args);
-        var raw = Combine(stdout, stderr);
+        var (exitCode, stdout, stderr) = await runner.RunAsync(args);
+        var raw = ProcessOutput.Combine(stdout, stderr);
         var filtered = new DotnetBuildFilter().Apply(raw, exitCode);
         var summary = filtered.Split('\n').FirstOrDefault(l => !string.IsNullOrWhiteSpace(l)) ?? "";
         var diagnostics = ParseDiagnostics(raw);
@@ -160,15 +171,16 @@ public static class QualityCommand
     private static async Task<QualityStepResult> RunFormatAsync(
         string target,
         ChangeSet changeSet,
-        bool showAll)
+        bool showAll,
+        IProcessRunner runner)
     {
-        var (exitCode, stdout, stderr) = await CommandRunner.RunAsync(
+        var (exitCode, stdout, stderr) = await runner.RunAsync(
             ["dotnet", "format", target, "--verify-no-changes", "--no-restore"]);
 
         if (exitCode == 0)
             return new QualityStepResult(0, 0, "ok format\n");
 
-        var raw = Combine(stdout, stderr);
+        var raw = ProcessOutput.Combine(stdout, stderr);
         var formatIssues = ParseFormatIssues(raw);
         if (formatIssues.Count > 0)
         {
@@ -197,23 +209,9 @@ public static class QualityCommand
         var diagnostics = new List<Diagnostic>();
         foreach (var line in raw.Split('\n').Select(l => l.TrimEnd('\r')))
         {
-            var match = DiagnosticRe.Match(line);
-            if (!match.Success)
-            {
-                match = ToolDiagnosticRe.Match(line);
-                if (!match.Success)
-                    continue;
-            }
-
-            var rawFile = match.Groups["file"].Success
-                ? match.Groups["file"].Value.Trim()
-                : match.Groups["source"].Value.Trim();
-
-            diagnostics.Add(new Diagnostic(
-                Kind: match.Groups["kind"].Value.ToLowerInvariant(),
-                Code: match.Groups["code"].Value,
-                Message: match.Groups["msg"].Value.Trim(),
-                File: rawFile));
+            var diagnostic = DiagnosticParser.Parse(line);
+            if (diagnostic is not null)
+                diagnostics.Add(diagnostic);
         }
 
         return diagnostics;
@@ -249,6 +247,9 @@ public static class QualityCommand
         if (groups.Length > maxGroups)
             sb.AppendLine($"  ... +{groups.Length - maxGroups} groups");
     }
+
+    private static string Truncate(string s, int max) =>
+        s.Length > max ? s[..max] + "..." : s;
 
     private static List<FormatIssue> ParseFormatIssues(string raw)
     {
@@ -339,34 +340,26 @@ public static class QualityCommand
         return null;
     }
 
-    private static async Task<ChangeSet> LoadChangedFilesAsync(string root)
+    private static async Task<ChangeSet> LoadChangedFilesAsync(string root, IProcessRunner runner)
     {
         var directory = File.Exists(root) ? Path.GetDirectoryName(root)! : root;
         var repoRoot = FindGitRoot(directory);
         if (repoRoot is null)
             return ChangeSet.Unavailable;
 
-        var (exitCode, stdout, stderr) = await CommandRunner.RunAsync(
+        var (exitCode, stdout, stderr) = await runner.RunAsync(
             ["git", "-C", repoRoot, "status", "--porcelain=v1"]);
         if (exitCode != 0)
             return ChangeSet.Unavailable;
 
         var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var rawLine in Combine(stdout, stderr).Split('\n').Select(l => l.TrimEnd('\r')))
+        foreach (var rawLine in ProcessOutput.Combine(stdout, stderr).Split('\n').Select(l => l.TrimEnd('\r')))
         {
-            if (rawLine.Length < 4)
+            var entry = GitPorcelain.ParseLine(rawLine);
+            if (entry is null)
                 continue;
 
-            var pathPart = rawLine[3..].Trim();
-            var renameIndex = pathPart.IndexOf(" -> ", StringComparison.Ordinal);
-            if (renameIndex >= 0)
-                pathPart = pathPart[(renameIndex + 4)..];
-
-            pathPart = pathPart.Trim('"');
-            if (string.IsNullOrWhiteSpace(pathPart))
-                continue;
-
-            files.Add(NormalizeFullPath(Path.Combine(repoRoot, pathPart)));
+            files.Add(NormalizeFullPath(Path.Combine(repoRoot, entry.Path)));
         }
 
         return new ChangeSet(repoRoot, files);
@@ -424,33 +417,16 @@ public static class QualityCommand
         File.Exists(Path.Combine(directory, "global.json")) ||
         File.Exists(Path.Combine(directory, "Directory.Build.props"));
 
-    private static string Combine(string stdout, string stderr) =>
-        string.IsNullOrWhiteSpace(stderr)
-            ? stdout
-            : $"{stdout.TrimEnd()}\n{stderr}";
-
     private static string ShortPath(string path) =>
         Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
 
     private static string NormalizeFullPath(string path) =>
         Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
-    private static string Truncate(string value, int maxLength) =>
-        value.Length <= maxLength ? value : value[..maxLength] + "...";
-
-    private static readonly Regex DiagnosticRe = new(
-        @"^(?<file>[^\r\n(]+)\((?<line>\d+),(?<col>\d+)\):\s*(?<kind>error|warning)\s+(?<code>[A-Za-z]*\d*)\s*:\s*(?<msg>[^\[]+?)(?<proj>\[[^\]]*\])?\s*$",
-        RegexOptions.Compiled);
-
-    private static readonly Regex ToolDiagnosticRe = new(
-        @"^(?<source>.+?)\s*:\s*(?<kind>error|warning)\s+(?<code>[A-Za-z]*\d+)\s*:\s*(?<msg>.+)$",
-        RegexOptions.Compiled);
-
     private static readonly Regex FormatIssueRe = new(
         @"^(?<file>.+?)\((?<line>\d+),(?<col>\d+)\):\s*error\s+WHITESPACE:",
         RegexOptions.Compiled);
 
-    private sealed record Diagnostic(string Kind, string Code, string Message, string File);
     private sealed record FormatIssue(string File, int Line);
     private sealed record QualityStepResult(int ExitCode, int EffectiveExitCode, string Output);
 

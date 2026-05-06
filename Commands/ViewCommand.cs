@@ -1,22 +1,46 @@
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace Tk;
+namespace Tk.Commands;
 
-public static partial class FileView
+public sealed partial class ViewCommand : ICommand
 {
+    public string Name => "view";
+
     private const int SmallFileLineLimit = 40;
     private const int SmallFileCharLimit = 3000;
     private const int MaxSymbols = 8;
     private const int MaxHotRanges = 5;
     private const int MaxPreviewLines = 12;
 
-    public static string Render(string target, string[] flags, CliOptions cliOptions)
+    public Task<int> RunAsync(CommandContext ctx)
     {
-        var raw = cliOptions.Raw || flags.Contains("--raw");
-        var more = cliOptions.DetailLevel == DetailLevel.More || flags.Contains("--more");
+        var targets = ctx.Args.Where(a => !a.StartsWith('-')).ToArray();
+        var flags = ctx.Args.Where(a => a.StartsWith('-')).ToArray();
+
+        if (targets.Length == 0)
+        {
+            ctx.Err.WriteLine("tk view: file argument required");
+            return Task.FromResult(1);
+        }
+
+        for (var i = 0; i < targets.Length; i++)
+        {
+            if (i > 0)
+                ctx.Out.WriteLine();
+            ctx.Out.Write(Render(targets[i], flags, ctx.Raw, ctx.DetailLevel == DetailLevel.More));
+        }
+
+        return Task.FromResult(0);
+    }
+
+    internal static string Render(string target, string[] flags, bool ctxRaw, bool ctxMore)
+    {
+        var raw = ctxRaw || flags.Contains("--raw");
+        var more = ctxMore || flags.Contains("--more");
         var symbolsOnly = flags.Contains("--symbols");
-        var (path, startLine, endLine) = ParseTarget(target);
+        var (pathTarget, symbolName) = SplitSymbolSuffix(target);
+        var (path, startLine, endLine) = ParseTarget(pathTarget);
 
         if (!File.Exists(path))
             return $"tk view: {path}: file not found\n";
@@ -25,21 +49,59 @@ public static partial class FileView
             return $"view {Path.GetFileName(path)} binary=1\n";
 
         var lines = File.ReadAllLines(path);
+
+        if (symbolName is not null)
+        {
+            var symbols = ExtractSymbols(lines).ToList();
+            var range = FindSymbolRange(symbols, lines.Length, symbolName);
+            if (range is null)
+                return $"tk view: {Path.GetFileName(path)}: symbol '{symbolName}' not found\n";
+            return RenderRange(path, lines, range.Value.Start, range.Value.End);
+        }
+
         if (startLine.HasValue || endLine.HasValue)
             return RenderRange(path, lines, startLine ?? 1, endLine ?? startLine ?? lines.Length);
 
         if (raw)
             return RenderWholeFile(path, lines);
 
-        var symbols = ExtractSymbols(lines).ToList();
+        var allSymbols = ExtractSymbols(lines).ToList();
         if (symbolsOnly)
-            return RenderSummary(path, lines, symbols, includePreview: false, more);
+            return RenderSummary(path, lines, allSymbols, includePreview: false, more);
 
         var totalChars = lines.Sum(l => l.Length);
         if (lines.Length <= SmallFileLineLimit && totalChars <= SmallFileCharLimit)
             return RenderWholeFile(path, lines);
 
-        return RenderSummary(path, lines, symbols, includePreview: true, more);
+        return RenderSummary(path, lines, allSymbols, includePreview: true, more);
+    }
+
+    private static (string PathTarget, string? Symbol) SplitSymbolSuffix(string target)
+    {
+        var idx = target.LastIndexOf("::", StringComparison.Ordinal);
+        if (idx <= 0)
+            return (target, null);
+
+        var symbol = target[(idx + 2)..];
+        if (string.IsNullOrWhiteSpace(symbol))
+            return (target, null);
+
+        return (target[..idx], symbol);
+    }
+
+    private static (int Start, int End)? FindSymbolRange(List<Symbol> symbols, int totalLines, string name)
+    {
+        var ranges = BuildHotRanges(symbols, totalLines).ToList();
+        var exact = ranges.FirstOrDefault(r => r.Name.Equals(name, StringComparison.Ordinal));
+        if (exact is not null)
+            return (exact.Start, exact.End);
+
+        var ci = ranges.FirstOrDefault(r => r.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (ci is not null)
+            return (ci.Start, ci.End);
+
+        var contains = ranges.FirstOrDefault(r => r.Name.Contains(name, StringComparison.OrdinalIgnoreCase));
+        return contains is null ? null : (contains.Start, contains.End);
     }
 
     private static string RenderWholeFile(string path, string[] lines)
@@ -116,9 +178,14 @@ public static partial class FileView
 
     private static bool LooksBinary(string path)
     {
-        var bytes = File.ReadAllBytes(path);
-        return bytes.Take(512).Any(b => b == 0);
+        using var stream = File.OpenRead(path);
+        Span<byte> buffer = stackalloc byte[512];
+        var read = stream.Read(buffer);
+        return buffer[..read].IndexOf((byte)0) >= 0;
     }
+
+    private static string Truncate(string s, int max) =>
+        s.Length > max ? s[..max] + "..." : s;
 
     private static IEnumerable<Symbol> ExtractSymbols(string[] lines)
     {
@@ -193,9 +260,6 @@ public static partial class FileView
 
         return (start + 1, Math.Min(lines.Length, start + maxLines));
     }
-
-    private static string Truncate(string text, int max) =>
-        text.Length > max ? text[..max] + "..." : text;
 
     [GeneratedRegex(@"^(?<path>.+):(?<start>\d+)(?:-(?<end>\d+))?$")]
     private static partial Regex RangeSuffixRe();

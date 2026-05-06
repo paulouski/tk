@@ -1,17 +1,36 @@
 using System.Text;
-using Tk.Filters;
+using Tk.Common;
 
-namespace Tk;
+namespace Tk.Commands;
 
-public static class RepoFocus
+public sealed class FocusCommand : ICommand
 {
-    public static async Task<(int ExitCode, string Output)> RunAsync(string query, string path, string[] flags, CliOptions cliOptions)
+    public string Name => "focus";
+
+    public async Task<int> RunAsync(CommandContext ctx)
     {
+        if (ctx.Args.Length == 0)
+        {
+            ctx.Err.Write("tk focus: query is required\n");
+            return 1;
+        }
+
+        var query = ctx.Args[0];
+        var remaining = ctx.Args[1..];
+        var path = remaining.FirstOrDefault(a => !a.StartsWith('-')) ?? ".";
+        var flags = remaining.Where(a => a.StartsWith('-')).ToArray();
+
         if (string.IsNullOrWhiteSpace(query))
-            return (1, "tk focus: query is required\n");
+        {
+            ctx.Err.Write("tk focus: query is required\n");
+            return 1;
+        }
 
         if (!Directory.Exists(path))
-            return (1, $"tk focus: {path}: no such directory\n");
+        {
+            ctx.Err.Write($"tk focus: {path}: no such directory\n");
+            return 1;
+        }
 
         var options = FocusOptions.Parse(flags);
 
@@ -43,21 +62,26 @@ public static class RepoFocus
             args.Add(query);
             args.Add(path);
 
-            var (exitCode, stdout, stderr) = await CommandRunner.RunAsync([.. args]);
-            var raw = Combine(stdout, stderr);
-            if (cliOptions.Raw || exitCode > 1)
-                return (exitCode, raw);
+            var (exitCode, stdout, stderr) = await ctx.Process.RunAsync([.. args]);
+            var raw = ProcessOutput.Combine(stdout, stderr);
+            if (ctx.Raw || exitCode > 1)
+            {
+                ctx.Out.Write(raw);
+                return exitCode;
+            }
 
-            return (exitCode, Render(raw, exitCode, cliOptions, options));
+            ctx.Out.Write(Render(raw, exitCode, ctx.DetailLevel, options));
+            return exitCode;
         }
         catch
         {
-            var fallback = FallbackSearch(query, path, cliOptions, options);
-            return (fallback.ExitCode, fallback.Output);
+            var fallback = FallbackSearch(query, path, ctx.Raw, ctx.DetailLevel, options);
+            ctx.Out.Write(fallback.Output);
+            return fallback.ExitCode;
         }
     }
 
-    private static (int ExitCode, string Output) FallbackSearch(string query, string path, CliOptions cliOptions, FocusOptions options)
+    private static (int ExitCode, string Output) FallbackSearch(string query, string path, bool raw, DetailLevel detail, FocusOptions options)
     {
         var ignoreCase = query.All(c => !char.IsLetter(c) || char.IsLower(c));
         var comparison = ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
@@ -76,23 +100,23 @@ public static class RepoFocus
                     continue;
 
                 matches.Add($"{file}:{lineNo}:{line}");
-                if (!cliOptions.Raw && matches.Count >= 500)
+                if (!raw && matches.Count >= 500)
                     break;
             }
 
-            if (!cliOptions.Raw && matches.Count >= 500)
+            if (!raw && matches.Count >= 500)
                 break;
         }
 
-        var raw = string.Join('\n', matches);
+        var rawOut = string.Join('\n', matches);
         if (matches.Count > 0)
-            raw += "\n";
+            rawOut += "\n";
 
-        if (cliOptions.Raw)
-            return (matches.Count > 0 ? 0 : 1, raw);
+        if (raw)
+            return (matches.Count > 0 ? 0 : 1, rawOut);
 
         var exitCode = matches.Count > 0 ? 0 : 1;
-        return (exitCode, Render(raw, exitCode, cliOptions, options));
+        return (exitCode, Render(rawOut, exitCode, detail, options));
     }
 
     private static IEnumerable<string> EnumerateFiles(string path)
@@ -112,16 +136,13 @@ public static class RepoFocus
 
     private static bool LooksBinary(string path)
     {
-        var bytes = File.ReadAllBytes(path);
-        return bytes.Take(512).Any(b => b == 0);
+        using var stream = File.OpenRead(path);
+        Span<byte> buffer = stackalloc byte[512];
+        var read = stream.Read(buffer);
+        return buffer[..read].IndexOf((byte)0) >= 0;
     }
 
-    private static string Combine(string stdout, string stderr) =>
-        string.IsNullOrWhiteSpace(stderr)
-            ? stdout
-            : $"{stdout.TrimEnd()}\n{stderr}";
-
-    private static string Render(string raw, int exitCode, CliOptions cliOptions, FocusOptions options)
+    private static string Render(string raw, int exitCode, DetailLevel detail, FocusOptions options)
     {
         var lines = raw.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         var entries = lines
@@ -144,9 +165,9 @@ public static class RepoFocus
             return $"focus{ScopeSuffix(options.Scope)} m=0 f=0\n";
 
         var filteredMatches = entries.Count(e => IsVisible(e.Kind, options.Scope));
-        var limit = cliOptions.DetailLevel == DetailLevel.More ? 8 : 5;
-        var docLimit = cliOptions.DetailLevel == DetailLevel.More ? 4 : 2;
-        var sampleLimit = cliOptions.DetailLevel == DetailLevel.More ? 6 : 3;
+        var limit = detail == DetailLevel.More ? 8 : 5;
+        var docLimit = detail == DetailLevel.More ? 4 : 2;
+        var sampleLimit = detail == DetailLevel.More ? 6 : 3;
         var sb = new StringBuilder();
         sb.AppendLine(BuildHeader(files, filteredFiles, entries.Count, filteredMatches, options.Scope));
 
@@ -163,7 +184,7 @@ public static class RepoFocus
                 AppendSection(sb, "top", filteredFiles, limit, shownFiles);
             }
 
-            if (cliOptions.DetailLevel == DetailLevel.More)
+            if (detail == DetailLevel.More)
             {
                 var docFiles = filteredFiles.Where(f => f.Kind == FocusKind.Docs).ToList();
                 if (docFiles.Count > 0)

@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using Tk.Common;
 
 namespace Tk.Filters;
 
@@ -16,42 +17,10 @@ public sealed partial class DotnetBuildFilter : IOutputFilter
 
         foreach (var line in lines)
         {
-            // Extract diagnostics: file(line,col): warning/error CODE: message [project]
-            var m = DiagnosticRe().Match(line);
-            if (m.Success)
+            var diagnostic = DiagnosticParser.Parse(line);
+            if (diagnostic is not null)
             {
-                var diag = new Diagnostic(
-                    File: NormalizePath(m.Groups["file"].Value.Trim()),
-                    Line: int.TryParse(m.Groups["line"].Value, out var l) ? l : 0,
-                    Column: int.TryParse(m.Groups["col"].Value, out var c) ? c : 0,
-                    Kind: m.Groups["kind"].Value.ToLowerInvariant(),
-                    Code: m.Groups["code"].Value,
-                    Message: m.Groups["msg"].Value.Trim(),
-                    Project: ExtractProject(m.Groups["proj"].Value)
-                );
-
-                if (diag.Kind == "error")
-                    errors.Add(diag);
-                else
-                    warnings.Add(diag);
-
-                continue;
-            }
-
-            // Extract tool diagnostics: "MSBUILD : error MSB1009: message"
-            var toolMatch = ToolDiagnosticRe().Match(line);
-            if (toolMatch.Success)
-            {
-                var diag = new Diagnostic(
-                    File: toolMatch.Groups["source"].Value.Trim(),
-                    Line: 0,
-                    Column: 0,
-                    Kind: toolMatch.Groups["kind"].Value.ToLowerInvariant(),
-                    Code: toolMatch.Groups["code"].Value,
-                    Message: toolMatch.Groups["msg"].Value.Trim(),
-                    Project: ""
-                );
-
+                var diag = diagnostic with { File = NormalizePath(diagnostic.File) };
                 if (diag.Kind == "error")
                     errors.Add(diag);
                 else
@@ -241,19 +210,6 @@ public sealed partial class DotnetBuildFilter : IOutputFilter
         return idx >= 0 ? path[(idx + 1)..] : Path.GetFileName(path);
     }
 
-    private static string ExtractProject(string raw)
-    {
-        // [C:\path\to\Project.csproj] -> Project
-        var trimmed = raw.Trim().Trim('[', ']');
-        return Path.GetFileNameWithoutExtension(trimmed);
-    }
-
-    [GeneratedRegex(@"^(?<file>[^\r\n(]+)\((?<line>\d+),(?<col>\d+)\):\s*(?<kind>error|warning)\s+(?<code>[A-Za-z]*\d*)\s*:\s*(?<msg>[^\[]+?)(?<proj>\[[^\]]*\])?\s*$")]
-    private static partial Regex DiagnosticRe();
-
-    [GeneratedRegex(@"^(?<source>.+?)\s*:\s*(?<kind>error|warning)\s+(?<code>[A-Za-z]*\d+)\s*:\s*(?<msg>.+)$")]
-    private static partial Regex ToolDiagnosticRe();
-
     [GeneratedRegex(@"^\s+(.+?)\s+->\s+")]
     private static partial Regex ProjectBuildRe();
 
@@ -275,8 +231,6 @@ public sealed partial class DotnetBuildFilter : IOutputFilter
         foreach (var line in tail)
             sb.AppendLine($"  {line}");
     }
-
-    private record Diagnostic(string File, int Line, int Column, string Kind, string Code, string Message, string Project);
 
     private class DiagnosticGroup(string code, string message)
     {

@@ -1,6 +1,5 @@
-namespace Tk.Filters;
+namespace Tk.Common;
 
-/// <summary>ANSI color helpers for terminal output.</summary>
 public static class Ansi
 {
     public static readonly bool Enabled = !Console.IsOutputRedirected

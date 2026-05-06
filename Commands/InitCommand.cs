@@ -1,7 +1,9 @@
-namespace Tk;
+namespace Tk.Commands;
 
-public static class ClaudeInit
+public sealed class InitCommand : ICommand
 {
+    public string Name => "init";
+
     private const string ClaudeMarker = "<!-- tk-global-claude -->";
     private const string AgentsMarker = "<!-- tk-global-agents -->";
     private const string EndMarker = "<!-- /tk-global -->";
@@ -74,7 +76,7 @@ public static class ClaudeInit
         {EndMarker}
         """;
 
-    public static int Run()
+    public Task<int> RunAsync(CommandContext ctx)
     {
         var home = ResolveHomeDirectory();
 
@@ -97,29 +99,29 @@ public static class ClaudeInit
         {
             try
             {
-                UpsertInstructions(target);
+                UpsertInstructions(target, ctx.Out);
             }
             catch (Exception ex)
             {
                 failures.Add($"{target.Path}: {ex.Message}");
-                Console.Error.WriteLine($"tk init failed for {target.Path}: {ex.Message}");
+                ctx.Err.WriteLine($"tk init failed for {target.Path}: {ex.Message}");
             }
         }
 
         if (failures.Count == 0)
-            Console.WriteLine("tk global instructions installed.");
+            ctx.Out.WriteLine("tk global instructions installed.");
         else if (failures.Count < targets.Length)
-            Console.WriteLine("tk global instructions installed with partial failures.");
+            ctx.Out.WriteLine("tk global instructions installed with partial failures.");
         else
-            Console.WriteLine("tk global instructions install failed.");
+            ctx.Out.WriteLine("tk global instructions install failed.");
 
         foreach (var target in targets)
-            Console.WriteLine($"  {target.Label}: {target.Path}");
+            ctx.Out.WriteLine($"  {target.Label}: {target.Path}");
 
-        return failures.Count == 0 ? 0 : 1;
+        return Task.FromResult(failures.Count == 0 ? 0 : 1);
     }
 
-    private static void UpsertInstructions(InstallTarget target)
+    private static void UpsertInstructions(InstallTarget target, TextWriter @out)
     {
         var directory = Path.GetDirectoryName(target.Path);
         if (!string.IsNullOrEmpty(directory))
@@ -130,12 +132,12 @@ public static class ClaudeInit
 
         if (updated == existing)
         {
-            Console.WriteLine($"tk instructions already up to date in {target.Path}");
+            @out.WriteLine($"tk instructions already up to date in {target.Path}");
             return;
         }
 
         File.WriteAllText(target.Path, updated);
-        Console.WriteLine($"tk instructions updated in {target.Path}");
+        @out.WriteLine($"tk instructions updated in {target.Path}");
     }
 
     private static string ReplaceMarkedBlock(string content, string marker, string block)

@@ -1,4 +1,4 @@
-namespace Tk;
+namespace Tk.Common;
 
 public static class RepoScope
 {

@@ -1,9 +1,7 @@
-namespace Tk.Filters;
+namespace Tk.Common;
 
-/// <summary>Shared path-stripping helpers for grep/find filters.</summary>
 internal static class PathUtils
 {
-    /// <summary>Longest common directory prefix across all paths.</summary>
     public static string FindCommonPrefix(IEnumerable<string> paths)
     {
         string? prefix = null;

@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using Tk.Common;
 
 namespace Tk.Filters;
 
@@ -130,25 +131,20 @@ public sealed partial class GitStatusFilter : IOutputFilter
                 continue;
             }
 
-            if (line.Length < 4)
+            var entry = GitPorcelain.ParseLine(line);
+            if (entry is null)
                 continue;
 
-            var x = line[0];
-            var y = line[1];
-            var path = line[3..].Trim();
-            if (string.IsNullOrWhiteSpace(path))
-                continue;
-
-            if (x == '?' && y == '?')
+            if (entry.X == '?' && entry.Y == '?')
             {
-                untracked.Add(path);
+                untracked.Add(entry.Path);
                 continue;
             }
 
-            if (x != ' ' && x != '?')
-                staged.Add(path);
-            if (y != ' ' && y != '?')
-                modified.Add(path);
+            if (entry.X != ' ' && entry.X != '?')
+                staged.Add(entry.Path);
+            if (entry.Y != ' ' && entry.Y != '?')
+                modified.Add(entry.Path);
         }
 
         return FormatSummary(branch, staged, modified, untracked);

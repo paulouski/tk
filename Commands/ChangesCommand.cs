@@ -1,0 +1,56 @@
+using System.Text;
+using Tk.Common;
+using Tk.Filters;
+
+namespace Tk.Commands;
+
+public sealed class ChangesCommand : ICommand
+{
+    public string Name => "changes";
+
+    public async Task<int> RunAsync(CommandContext ctx)
+    {
+        var (statusExitCode, statusStdout, statusStderr) = await ctx.Process.RunAsync(
+            ["git", "status", "--porcelain=v1", "--branch"]);
+        var statusRaw = ProcessOutput.Combine(statusStdout, statusStderr);
+        if (statusExitCode != 0)
+        {
+            ctx.Out.Write(statusRaw);
+            return statusExitCode;
+        }
+
+        var (diffExitCode, diffStdout, diffStderr) = await ctx.Process.RunAsync(["git", "diff"]);
+        var diffRaw = ProcessOutput.Combine(diffStdout, diffStderr);
+        if (diffExitCode != 0)
+        {
+            ctx.Out.Write(diffRaw);
+            return diffExitCode;
+        }
+
+        if (ctx.Raw)
+        {
+            var rawOutput = new StringBuilder();
+            rawOutput.Append(statusRaw.TrimEnd());
+            if (!string.IsNullOrWhiteSpace(diffRaw))
+            {
+                rawOutput.AppendLine();
+                rawOutput.Append(diffRaw.TrimEnd());
+            }
+            rawOutput.AppendLine();
+            ctx.Out.Write(rawOutput.ToString());
+            return 0;
+        }
+
+        var statusOutput = new GitStatusFilter(ctx.DetailLevel).Apply(statusRaw, 0).TrimEnd();
+        var diffOutput = new GitDiffFilter(ctx.DetailLevel).Apply(diffRaw, 0).TrimEnd();
+
+        var sb = new StringBuilder();
+        sb.AppendLine(statusOutput);
+        if (!string.Equals(diffOutput, "ok diff f=0", StringComparison.Ordinal))
+            sb.AppendLine(diffOutput);
+
+        ctx.Out.Write(sb.ToString());
+        return 0;
+    }
+
+}
