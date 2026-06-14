@@ -12,23 +12,35 @@ Same idea for `git status`, `git diff`, `git log`, and service log files.
 
 ## Install
 
-Requires [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8).
+Requires the [.NET 8 **Runtime**](https://dotnet.microsoft.com/download/dotnet/8) (not the SDK). The install script will offer to install it via `winget` if it is missing.
 
 ```powershell
-git clone https://github.com/<you>/tk.git
-cd tk
-.\install.ps1
+irm https://raw.githubusercontent.com/paulouski/tk/main/install.ps1 | iex
 ```
 
-This builds the project, puts the binary in `%LOCALAPPDATA%\tk`, adds it to user PATH, and installs global instruction blocks to:
+This downloads the latest `tk.exe` from GitHub Releases, puts it in `%LOCALAPPDATA%\tk`, adds that directory to your user PATH, and installs global instruction blocks to:
 
 - `~/.claude/CLAUDE.md`
 - `~/.codex/AGENTS.md`
 
-**Manual install** (if you prefer):
+Re-run the same command at any time to update to the latest release.
+
+### Build from source (development)
+
+Requires the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8).
+
+```powershell
+git clone https://github.com/paulouski/tk.git
+cd tk
+.\build.ps1
+```
+
+`build.ps1` compiles and publishes the binary to `%LOCALAPPDATA%\tk`, adds it to user PATH, and runs `tk init`.
+
+You can also publish manually:
 
 ```bash
-dotnet publish -c Release -o <your-bin-dir>
+dotnet publish Tk.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o <your-bin-dir>
 # add <your-bin-dir> to PATH
 tk init   # optional: install global Claude + AGENTS instructions
 ```

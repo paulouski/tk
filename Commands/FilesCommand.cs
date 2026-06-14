@@ -8,13 +8,15 @@ public sealed class FilesCommand : ICommand
 {
     public string Name => "files";
 
-    public async Task<int> RunAsync(CommandContext ctx)
+    public async Task<int> RunAsync(CommandContext ctx) => await RunAsync(ctx, unityMode: false);
+
+    public async Task<int> RunAsync(CommandContext ctx, bool unityMode)
     {
-        ctx.Out.Write(await RenderAsync(ctx.Args, ctx.Raw, ctx.DetailLevel, ctx.Process));
+        ctx.Out.Write(await RenderAsync(ctx.Args, ctx.Raw, ctx.DetailLevel, ctx.Process, unityMode));
         return 0;
     }
 
-    private static async Task<string> RenderAsync(string[] args, bool raw, DetailLevel detail, IProcessRunner runner)
+    private static async Task<string> RenderAsync(string[] args, bool raw, DetailLevel detail, IProcessRunner runner, bool unityMode = false)
     {
         var path = FindPathArg(args) ?? ".";
         var flags = args;
@@ -34,14 +36,14 @@ public sealed class FilesCommand : ICommand
         }
         else
         {
-            files = EnumerateFiles(path, includeIgnored: raw, codeFocused).ToList();
+            files = EnumerateFiles(path, includeIgnored: raw, codeFocused, unityMode).ToList();
         }
 
         if (!string.IsNullOrEmpty(extension))
             files = files.Where(f => string.Equals(Path.GetExtension(f), extension, StringComparison.OrdinalIgnoreCase)).ToList();
 
         if (codeFocused)
-            files = files.Where(RepoScope.IsCodeFile).ToList();
+            files = files.Where(f => RepoScope.IsCodeFile(f, unityMode)).ToList();
 
         var relative = files
             .Select(f => MakeRelative(path, f))
@@ -82,11 +84,11 @@ public sealed class FilesCommand : ICommand
         return sb.ToString();
     }
 
-    private static IEnumerable<string> EnumerateFiles(string path, bool includeIgnored, bool codeFocused)
+    private static IEnumerable<string> EnumerateFiles(string path, bool includeIgnored, bool codeFocused, bool unityMode = false)
     {
         foreach (var file in Directory.GetFiles(path))
         {
-            if (!RepoScope.ShouldIncludeFile(file, codeFocused))
+            if (!RepoScope.ShouldIncludeFile(file, codeFocused, unityMode))
                 continue;
 
             yield return file;
@@ -94,10 +96,10 @@ public sealed class FilesCommand : ICommand
 
         foreach (var directory in Directory.GetDirectories(path))
         {
-            if (!RepoScope.ShouldIncludeDirectory(directory, includeIgnored, codeFocused))
+            if (!RepoScope.ShouldIncludeDirectory(directory, includeIgnored, codeFocused, unityMode))
                 continue;
 
-            foreach (var file in EnumerateFiles(directory, includeIgnored, codeFocused))
+            foreach (var file in EnumerateFiles(directory, includeIgnored, codeFocused, unityMode))
                 yield return file;
         }
     }

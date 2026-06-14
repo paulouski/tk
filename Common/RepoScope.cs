@@ -24,33 +24,56 @@ public static class RepoScope
         ".md", ".txt", ".adoc", ".rst"
     };
 
-    public static bool ShouldIncludeDirectory(string directory, bool includeIgnored, bool codeFocused)
+    public static readonly HashSet<string> UnityIgnoredDirectories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Library", "Temp", "Logs", "Build", "Builds", "UserSettings", "MemoryCaptures"
+    };
+
+    public static readonly HashSet<string> UnityCodeExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".shader", ".hlsl", ".cginc", ".compute", ".asmdef", ".asmref", ".uxml", ".uss", ".inputactions"
+    };
+
+    public static bool ShouldIncludeDirectory(string directory, bool includeIgnored, bool codeFocused, bool unityMode = false)
     {
         var name = Path.GetFileName(directory);
         if (!includeIgnored && IgnoredDirectories.Contains(name))
             return false;
 
-        if (codeFocused && CodeHiddenDirectories.Contains(name))
+        if (unityMode && !includeIgnored && UnityIgnoredDirectories.Contains(name))
+            return false;
+
+        if (codeFocused && CodeHiddenDirectories.Contains(name)
+            && !(unityMode && name.Equals("Assets", StringComparison.OrdinalIgnoreCase)))
             return false;
 
         return true;
     }
 
-    public static bool ShouldIncludeFile(string path, bool codeFocused)
+    public static bool ShouldIncludeFile(string path, bool codeFocused, bool unityMode = false)
     {
+        if (unityMode && Path.GetExtension(path).Equals(".meta", StringComparison.OrdinalIgnoreCase))
+            return false;
+
         if (!codeFocused)
             return true;
 
-        return IsCodeFile(path);
+        return IsCodeFile(path, unityMode);
     }
 
-    public static bool IsCodeFile(string path)
+    public static bool IsCodeFile(string path, bool unityMode = false)
     {
         if (IsGeneratedFile(path))
             return false;
 
+        if (unityMode && UnityCodeExtensions.Contains(Path.GetExtension(path)))
+            return true;
+
         return CodeExtensions.Contains(Path.GetExtension(path));
     }
+
+    public static bool IsUnityProject(string root) =>
+        File.Exists(Path.Combine(root, "ProjectSettings", "ProjectVersion.txt"));
 
     public static bool IsDocFile(string path)
     {

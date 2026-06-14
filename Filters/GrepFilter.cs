@@ -14,11 +14,13 @@ public sealed partial class GrepFilter : IOutputFilter
     private readonly int _maxSamples;
     private readonly string _command;
     private readonly DetailLevel _detailLevel;
+    private readonly string? _pattern;
 
-    public GrepFilter(string command, DetailLevel detailLevel)
+    public GrepFilter(string command, DetailLevel detailLevel, string? pattern = null)
     {
         _command = command;
         _detailLevel = detailLevel;
+        _pattern = string.IsNullOrWhiteSpace(pattern) ? null : pattern;
         _maxTopFiles = detailLevel == DetailLevel.More ? 6 : 3;
         _maxSamples = detailLevel == DetailLevel.More ? 6 : 3;
     }
@@ -108,7 +110,7 @@ public sealed partial class GrepFilter : IOutputFilter
                 var first = sample.First();
                 var path = PathUtils.StripPrefix(first.File, prefix);
                 var location = first.Line > 0 ? $"{path}:{first.Line}" : path;
-                sb.AppendLine($"  {location} {Truncate(sample.Key, 120)}");
+                sb.AppendLine($"  {location} {TruncateAroundPattern(sample.Key, 120, _pattern)}");
             }
         }
         else if (files.Count > 0)
@@ -132,8 +134,26 @@ public sealed partial class GrepFilter : IOutputFilter
         return sb.ToString();
     }
 
-    private static string Truncate(string s, int max) =>
-        s.Length > max ? s[..max] + "..." : s;
+    private static string TruncateAroundPattern(string s, int max, string? pattern)
+    {
+        if (s.Length <= max)
+            return s;
+
+        var patternIndex = pattern is null
+            ? -1
+            : s.IndexOf(pattern, StringComparison.OrdinalIgnoreCase);
+        if (patternIndex < 0)
+            return s[..max] + "...";
+
+        var start = Math.Max(0, patternIndex - (max / 3));
+        if (start + max > s.Length)
+            start = Math.Max(0, s.Length - max);
+
+        var end = Math.Min(s.Length, start + max);
+        var prefix = start > 0 ? "..." : "";
+        var suffix = end < s.Length ? "..." : "";
+        return prefix + s[start..end] + suffix;
+    }
 
     private static bool TryParseFileContent(string line, out string file, out string content)
     {

@@ -106,4 +106,17 @@ public class GrepFilterTests
         Assert.Contains(new string('x', 120), sampleLine);
         Assert.DoesNotContain(new string('x', 121), sampleLine);
     }
+
+    [Fact]
+    public void Long_sample_content_truncated_around_pattern_when_known()
+    {
+        var raw = $"src/a.cs:1:{new string('a', 160)}NEEDLE{new string('z', 160)}\nsrc/b.cs:2:other";
+
+        var actual = new GrepFilter("rg", DetailLevel.Default, "NEEDLE").Apply(raw, 0);
+
+        var sampleLine = actual.Split('\n').First(l => l.TrimStart().StartsWith("a.cs"));
+        Assert.Contains("NEEDLE", sampleLine);
+        Assert.StartsWith("  a.cs:1 ...", sampleLine);
+        Assert.EndsWith("...", sampleLine);
+    }
 }

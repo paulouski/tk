@@ -7,13 +7,15 @@ public sealed class TreeCommand : ICommand
 {
     public string Name => "tree";
 
-    public Task<int> RunAsync(CommandContext ctx)
+    public Task<int> RunAsync(CommandContext ctx) => RunAsync(ctx, unityMode: false);
+
+    public Task<int> RunAsync(CommandContext ctx, bool unityMode)
     {
-        ctx.Out.Write(Render(ctx.Args, ctx.Raw, ctx.DetailLevel));
+        ctx.Out.Write(Render(ctx.Args, ctx.Raw, ctx.DetailLevel, unityMode));
         return Task.FromResult(0);
     }
 
-    private static string Render(string[] args, bool raw, DetailLevel detail)
+    private static string Render(string[] args, bool raw, DetailLevel detail, bool unityMode = false)
     {
         var path = args.FirstOrDefault(a => !a.StartsWith('-')) ?? ".";
         var flags = args;
@@ -25,7 +27,7 @@ public sealed class TreeCommand : ICommand
         var includeIgnored = raw || flags.Contains("--all");
         var maxDepth = ParseDepth(flags) ?? (raw ? 5 : detail == DetailLevel.More ? 3 : 2);
         var topFiles = raw ? 12 : detail == DetailLevel.More ? 8 : 5;
-        var root = BuildNode(path, includeIgnored, codeFocused, currentDepth: 0, maxDepth);
+        var root = BuildNode(path, includeIgnored, codeFocused, currentDepth: 0, maxDepth, unityMode);
         var directoryCount = CountDirectories(root) - 1;
         var fileCount = CountFiles(root);
 
@@ -44,17 +46,17 @@ public sealed class TreeCommand : ICommand
         return sb.ToString();
     }
 
-    private static DirectoryNode BuildNode(string path, bool includeIgnored, bool codeFocused, int currentDepth, int maxDepth)
+    private static DirectoryNode BuildNode(string path, bool includeIgnored, bool codeFocused, int currentDepth, int maxDepth, bool unityMode = false)
     {
         var node = new DirectoryNode(path);
 
         var directories = Directory.GetDirectories(path)
-            .Where(d => RepoScope.ShouldIncludeDirectory(d, includeIgnored, codeFocused))
+            .Where(d => RepoScope.ShouldIncludeDirectory(d, includeIgnored, codeFocused, unityMode))
             .OrderBy(d => d, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         foreach (var file in Directory.GetFiles(path)
-            .Where(f => RepoScope.ShouldIncludeFile(f, codeFocused))
+            .Where(f => RepoScope.ShouldIncludeFile(f, codeFocused, unityMode))
             .OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
         {
             node.Files.Add(file);
@@ -65,7 +67,7 @@ public sealed class TreeCommand : ICommand
 
         foreach (var directory in directories)
         {
-            var child = BuildNode(directory, includeIgnored, codeFocused, currentDepth + 1, maxDepth);
+            var child = BuildNode(directory, includeIgnored, codeFocused, currentDepth + 1, maxDepth, unityMode);
             if (!codeFocused || child.Files.Count > 0 || child.Directories.Count > 0)
                 node.Directories.Add(child);
         }

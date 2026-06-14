@@ -145,4 +145,102 @@ public class GitStatusFilterTests
         var actual = new GitStatusFilter(DetailLevel.Default).Apply(raw, 128);
         Assert.Equal(raw, actual);
     }
+
+    [Fact]
+    public void State_raw_adds_repository_state_to_summary()
+    {
+        var raw = "## main\n";
+        var stateRaw = """
+            On branch main
+            You are currently cherry-picking commit abc123.
+              (fix conflicts and run "git cherry-pick --continue")
+            """;
+
+        var actual = new GitStatusFilter(DetailLevel.Default).Apply(raw, 0, stateRaw);
+
+        Assert.Contains("state=cherry-pick", actual);
+    }
+
+    // Unity mode tests
+
+    [Fact]
+    public void Unity_mode_partitions_meta_files_out_of_counts()
+    {
+        var raw = """
+            ## main
+            M  Assets/Foo.cs
+            M  Assets/Foo.cs.meta
+             M Assets/Bar.shader
+             M Assets/Bar.shader.meta
+            ?? Assets/New.cs
+            ?? Assets/New.cs.meta
+            """;
+
+        var actual = new GitStatusFilter(DetailLevel.Default, unityMode: true).Apply(raw, 0);
+
+        Assert.Contains("st=1", actual);
+        Assert.Contains("mod=1", actual);
+        Assert.Contains("untr=1", actual);
+        Assert.Contains("meta=3", actual);
+    }
+
+    [Fact]
+    public void Unity_mode_meta_paths_absent_from_top_list()
+    {
+        var raw = """
+            ## main
+            M  Assets/Foo.cs
+            M  Assets/Foo.cs.meta
+            ?? Assets/New.cs.meta
+            """;
+
+        var actual = new GitStatusFilter(DetailLevel.Default, unityMode: true).Apply(raw, 0);
+
+        Assert.DoesNotContain(".meta", actual.Split('\n').First(l => l.StartsWith("top=")));
+    }
+
+    [Fact]
+    public void Unity_mode_meta_only_repo_is_not_ok()
+    {
+        var raw = """
+            ## main
+            M  Assets/Foo.cs.meta
+            """;
+
+        var actual = new GitStatusFilter(DetailLevel.Default, unityMode: true).Apply(raw, 0);
+
+        Assert.StartsWith("status ", actual);
+        Assert.Contains("meta=1", actual);
+        Assert.DoesNotContain("ok status", actual);
+    }
+
+    [Fact]
+    public void Unity_mode_clean_repo_with_no_meta_is_ok()
+    {
+        var raw = "## main\n";
+
+        var actual = new GitStatusFilter(DetailLevel.Default, unityMode: true).Apply(raw, 0);
+
+        Assert.StartsWith("ok status", actual);
+        Assert.DoesNotContain("meta=", actual);
+    }
+
+    [Fact]
+    public void Default_mode_never_outputs_meta_field()
+    {
+        var raw = """
+            ## main
+            M  Assets/Foo.cs.meta
+             M Assets/Bar.cs.meta
+            ?? Assets/New.cs.meta
+            """;
+
+        var actual = new GitStatusFilter(DetailLevel.Default).Apply(raw, 0);
+
+        Assert.DoesNotContain("meta=", actual);
+        // All .meta paths appear normally in default mode
+        Assert.Contains("st=1", actual);
+        Assert.Contains("mod=1", actual);
+        Assert.Contains("untr=1", actual);
+    }
 }

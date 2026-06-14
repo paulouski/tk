@@ -9,14 +9,18 @@ public sealed partial class GitStatusFilter : IOutputFilter
 {
     private readonly DetailLevel _detailLevel;
     private readonly int _maxTopPaths;
+    private readonly bool _unityMode;
 
-    public GitStatusFilter(DetailLevel detailLevel)
+    public GitStatusFilter(DetailLevel detailLevel, bool unityMode = false)
     {
         _detailLevel = detailLevel;
         _maxTopPaths = detailLevel == DetailLevel.More ? 12 : 5;
+        _unityMode = unityMode;
     }
 
-    public string Apply(string raw, int exitCode)
+    public string Apply(string raw, int exitCode) => Apply(raw, exitCode, stateRaw: null);
+
+    public string Apply(string raw, int exitCode, string? stateRaw)
     {
         if (exitCode != 0) return raw;
 
@@ -26,7 +30,7 @@ public sealed partial class GitStatusFilter : IOutputFilter
             return "ok status st=0 mod=0 untr=0\n";
 
         if (LooksLikePorcelain(lines))
-            return FormatPorcelain(lines);
+            return FormatPorcelain(lines, stateRaw);
 
         var staged = new List<string>();
         var modified = new List<string>();
@@ -82,17 +86,32 @@ public sealed partial class GitStatusFilter : IOutputFilter
             }
         }
 
-        return FormatSummary(branch, staged, modified, untracked);
+        return FormatSummary(branch, staged, modified, untracked, stateRaw);
     }
 
-    private string FormatSummary(string? branch, List<string> staged, List<string> modified, List<string> untracked)
+    private string FormatSummary(string? branch, List<string> staged, List<string> modified, List<string> untracked, string? stateRaw = null)
     {
-        var clean = staged.Count == 0 && modified.Count == 0 && untracked.Count == 0;
+        var metaCount = 0;
+        if (_unityMode)
+        {
+            static bool IsMeta(string p) => p.EndsWith(".meta", StringComparison.OrdinalIgnoreCase);
+            metaCount += staged.RemoveAll(IsMeta);
+            metaCount += modified.RemoveAll(IsMeta);
+            metaCount += untracked.RemoveAll(IsMeta);
+        }
+
+        var clean = staged.Count == 0 && modified.Count == 0 && untracked.Count == 0
+            && (!_unityMode || metaCount == 0);
+        var states = ExtractRepositoryStates(stateRaw).ToList();
         var sb = new StringBuilder();
         sb.Append(clean ? "ok status" : "status");
         sb.Append($" st={staged.Count} mod={modified.Count} untr={untracked.Count}");
+        if (_unityMode && metaCount > 0)
+            sb.Append($" meta={metaCount}");
         if (!string.IsNullOrWhiteSpace(branch))
             sb.Append($" br={SanitizeBranch(branch)}");
+        if (states.Count > 0)
+            sb.Append($" state={string.Join("+", states)}");
         sb.AppendLine();
 
         var top = new List<string>();
@@ -116,7 +135,7 @@ public sealed partial class GitStatusFilter : IOutputFilter
         lines.Any(line => line.StartsWith("## "))
         || lines.All(line => line.Length >= 3 && PorcelainStatusRe().IsMatch(line));
 
-    private string FormatPorcelain(string[] lines)
+    private string FormatPorcelain(string[] lines, string? stateRaw = null)
     {
         string? branch = null;
         var staged = new List<string>();
@@ -147,7 +166,27 @@ public sealed partial class GitStatusFilter : IOutputFilter
                 modified.Add(entry.Path);
         }
 
-        return FormatSummary(branch, staged, modified, untracked);
+        return FormatSummary(branch, staged, modified, untracked, stateRaw);
+    }
+
+    private static IEnumerable<string> ExtractRepositoryStates(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            yield break;
+
+        var lower = raw.ToLowerInvariant();
+        if (lower.Contains("rebase in progress") || lower.Contains("rebasing"))
+            yield return "rebase";
+        if (lower.Contains("merge in progress") || lower.Contains("unmerged paths") || lower.Contains("fix conflicts and then commit"))
+            yield return "merge";
+        if (lower.Contains("cherry-pick"))
+            yield return "cherry-pick";
+        if (lower.Contains("revert currently in progress") || lower.Contains("reverting"))
+            yield return "revert";
+        if (lower.Contains("bisecting:"))
+            yield return "bisect";
+        if (lower.Contains("am in progress") || lower.Contains("apply mailbox"))
+            yield return "am";
     }
 
     private static void AppendSection(StringBuilder sb, string title, List<string> items)
