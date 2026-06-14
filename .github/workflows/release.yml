@@ -10,7 +10,18 @@ permissions:
   contents: write
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Run tests
+        run: dotnet test Tk.Tests/Tk.Tests.csproj -c Release --nologo
+
   build:
+    needs: test
     strategy:
       fail-fast: false
       matrix:
@@ -29,8 +40,6 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-      - name: Run tests
-        run: dotnet test Tk.Tests/Tk.Tests.csproj -c Release --nologo
       - name: Publish
         run: dotnet publish Tk.csproj -c Release -r ${{ matrix.rid }} --self-contained false -p:PublishSingleFile=true -o publish
       - name: Stage asset

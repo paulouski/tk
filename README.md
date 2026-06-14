@@ -12,13 +12,25 @@ Same idea for `git status`, `git diff`, `git log`, and service log files.
 
 ## Install
 
-Requires the [.NET 8 **Runtime**](https://dotnet.microsoft.com/download/dotnet/8) (not the SDK). The install script will offer to install it via `winget` if it is missing.
+Requires the [.NET 8 **Runtime**](https://dotnet.microsoft.com/download/dotnet/8) (not the SDK). The install script will offer to install it for you (via `winget` on Windows, Homebrew on macOS) if it is missing.
+
+### Windows
 
 ```powershell
 irm https://raw.githubusercontent.com/paulouski/tk/main/install.ps1 | iex
 ```
 
-This downloads the latest `tk.exe` from GitHub Releases, puts it in `%LOCALAPPDATA%\tk`, adds that directory to your user PATH, and installs global instruction blocks to:
+Downloads the latest `tk.exe` from GitHub Releases into `%LOCALAPPDATA%\tk` and adds it to your user PATH.
+
+### macOS (Apple Silicon)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/paulouski/tk/main/install.sh | bash
+```
+
+Downloads the latest `tk-osx-arm64` binary into `~/.local/bin/tk` and adds it to your PATH.
+
+Both installers also install global instruction blocks to:
 
 - `~/.claude/CLAUDE.md`
 - `~/.codex/AGENTS.md`
