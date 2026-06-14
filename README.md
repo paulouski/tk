@@ -88,6 +88,12 @@ tk focus Refit . --docs # docs/specs/guides only
 tk focus Refit . --all  # include docs/logs/other in the ranking
 tk focus "RunAsync(" tk  # same, scoped to a path
 
+# Unity (explicit, opt-in -- never changes the plain commands above)
+tk unity tree            # tree that hides Library/Temp/Logs and .meta sidecars
+tk unity files           # file inventory aware of Unity dirs and code extensions (.shader/.asmdef/...)
+tk unity tree --code     # code-focused, keeps Assets/ as the source root
+tk unity status          # git status that folds .meta noise into a meta= count
+
 # Quality gate
 tk quality .                     # dotnet build + dotnet format verify
 tk quality . --test-filter Onboarding  # add targeted tests

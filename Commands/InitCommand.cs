@@ -23,6 +23,7 @@ public sealed class InitCommand : ICommand
         - `tk view <file>`
         - `tk dotnet build|test|restore`
         - `tk git status|diff|log`
+        - `tk unity tree|files|status` (Unity projects: hides Library/Temp/Logs/.meta)
         - `tk log <file>`
 
         Escalate detail as:
@@ -57,6 +58,7 @@ public sealed class InitCommand : ICommand
         - `tk view <file>`
         - `tk dotnet build|test|restore`
         - `tk git status|diff|log`
+        - `tk unity tree|files|status` (Unity projects: hides Library/Temp/Logs/.meta)
         - `tk log <file>`
 
         Escalation order:
