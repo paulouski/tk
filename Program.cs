@@ -3,6 +3,7 @@ using Tk;
 using Tk.Commands;
 using Tk.Common;
 using Tk.Filters;
+using Tk.Modules;
 
 var cliOptions = CliOptionsParser.Parse(args);
 var commandArgs = cliOptions.CommandArgs;
@@ -20,21 +21,11 @@ if (commandArgs[0] is "--version")
     return 0;
 }
 
-var registry = new BuiltinRegistry([
-    new LsCommand(),
-    new ViewCommand(),
-    new InitCommand(),
-    new LogCommand(),
-    new TreeCommand(),
-    new FilesCommand(),
-    new ChangesCommand(),
-    new BranchCommand(),
-    new GitCommand(),
-    new FocusCommand(),
-    new QualityCommand(),
-    new SwitchCommand(),
-    new UnityCommand(),
-]);
+var moduleConfig = ModuleConfig.Load();
+var registry = new BuiltinRegistry(
+    ModuleCatalog.All
+        .Where(m => moduleConfig.IsEnabled(m))
+        .SelectMany(m => m.Commands));
 
 if (registry.TryResolve(commandArgs[0], out var builtin))
 {
@@ -74,6 +65,8 @@ static void PrintHelp()
     Console.WriteLine("  tk quality [path]          Fast local quality gate for agent changes");
     Console.WriteLine("  tk init                    Install global Claude + AGENTS instructions");
     Console.WriteLine("  tk switch                  Toggle between two Claude Code accounts");
+    Console.WriteLine("  tk refs <symbol>           Find all references to a symbol (LSP-backed)");
+    Console.WriteLine("  tk lsp status|stop         LSP daemon status and control");
     Console.WriteLine();
     Console.WriteLine("Commands:");
     Console.WriteLine("  tk ls <path>                   Names only (no perms/dates/sizes)");

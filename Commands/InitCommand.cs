@@ -1,82 +1,61 @@
+using Tk.Modules;
+
 namespace Tk.Commands;
 
 public sealed class InitCommand : ICommand
 {
+    // When constructed with no arguments, enabled modules are resolved at run time from ModuleConfig.
+    private readonly IReadOnlyList<ModuleDescriptor>? _enabledModules;
+
+    public InitCommand() { }
+
+    public InitCommand(IReadOnlyList<ModuleDescriptor> enabledModules)
+    {
+        _enabledModules = enabledModules;
+    }
+
+    private IReadOnlyList<ModuleDescriptor> ResolveEnabledModules()
+    {
+        if (_enabledModules is not null)
+            return _enabledModules;
+
+        var config = ModuleConfig.Load();
+        return ModuleCatalog.All.Where(m => config.IsEnabled(m)).ToList();
+    }
+
     public string Name => "init";
 
     private const string ClaudeMarker = "<!-- tk-global-claude -->";
     private const string AgentsMarker = "<!-- tk-global-agents -->";
     private const string EndMarker = "<!-- /tk-global -->";
 
-    private const string ClaudeInstructions = $"""
-        {ClaudeMarker}
-        ## tk Global Compact Workflow
+    private string BuildClaudeInstructions()
+    {
+        var snippets = ResolveEnabledModules()
+            .Select(m => m.InitSnippet)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .ToArray();
 
-        Prefer `tk` for noisy commands and repo exploration when exact raw output is not required.
+        return $"""
+            {ClaudeMarker}
+            {string.Join("\n\n", snippets)}
+            {EndMarker}
+            """;
+    }
 
-        Use:
-        - `tk changes`
-        - `tk tree`
-        - `tk files`
-        - `tk focus <query> [path]`
-        - `tk focus <query> [path] --files-only`
-        - `tk view <file>`
-        - `tk dotnet build|test|restore`
-        - `tk git status|diff|log`
-        - `tk unity tree|files|status` (Unity projects: hides Library/Temp/Logs/.meta)
-        - `tk log <file>`
+    private string BuildAgentsInstructions()
+    {
+        var snippets = ResolveEnabledModules()
+            .Select(m => ModuleCatalog.GetAgentsSnippet(m))
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .ToArray();
 
-        Escalate detail as:
-        - default `tk ...`
-        - `tk --more ...`
-        - `tk --raw ...`
-
-        Compact keys:
-        - `p=projects`, `t=time`, `e=errors`, `w=warnings`, `i=info`
-        - `nu=NuGet vulnerabilities`, `pass=passed`, `fail=failed`, `skip=skipped`
-        - `st=staged`, `mod=modified`, `untr=untracked`, `f=files`, `d=directories`, `m=matches`
-        - `n=count`, `top=top items`, `br=branch`, `up=up to date`, `file=file`
-
-        If compact output is enough to choose the next step, do not rerun raw.
-        If compact output is ambiguous, try `--more`.
-        If exact original output is needed, use `--raw`.
-        {EndMarker}
-        """;
-
-    private const string AgentsInstructions = $"""
-        {AgentsMarker}
-        # tk Global Agent Preset
-
-        Use `tk` as the default compact interface for repo exploration, search, and noisy command output.
-
-        Prefer:
-        - `tk changes`
-        - `tk tree`
-        - `tk files`
-        - `tk focus <query> [path]`
-        - `tk focus <query> [path] --files-only`
-        - `tk view <file>`
-        - `tk dotnet build|test|restore`
-        - `tk git status|diff|log`
-        - `tk unity tree|files|status` (Unity projects: hides Library/Temp/Logs/.meta)
-        - `tk log <file>`
-
-        Escalation order:
-        1. `tk ...`
-        2. `tk --more ...`
-        3. `tk --raw ...`
-
-        Stable compact keys:
-        - `p`, `t`, `e`, `w`, `i`, `nu`
-        - `pass`, `fail`, `skip`
-        - `st`, `mod`, `untr`
-        - `f`, `d`, `m`, `n`
-        - `top`, `br`, `up`, `file`
-
-        If compact output is sufficient to choose the next action, do not rerun the raw command.
-        If `tk` emits a raw tail fallback, treat it as parser uncertainty and inspect more carefully.
-        {EndMarker}
-        """;
+        return $"""
+            {AgentsMarker}
+            {string.Join("\n\n", snippets)}
+            {EndMarker}
+            """;
+    }
 
     public Task<int> RunAsync(CommandContext ctx)
     {
@@ -87,12 +66,12 @@ public sealed class InitCommand : ICommand
             new InstallTarget(
                 Path.Combine(home, ".claude", "CLAUDE.md"),
                 ClaudeMarker,
-                ClaudeInstructions,
+                BuildClaudeInstructions(),
                 "Claude global instructions"),
             new InstallTarget(
                 Path.Combine(home, ".codex", "AGENTS.md"),
                 AgentsMarker,
-                AgentsInstructions,
+                BuildAgentsInstructions(),
                 "global AGENTS instructions")
         };
 
