@@ -106,6 +106,17 @@ tk unity files           # file inventory aware of Unity dirs and code extension
 tk unity tree --code     # code-focused, keeps Assets/ as the source root
 tk unity status          # git status that folds .meta noise into a meta= count
 
+# Semantic navigation (LSP-backed, opt-in module)
+tk refs src/Mediator.cs:7:18    # all references to the symbol at file:line:col
+tk rename src/Mediator.cs:7:18 IBus  # rename a symbol everywhere, editing files IN PLACE
+tk lsp status                    # warm-daemon status for the current workspace
+tk lsp stop                      # stop the workspace daemon
+
+# Modules (enable/disable feature groups)
+tk module list                   # show modules and enabled state
+tk module disable unity          # drop a group's commands + its init snippet
+tk module enable lsp
+
 # Quality gate
 tk quality .                     # dotnet build + dotnet format verify
 tk quality . --test-filter Onboarding  # add targeted tests
@@ -126,6 +137,34 @@ tk log app.log --all     # raw output, no filtering
 tk cargo build           # no filter exists, runs as-is
 tk npm test              # same -- passthrough
 ```
+
+## Semantic navigation (`tk refs` / `tk rename`)
+
+Beyond text filtering, the `lsp` module gives agents real semantic operations backed by a warm language server, so navigation and refactors are accurate instead of guessed from grep:
+
+- `tk refs <file:line:col>` — exact references to a symbol (declaration + all usages), grouped by file.
+- `tk rename <file:line:col> <newName>` — rename a symbol across the whole workspace, applying edits **in place** (the files are modified, not recreated), so git history and unrelated lines are preserved. Intended for refactoring existing code, not atomic single-file micro-edits.
+
+A per-workspace daemon hosts the language server and stays warm across calls; the first call pays a cold load, later calls are fast. Edits made on disk between calls are picked up automatically. `tk lsp status` / `tk lsp stop` inspect and control it.
+
+**Requirement (C#):** these commands need a C# language server. `tk` discovers it in this order:
+
+1. `TK_LSP_CSHARP_SERVER` env var (explicit path),
+2. the Roslyn server bundled with the **C# Dev Kit / C# extension for VS Code** (`~/.vscode/extensions/ms-dotnettools.csharp-*/.roslyn/...`),
+3. `csharp-ls` on `PATH`.
+
+If none is found, `tk refs` / `tk rename` report that the server is unavailable with an install hint; the rest of `tk` is unaffected. `tk` does not download the server itself.
+
+## Modules
+
+`tk` is organized into feature groups so you only enable what you use:
+
+- `core` — always on (navigation, search, view, git, `init`, `module`, …)
+- `dotnet` — `tk quality`, `tk dotnet build|test|restore`
+- `unity` — `tk unity tree|files|status`
+- `lsp` — `tk refs`, `tk rename`, `tk lsp …`
+
+`tk module list|enable <name>|disable <name>` toggles a group. The set of enabled modules also determines which instruction snippets `tk init` writes into `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`, so disabling a module both removes its commands and stops advertising it to your agents. Config lives at `~/.claude/tk/modules`; with no config file, all modules are enabled.
 
 ## Agent-First vNext (planned)
 
