@@ -379,6 +379,71 @@ public sealed class LspDaemon
         return [.. locations];
     }
 
+    private async Task<FileEdits[]> RenameAsync(
+        MessageLoop loop, string filePath, int line, int character, string newName, CancellationToken ct)
+    {
+        var fileUri = new Uri(filePath).ToString();
+        await EnsureFileOpenAsync(loop, filePath, fileUri, ct).ConfigureAwait(false);
+
+        var renameParams = new
+        {
+            textDocument = new { uri = fileUri },
+            position = new { line, character },
+            newName
+        };
+
+        var result = await loop.SendRequestAsync("textDocument/rename", renameParams, ct).ConfigureAwait(false);
+
+        if (result.ValueKind == JsonValueKind.Null || result.ValueKind == JsonValueKind.Undefined)
+            return [];
+
+        // Parse result.changes (object map: uri -> TextEdit[])
+        if (result.TryGetProperty("changes", out var changes) && changes.ValueKind == JsonValueKind.Object)
+        {
+            var fileEditsList = new List<FileEdits>();
+            foreach (var prop in changes.EnumerateObject())
+            {
+                var edits = ParseTextEdits(prop.Value);
+                fileEditsList.Add(new FileEdits(prop.Name, edits));
+            }
+            return [.. fileEditsList];
+        }
+
+        // Parse result.documentChanges (array: [{textDocument:{uri}, edits:[]}])
+        if (result.TryGetProperty("documentChanges", out var docChanges) && docChanges.ValueKind == JsonValueKind.Array)
+        {
+            var fileEditsList = new List<FileEdits>();
+            foreach (var item in docChanges.EnumerateArray())
+            {
+                var uri = item.GetProperty("textDocument").GetProperty("uri").GetString() ?? "";
+                var edits = ParseTextEdits(item.GetProperty("edits"));
+                fileEditsList.Add(new FileEdits(uri, edits));
+            }
+            return [.. fileEditsList];
+        }
+
+        return [];
+    }
+
+    private static RenameTextEdit[] ParseTextEdits(JsonElement editsArray)
+    {
+        var list = new List<RenameTextEdit>();
+        foreach (var edit in editsArray.EnumerateArray())
+        {
+            var range = edit.GetProperty("range");
+            var start = range.GetProperty("start");
+            var end = range.GetProperty("end");
+            var newText = edit.GetProperty("newText").GetString() ?? "";
+            list.Add(new RenameTextEdit(
+                start.GetProperty("line").GetInt32(),
+                start.GetProperty("character").GetInt32(),
+                end.GetProperty("line").GetInt32(),
+                end.GetProperty("character").GetInt32(),
+                newText));
+        }
+        return [.. list];
+    }
+
     /// <summary>
     /// Sends textDocument/didOpen for a file once. Roslyn requires the document to be open
     /// before it will answer position-based queries; otherwise it faults with "Unexpected null".
@@ -439,6 +504,15 @@ public sealed class LspDaemon
                 Log($"refs query done, {locs.Length} locations");
                 response = new DaemonResponse(true, null, locs);
             }
+            else if (request.Method == "rename" && request.FilePath is not null && request.NewName is not null)
+            {
+                await WaitForReadyAsync(ct).ConfigureAwait(false);
+                Log($"rename: {request.FilePath}:{request.Line}:{request.Character} -> {request.NewName}");
+                var edits = await RenameAsync(loop, request.FilePath, request.Line, request.Character, request.NewName, ct).ConfigureAwait(false);
+                var n = edits.Sum(f => f.Edits.Length);
+                Log($"rename done, {n} edits in {edits.Length} files");
+                response = new DaemonResponse(true, null, null) with { Edits = edits };
+            }
             else
             {
                 response = new DaemonResponse(false, $"Unknown method: {request.Method}", null);
@@ -451,6 +525,24 @@ public sealed class LspDaemon
         }
 
         await writer.WriteLineAsync(JsonSerializer.Serialize(response, LspMessage.Options)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The action to take when syncing an open document for freshness.
+    /// </summary>
+    public enum SyncAction { None, Change, Close }
+
+    /// <summary>
+    /// Pure helper: decides what sync action to take for an already-opened document.
+    /// Returns <see cref="SyncAction.Close"/> if the file no longer exists,
+    /// <see cref="SyncAction.Change"/> if the file has been modified since it was opened,
+    /// or <see cref="SyncAction.None"/> if no update is needed.
+    /// </summary>
+    public static SyncAction DecideSyncAction(DateTime storedMtime, bool fileExists, DateTime currentMtime)
+    {
+        if (!fileExists) return SyncAction.Close;
+        if (currentMtime > storedMtime) return SyncAction.Change;
+        return SyncAction.None;
     }
 
     private void Log(string message)

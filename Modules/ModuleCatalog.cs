@@ -90,6 +90,7 @@ public static class ModuleCatalog
     private const string LspSnippet = """
         - `tk refs <symbol>` — find all references to a symbol (LSP-backed)
         - `tk refs <file:line:col>` — find references at position
+        - `tk rename <file:line:col> <newName>` — rename a symbol everywhere (for refactoring existing code, NOT for atomic single-file micro-edits)
         - `tk lsp status` — check LSP daemon status
         - `tk lsp stop` — stop LSP daemon
         """;
@@ -130,7 +131,7 @@ public static class ModuleCatalog
 
         new ModuleDescriptor(
             Name: "lsp",
-            Commands: [new LspStatusCommand(), new RefsCommand(), new LspDaemonCommand()],
+            Commands: [new LspStatusCommand(), new RefsCommand(), new RenameCommand(), new LspDaemonCommand()],
             AlwaysOn: false,
             InitSnippet: LspSnippet),
     ];
