@@ -83,8 +83,16 @@ public static class DaemonClient
                     FileName = tkPath,
                     ArgumentList = { "__lsp-daemon", workspaceRoot },
                     UseShellExecute = false,
-                    RedirectStandardOutput = false,
-                    RedirectStandardError = false,
+                    // Detach the daemon's stdio from the caller's inherited descriptors.
+                    // With these false the long-lived daemon inherits the caller's stdout/stderr,
+                    // so `tk refs ... | grep` or `$(tk refs ...)` would hang: the daemon holds the
+                    // pipe's write end open and the consumer never sees EOF until the daemon idles
+                    // out (~30 min). Redirecting gives the daemon its own pipes (owned by the
+                    // short-lived parent), which close when the parent exits. The daemon writes
+                    // only to its log file on the normal path, so the undrained pipes never fill.
+                    RedirectStandardInput = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
                     CreateNoWindow = true,
                 }
             };
