@@ -1,16 +1,16 @@
+using Tk.Common;
+
 namespace Tk.Modules;
 
 /// <summary>
-/// Reads and writes the set of enabled module names from
-/// <c>~/.claude/tk/modules</c> (one name per line).
+/// Reads and writes the set of enabled module names from the tk state root
+/// (<c>~/.local/state/tk/modules</c>, one name per line).
 /// If the file does not exist, all modules are considered enabled.
 /// The <c>core</c> module is always enabled regardless of config.
 /// </summary>
 public sealed class ModuleConfig
 {
-    private static readonly string ConfigPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        ".claude", "tk", "modules");
+    private static readonly string ConfigPath = TkPaths.ModulesFile();
 
     private readonly HashSet<string> _enabled;
     private readonly bool _defaultAll;

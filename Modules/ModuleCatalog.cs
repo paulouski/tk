@@ -10,18 +10,21 @@ public static class ModuleCatalog
     private const string CoreSnippet = """
         ## tk Global Compact Workflow
 
-        Prefer `tk` for noisy commands and repo exploration when exact raw output is not required.
+        `tk` turns noisy command and git output into compact, complete summaries. That — plus
+        semantic code navigation — is its real strength. For text search and full file reads,
+        native Grep/Read beat `tk`; treat `tk`'s search/read as orientation only.
 
-        Use:
-        - `tk changes`
-        - `tk tree`
-        - `tk files`
-        - `tk focus <query> [path]`
-        - `tk focus <query> [path] --files-only`
-        - `tk view <file>`
-        - `tk git status|diff|log`
-        - `tk log <file>`
+        Use `tk` for (where it wins):
+        - `tk git status|diff|log` — compact, complete git output
+        - `tk log <file>` — compacted file history
+        - `tk changes` — working-tree change summary
         - `tk mv <old> <new>` — move a file preserving git history (use instead of delete+recreate; keeps git blame and saves tokens). When moving across folders, check the file's namespace and update references afterward — tk does not rewrite them.
+        - plus the `dotnet` (build/test/restore) and `lsp` (refs/callers/def/rename) module commands listed below, when enabled — prefer these.
+
+        Orientation only — prefer native Grep/Read for real work:
+        - `tk tree`, `tk files` — quick repo shape
+        - `tk focus <query> [path]` (`--files-only`) — rough first sweep only; to find a symbol, its callers, or its definition use `tk refs`/`tk callers`/`tk def` (or native Grep), not focus
+        - `tk view <file>` — large-file map (symbols/hot TOC) only; to read a file, use native Read
 
         Escalate detail as:
         - default `tk ...`
@@ -43,18 +46,21 @@ public static class ModuleCatalog
     private const string CoreAgentsSnippet = """
         # tk Global Agent Preset
 
-        Use `tk` as the default compact interface for repo exploration, search, and noisy command output.
+        `tk` gives compact, complete output for noisy commands and git, plus semantic code
+        navigation. Those are its strengths — reach for them first. For text search and full
+        file reads, native Grep/Read are better; `tk`'s search/read are orientation only.
 
-        Prefer:
-        - `tk changes`
-        - `tk tree`
-        - `tk files`
-        - `tk focus <query> [path]`
-        - `tk focus <query> [path] --files-only`
-        - `tk view <file>`
-        - `tk git status|diff|log`
-        - `tk log <file>`
+        Prefer `tk` for (where it wins):
+        - `tk git status|diff|log` — compact, complete git output
+        - `tk log <file>` — compacted file history
+        - `tk changes` — working-tree change summary
         - `tk mv <old> <new>` — move a file preserving git history; NEVER delete and recreate a file to rename/relocate it — use this instead to keep git blame and avoid re-emitting file content. After moving across folders, check the file's namespace and update references — tk does not rewrite them.
+        - plus the `dotnet` (build/test/restore) and `lsp` (refs/callers/def/rename) module commands listed below, when enabled — prefer these.
+
+        Orientation only — prefer native Grep/Read for real work:
+        - `tk tree`, `tk files` — quick repo shape
+        - `tk focus <query> [path]` (`--files-only`) — rough first sweep only; to find a symbol, its callers, or its definition use `tk refs`/`tk callers`/`tk def` (or native Grep), not focus
+        - `tk view <file>` — large-file map (symbols/hot TOC) only; to read a file, use native Read
 
         Escalation order:
         1. `tk ...`
@@ -92,8 +98,12 @@ public static class ModuleCatalog
         """;
 
     private const string LspSnippet = """
-        - `tk refs <symbol>` — find all references to a symbol (LSP-backed)
+        - `tk refs <symbol>` — all references to a symbol by name (resolves name → position; lists candidates if ambiguous)
         - `tk refs <file:line:col>` — find references at position
+        - `tk callers <symbol>` — who calls this symbol (incoming call hierarchy; crosses interface dispatch)
+        - `tk callers <file:line:col>` — incoming callers at position
+        - `tk def <symbol>` — show where a symbol is defined (jumps to source; lists candidates if ambiguous)
+        - `tk def <file:line:col>` — go to definition at position
         - `tk rename <file:line:col> <newName>` — rename a symbol everywhere (for refactoring existing code, NOT for atomic single-file micro-edits)
         - `tk lsp status` — check LSP daemon status
         - `tk lsp stop` — stop LSP daemon
@@ -136,7 +146,7 @@ public static class ModuleCatalog
 
         new ModuleDescriptor(
             Name: "lsp",
-            Commands: [new LspStatusCommand(), new RefsCommand(), new RenameCommand(), new LspDaemonCommand()],
+            Commands: [new LspStatusCommand(), new RefsCommand(), new CallersCommand(), new DefCommand(), new RenameCommand(), new LspDaemonCommand()],
             AlwaysOn: false,
             InitSnippet: LspSnippet),
     ];

@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using Tk;
 using Tk.Common;
 
 namespace Tk.Filters;
@@ -12,7 +13,7 @@ namespace Tk.Filters;
 /// </summary>
 public static partial class LogFileFilter
 {
-    public static string Apply(string filePath, string[] flags)
+    public static string Apply(string filePath, string[] flags, DetailLevel level = DetailLevel.Default)
     {
         if (!File.Exists(filePath))
             return $"File not found: {filePath}\n";
@@ -39,7 +40,11 @@ public static partial class LogFileFilter
         if (lastN > 0)
             entries = entries.TakeLast(lastN).ToList();
 
-        return FormatEntries(entries, filePath);
+        var result = FormatEntries(entries, filePath);
+        var footer = HiddenLinesFooter.Format(lines.Length, HiddenLinesFooter.CountLines(result), level);
+        if (footer is not null)
+            result = result.EndsWith('\n') ? $"{result}{footer}\n" : $"{result}\n{footer}\n";
+        return result;
     }
 
     private static string ReadAutoDetectEncoding(string path)

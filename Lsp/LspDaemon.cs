@@ -247,7 +247,8 @@ public sealed class LspDaemon
                         references = new { dynamicRegistration = false },
                         rename = new { dynamicRegistration = false, prepareSupport = true },
                         synchronization = new { dynamicRegistration = false, didSave = false },
-                        publishDiagnostics = new { relatedInformation = true }
+                        publishDiagnostics = new { relatedInformation = true },
+                        callHierarchy = new { dynamicRegistration = false },
                     },
                     window = new
                     {
@@ -425,6 +426,212 @@ public sealed class LspDaemon
         return [];
     }
 
+    /// <summary>
+    /// Resolves a symbol name (or qualified name like Namespace.Class.Method) to a list of
+    /// matching workspace symbols via workspace/symbol. Returns only results whose 'name'
+    /// field exactly matches the simple name (the substring after the last '.').
+    /// </summary>
+    private async Task<List<SymbolMatch>> ResolveSymbolAsync(MessageLoop loop, string symbol, CancellationToken ct)
+    {
+        // Use the simple name (after last '.') as the query — servers match on it.
+        var simpleName = symbol.Contains('.') ? symbol[(symbol.LastIndexOf('.') + 1)..] : symbol;
+
+        var result = await loop.SendRequestAsync("workspace/symbol", new { query = simpleName }, ct).ConfigureAwait(false);
+
+        if (result.ValueKind == JsonValueKind.Null || result.ValueKind == JsonValueKind.Undefined)
+            return [];
+
+        var matches = new List<SymbolMatch>();
+        foreach (var item in result.EnumerateArray())
+        {
+            if (!item.TryGetProperty("name", out var nameProp)) continue;
+            var name = nameProp.GetString() ?? "";
+            if (name != simpleName) continue;
+
+            // location is required; skip items without it or without a range
+            if (!item.TryGetProperty("location", out var locationEl)) continue;
+            if (!locationEl.TryGetProperty("uri", out var uriProp)) continue;
+            if (!locationEl.TryGetProperty("range", out var rangeProp)) continue;
+
+            var uri = uriProp.GetString() ?? "";
+            if (!rangeProp.TryGetProperty("start", out var startProp)) continue;
+            if (!rangeProp.TryGetProperty("end", out var endProp)) continue;
+
+            var startLine = startProp.TryGetProperty("line", out var sl) ? sl.GetInt32() : 0;
+            var startChar = startProp.TryGetProperty("character", out var sc) ? sc.GetInt32() : 0;
+            var endLine = endProp.TryGetProperty("line", out var el) ? el.GetInt32() : startLine;
+            var endChar = endProp.TryGetProperty("character", out var ec) ? ec.GetInt32() : startChar;
+
+            var kind = item.TryGetProperty("kind", out var kindProp) ? kindProp.GetInt32() : 0;
+            var container = item.TryGetProperty("containerName", out var cnProp) ? cnProp.GetString() ?? "" : "";
+
+            matches.Add(new SymbolMatch(name, container, SymbolKindName(kind), new LspLocation(uri, startLine, startChar, endLine, endChar)));
+        }
+
+        return matches;
+    }
+
+    /// <summary>
+    /// Finds the definition location(s) for the symbol at the given position via
+    /// textDocument/definition. Handles null/undefined, single Location, array of
+    /// Location, and LocationLink (targetUri / targetSelectionRange / targetRange).
+    /// </summary>
+    private async Task<LspLocation[]> FindDefinitionAsync(
+        MessageLoop loop, string filePath, int line, int character, CancellationToken ct)
+    {
+        var fileUri = new Uri(filePath).ToString();
+        await EnsureFileOpenAsync(loop, filePath, fileUri, ct).ConfigureAwait(false);
+
+        var defParams = new
+        {
+            textDocument = new { uri = fileUri },
+            position = new { line, character }
+        };
+
+        var result = await loop.SendRequestAsync("textDocument/definition", defParams, ct).ConfigureAwait(false);
+
+        if (result.ValueKind == JsonValueKind.Null || result.ValueKind == JsonValueKind.Undefined)
+            return [];
+
+        var locations = new List<LspLocation>();
+
+        // Result may be a single object or an array; normalise to iteration.
+        IEnumerable<JsonElement> elements = result.ValueKind == JsonValueKind.Array
+            ? result.EnumerateArray()
+            : [result];
+
+        foreach (var el in elements)
+        {
+            // Determine uri: Location has "uri"; LocationLink has "targetUri".
+            string? uri = null;
+            if (el.TryGetProperty("uri", out var uriProp))
+                uri = uriProp.GetString();
+            else if (el.TryGetProperty("targetUri", out var targetUriProp))
+                uri = targetUriProp.GetString();
+
+            if (string.IsNullOrEmpty(uri))
+                continue;
+
+            // Determine range: Location has "range"; LocationLink has "targetSelectionRange" then "targetRange".
+            JsonElement range = default;
+            if (el.TryGetProperty("range", out var rangeProp))
+                range = rangeProp;
+            else if (el.TryGetProperty("targetSelectionRange", out var tsr))
+                range = tsr;
+            else if (el.TryGetProperty("targetRange", out var tr))
+                range = tr;
+
+            if (range.ValueKind == JsonValueKind.Undefined)
+                continue;
+
+            locations.Add(ParseRangeToLocation(uri, range));
+        }
+
+        return [.. locations];
+    }
+
+    /// <summary>
+    /// Finds incoming callers of the symbol at the given position using the LSP call hierarchy.
+    /// Sends textDocument/prepareCallHierarchy then callHierarchy/incomingCalls.
+    /// </summary>
+    private async Task<CallerInfo[]> FindIncomingCallsAsync(
+        MessageLoop loop, string filePath, int line, int character, CancellationToken ct)
+    {
+        var fileUri = new Uri(filePath).ToString();
+        await EnsureFileOpenAsync(loop, filePath, fileUri, ct).ConfigureAwait(false);
+
+        var prepareParams = new
+        {
+            textDocument = new { uri = fileUri },
+            position = new { line, character }
+        };
+
+        var prepareResult = await loop.SendRequestAsync("textDocument/prepareCallHierarchy", prepareParams, ct).ConfigureAwait(false);
+
+        if (prepareResult.ValueKind == JsonValueKind.Null || prepareResult.ValueKind == JsonValueKind.Undefined)
+            return [];
+
+        // Result is an array; take the first item
+        JsonElement itemEl;
+        if (prepareResult.ValueKind == JsonValueKind.Array)
+        {
+            if (prepareResult.GetArrayLength() == 0) return [];
+            itemEl = prepareResult[0].Clone();
+        }
+        else
+        {
+            // Some servers may return a single object (non-standard) — handle gracefully
+            itemEl = prepareResult.Clone();
+        }
+
+        var incomingParams = new { item = itemEl };
+        var incomingResult = await loop.SendRequestAsync("callHierarchy/incomingCalls", incomingParams, ct).ConfigureAwait(false);
+
+        if (incomingResult.ValueKind == JsonValueKind.Null || incomingResult.ValueKind == JsonValueKind.Undefined)
+            return [];
+
+        var callers = new List<CallerInfo>();
+        foreach (var call in incomingResult.EnumerateArray())
+        {
+            if (!call.TryGetProperty("from", out var from)) continue;
+
+            var callerName = from.TryGetProperty("name", out var np) ? np.GetString() ?? "" : "";
+            var callerKind = from.TryGetProperty("kind", out var kp) ? kp.GetInt32() : 0;
+            var callerDetail = from.TryGetProperty("detail", out var dp) ? dp.GetString() ?? "" : "";
+
+            // selectionRange preferred over range for the symbol name position
+            JsonElement selRange;
+            if (!from.TryGetProperty("selectionRange", out selRange))
+                if (!from.TryGetProperty("range", out selRange))
+                    continue;
+
+            if (!from.TryGetProperty("uri", out var callerUriProp)) continue;
+            var callerUri = callerUriProp.GetString() ?? "";
+
+            var callerLoc = ParseRangeToLocation(callerUri, selRange);
+
+            // Parse fromRanges (the actual call sites inside the caller)
+            var callSites = new List<LspLocation>();
+            if (call.TryGetProperty("fromRanges", out var fromRanges) && fromRanges.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var r in fromRanges.EnumerateArray())
+                    callSites.Add(ParseRangeToLocation(callerUri, r));
+            }
+
+            callers.Add(new CallerInfo(callerName, callerDetail, SymbolKindName(callerKind), callerLoc, [.. callSites]));
+        }
+
+        return [.. callers];
+    }
+
+    private static LspLocation ParseRangeToLocation(string uri, JsonElement range)
+    {
+        var start = range.TryGetProperty("start", out var sp) ? sp : default;
+        var end = range.TryGetProperty("end", out var ep) ? ep : default;
+        var sl = start.ValueKind != JsonValueKind.Undefined && start.TryGetProperty("line", out var slp) ? slp.GetInt32() : 0;
+        var sc = start.ValueKind != JsonValueKind.Undefined && start.TryGetProperty("character", out var scp) ? scp.GetInt32() : 0;
+        var el = end.ValueKind != JsonValueKind.Undefined && end.TryGetProperty("line", out var elp) ? elp.GetInt32() : sl;
+        var ec = end.ValueKind != JsonValueKind.Undefined && end.TryGetProperty("character", out var ecp) ? ecp.GetInt32() : sc;
+        return new LspLocation(uri, sl, sc, el, ec);
+    }
+
+    private static string SymbolKindName(int kind) => kind switch
+    {
+        5 => "class",
+        6 => "method",
+        7 => "property",
+        8 => "field",
+        9 => "constructor",
+        10 => "enum",
+        11 => "interface",
+        12 => "function",
+        13 => "variable",
+        22 => "enumMember",
+        23 => "struct",
+        26 => "typeParameter",
+        _ => "symbol",
+    };
+
     private static RenameTextEdit[] ParseTextEdits(JsonElement editsArray)
     {
         var list = new List<RenameTextEdit>();
@@ -502,6 +709,122 @@ public sealed class LspDaemon
 
                 var locs = await FindReferencesAsync(loop, request.FilePath, request.Line, request.Character, ct).ConfigureAwait(false);
                 Log($"refs query done, {locs.Length} locations");
+                response = new DaemonResponse(true, null, locs);
+            }
+            else if (request.Method == "refs" && request.Symbol is not null)
+            {
+                await WaitForReadyAsync(ct).ConfigureAwait(false);
+                Log($"refs by symbol: {request.Symbol}");
+
+                var matches = await ResolveSymbolAsync(loop, request.Symbol, ct).ConfigureAwait(false);
+                if (matches.Count == 0)
+                {
+                    response = new DaemonResponse(false, $"symbol '{request.Symbol}' not found", null);
+                }
+                else if (matches.Count == 1)
+                {
+                    var loc = matches[0].Location;
+                    var path = new Uri(loc.Uri).LocalPath;
+                    var locs = await FindReferencesAsync(loop, path, loc.StartLine, loc.StartChar, ct).ConfigureAwait(false);
+                    Log($"refs by symbol done, {locs.Length} locations");
+                    response = new DaemonResponse(true, null, locs);
+                }
+                else
+                {
+                    Log($"refs by symbol ambiguous, {matches.Count} candidates");
+                    response = new DaemonResponse(true, null, null) with { Candidates = matches.ToArray() };
+                }
+            }
+            else if (request.Method == "callers")
+            {
+                await WaitForReadyAsync(ct).ConfigureAwait(false);
+
+                string callersPath;
+                int callersLine;
+                int callersChar;
+
+                if (request.FilePath is not null)
+                {
+                    callersPath = request.FilePath;
+                    callersLine = request.Line;
+                    callersChar = request.Character;
+                }
+                else if (request.Symbol is not null)
+                {
+                    var matches = await ResolveSymbolAsync(loop, request.Symbol, ct).ConfigureAwait(false);
+                    if (matches.Count == 0)
+                    {
+                        response = new DaemonResponse(false, $"symbol '{request.Symbol}' not found", null);
+                        await writer.WriteLineAsync(JsonSerializer.Serialize(response, LspMessage.Options)).ConfigureAwait(false);
+                        return;
+                    }
+                    if (matches.Count > 1)
+                    {
+                        response = new DaemonResponse(true, null, null) with { Candidates = matches.ToArray() };
+                        await writer.WriteLineAsync(JsonSerializer.Serialize(response, LspMessage.Options)).ConfigureAwait(false);
+                        return;
+                    }
+                    var loc = matches[0].Location;
+                    callersPath = new Uri(loc.Uri).LocalPath;
+                    callersLine = loc.StartLine;
+                    callersChar = loc.StartChar;
+                }
+                else
+                {
+                    response = new DaemonResponse(false, "callers requires a file position or symbol name", null);
+                    await writer.WriteLineAsync(JsonSerializer.Serialize(response, LspMessage.Options)).ConfigureAwait(false);
+                    return;
+                }
+
+                Log($"callers query: {callersPath}:{callersLine}:{callersChar}");
+                var callers = await FindIncomingCallsAsync(loop, callersPath, callersLine, callersChar, ct).ConfigureAwait(false);
+                Log($"callers query done, {callers.Length} callers");
+                response = new DaemonResponse(true, null, null) with { Callers = callers };
+            }
+            else if (request.Method == "def")
+            {
+                await WaitForReadyAsync(ct).ConfigureAwait(false);
+
+                string defPath;
+                int defLine;
+                int defChar;
+
+                if (request.FilePath is not null)
+                {
+                    defPath = request.FilePath;
+                    defLine = request.Line;
+                    defChar = request.Character;
+                }
+                else if (request.Symbol is not null)
+                {
+                    var matches = await ResolveSymbolAsync(loop, request.Symbol, ct).ConfigureAwait(false);
+                    if (matches.Count == 0)
+                    {
+                        response = new DaemonResponse(false, $"symbol '{request.Symbol}' not found", null);
+                        await writer.WriteLineAsync(JsonSerializer.Serialize(response, LspMessage.Options)).ConfigureAwait(false);
+                        return;
+                    }
+                    if (matches.Count > 1)
+                    {
+                        response = new DaemonResponse(true, null, null) with { Candidates = matches.ToArray() };
+                        await writer.WriteLineAsync(JsonSerializer.Serialize(response, LspMessage.Options)).ConfigureAwait(false);
+                        return;
+                    }
+                    var loc = matches[0].Location;
+                    defPath = new Uri(loc.Uri).LocalPath;
+                    defLine = loc.StartLine;
+                    defChar = loc.StartChar;
+                }
+                else
+                {
+                    response = new DaemonResponse(false, "def requires a file position or symbol name", null);
+                    await writer.WriteLineAsync(JsonSerializer.Serialize(response, LspMessage.Options)).ConfigureAwait(false);
+                    return;
+                }
+
+                Log($"def query: {defPath}:{defLine}:{defChar}");
+                var locs = await FindDefinitionAsync(loop, defPath, defLine, defChar, ct).ConfigureAwait(false);
+                Log($"def query done, {locs.Length} locations");
                 response = new DaemonResponse(true, null, locs);
             }
             else if (request.Method == "rename" && request.FilePath is not null && request.NewName is not null)

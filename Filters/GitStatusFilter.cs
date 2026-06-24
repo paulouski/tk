@@ -7,12 +7,10 @@ namespace Tk.Filters;
 /// <summary>Compact git status with a count-first agent-friendly format.</summary>
 public sealed partial class GitStatusFilter : IOutputFilter
 {
-    private readonly DetailLevel _detailLevel;
     private readonly bool _unityMode;
 
     public GitStatusFilter(DetailLevel detailLevel, bool unityMode = false)
     {
-        _detailLevel = detailLevel;
         _unityMode = unityMode;
     }
 
@@ -112,19 +110,12 @@ public sealed partial class GitStatusFilter : IOutputFilter
             sb.Append($" state={string.Join("+", states)}");
         sb.AppendLine();
 
-        var top = new List<string>();
-        top.AddRange(staged.Select(p => $"s:{p}"));
-        top.AddRange(modified.Select(p => $"m:{p}"));
-        top.AddRange(untracked.Select(p => $"u:{p}"));
-        if (top.Count > 0)
-            sb.AppendLine($"top={string.Join(",", top)}");
-
-        if (_detailLevel == DetailLevel.More)
-        {
-            AppendSection(sb, "staged", staged);
-            AppendSection(sb, "modified", modified);
-            AppendSection(sb, "untracked", untracked);
-        }
+        foreach (var p in staged)
+            sb.AppendLine($"  s:{p}");
+        foreach (var p in modified)
+            sb.AppendLine($"  m:{p}");
+        foreach (var p in untracked)
+            sb.AppendLine($"  u:{p}");
 
         return sb.ToString();
     }
@@ -185,16 +176,6 @@ public sealed partial class GitStatusFilter : IOutputFilter
             yield return "bisect";
         if (lower.Contains("am in progress") || lower.Contains("apply mailbox"))
             yield return "am";
-    }
-
-    private static void AppendSection(StringBuilder sb, string title, List<string> items)
-    {
-        if (items.Count == 0)
-            return;
-
-        sb.AppendLine($"{title}:");
-        foreach (var item in items)
-            sb.AppendLine($"  {item}");
     }
 
     private static string SanitizeBranch(string branch)

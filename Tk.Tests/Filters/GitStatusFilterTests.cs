@@ -35,7 +35,10 @@ public class GitStatusFilterTests
         Assert.Equal(
             """
             status st=2 mod=1 untr=1 br=feature/x
-            top=s:src/b.cs,s:added.cs,m:src/a.cs,u:new.cs
+              s:src/b.cs
+              s:added.cs
+              m:src/a.cs
+              u:new.cs
 
             """,
             actual);
@@ -54,13 +57,9 @@ public class GitStatusFilterTests
         Assert.Equal(
             """
             status st=1 mod=1 untr=1 br=main
-            top=s:staged.cs,m:modified.cs,u:untracked.cs
-            staged:
-              staged.cs
-            modified:
-              modified.cs
-            untracked:
-              untracked.cs
+              s:staged.cs
+              m:modified.cs
+              u:untracked.cs
 
             """,
             actual);
@@ -90,7 +89,9 @@ public class GitStatusFilterTests
         Assert.Equal(
             """
             status st=1 mod=1 untr=1 br=main
-            top=s:new file:   added.cs,m:modified:   src/a.cs,u:new.cs
+              s:new file:   added.cs
+              m:modified:   src/a.cs
+              u:new.cs
 
             """,
             actual);
@@ -114,10 +115,10 @@ public class GitStatusFilterTests
         var actual = new GitStatusFilter(DetailLevel.Default).Apply(raw, 0);
         Assert.Contains("mod=7", actual);
         // All 7 paths must appear — set is complete
-        var topLine = actual.Split('\n').First(l => l.StartsWith("top="));
-        Assert.Equal(7, topLine.Split(',').Length);
-        Assert.Contains("m:a.cs", actual);
-        Assert.Contains("m:g.cs", actual);
+        var pathLines = actual.Split('\n').Where(l => l.StartsWith("  m:") || l.StartsWith("  s:") || l.StartsWith("  u:")).ToArray();
+        Assert.Equal(7, pathLines.Length);
+        Assert.Contains("  m:a.cs", actual);
+        Assert.Contains("  m:g.cs", actual);
     }
 
     [Fact]
@@ -129,9 +130,9 @@ public class GitStatusFilterTests
         var raw = string.Join("\n", lines);
         var actual = new GitStatusFilter(DetailLevel.More).Apply(raw, 0);
         Assert.Contains("mod=15", actual);
-        // All 15 paths must appear in top= — set is complete
-        var topLine = actual.Split('\n').First(l => l.StartsWith("top="));
-        Assert.Equal(15, topLine.Split(',').Length);
+        // All 15 paths must appear — set is complete
+        var pathLines = actual.Split('\n').Where(l => l.StartsWith("  m:") || l.StartsWith("  s:") || l.StartsWith("  u:")).ToArray();
+        Assert.Equal(15, pathLines.Length);
     }
 
     [Fact]
@@ -200,7 +201,9 @@ public class GitStatusFilterTests
 
         var actual = new GitStatusFilter(DetailLevel.Default, unityMode: true).Apply(raw, 0);
 
-        Assert.DoesNotContain(".meta", actual.Split('\n').First(l => l.StartsWith("top=")));
+        // Only one non-meta path should appear in the per-line path list
+        var pathLines = actual.Split('\n').Where(l => l.StartsWith("  s:") || l.StartsWith("  m:") || l.StartsWith("  u:")).ToArray();
+        Assert.DoesNotContain(pathLines, l => l.Contains(".meta"));
     }
 
     [Fact]

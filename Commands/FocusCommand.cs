@@ -70,6 +70,8 @@ public sealed class FocusCommand : ICommand
                 return exitCode;
             }
 
+            ctx.RawCharCount = raw.Length;
+            ctx.RawLineCount = HiddenLinesFooter.CountLines(raw);
             ctx.Out.Write(Render(raw, exitCode, ctx.DetailLevel, options));
             return exitCode;
         }
@@ -218,7 +220,8 @@ public sealed class FocusCommand : ICommand
             var codeCount = allFiles.Count(f => f.Kind == FocusKind.Code);
             var docCount = allFiles.Count(f => f.Kind == FocusKind.Docs);
             var logCount = allFiles.Count(f => f.Kind == FocusKind.Logs);
-            var otherCount = allFiles.Count - codeCount - docCount - logCount;
+            var genCount = allFiles.Count(f => f.Kind == FocusKind.Generated);
+            var otherCount = allFiles.Count - codeCount - docCount - logCount - genCount;
 
             var parts = new List<string>
             {
@@ -229,6 +232,8 @@ public sealed class FocusCommand : ICommand
                 $"logs={logCount}"
             };
 
+            if (genCount > 0)
+                parts.Add($"gen={genCount}");
             if (otherCount > 0)
                 parts.Add($"other={otherCount}");
 
@@ -312,7 +317,8 @@ public sealed class FocusCommand : ICommand
             FocusKind.Other => 1,
             FocusKind.Docs => 2,
             FocusKind.Logs => 3,
-            _ => 4
+            FocusKind.Generated => 4,
+            _ => 5
         },
         FocusScope.All => kind switch
         {
@@ -320,7 +326,8 @@ public sealed class FocusCommand : ICommand
             FocusKind.Docs => 1,
             FocusKind.Other => 2,
             FocusKind.Logs => 3,
-            _ => 4
+            FocusKind.Generated => 4,
+            _ => 5
         },
         _ => 0
     };
@@ -341,6 +348,17 @@ public sealed class FocusCommand : ICommand
             RepoScope.IsDocFile(relativePath))
         {
             return FocusKind.Docs;
+        }
+
+        var fileName = Path.GetFileName(normalized);
+        if (normalized.Contains("/generated/", StringComparison.OrdinalIgnoreCase) ||
+            normalized.StartsWith("generated/", StringComparison.OrdinalIgnoreCase) ||
+            fileName.Contains("Generated", StringComparison.OrdinalIgnoreCase) ||
+            fileName.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase) ||
+            fileName.EndsWith(".generated.cs", StringComparison.OrdinalIgnoreCase) ||
+            fileName.EndsWith(".designer.cs", StringComparison.OrdinalIgnoreCase))
+        {
+            return FocusKind.Generated;
         }
 
         if (RepoScope.IsCodeFile(relativePath))
@@ -389,7 +407,8 @@ public sealed class FocusCommand : ICommand
         Code,
         Docs,
         Logs,
-        Other
+        Other,
+        Generated
     }
 
     private enum FocusScope

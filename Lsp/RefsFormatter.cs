@@ -40,7 +40,30 @@ public static class RefsFormatter
         return sb.ToString();
     }
 
-    private static string UriToPath(string uri)
+    /// <summary>
+    /// Formats a list of ambiguous symbol candidates produced by a workspace/symbol query.
+    /// </summary>
+    public static string FormatCandidates(string symbol, IReadOnlyList<SymbolMatch> candidates, string command = "refs")
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"{command} {symbol}: {candidates.Count} matches (ambiguous) — re-run with file:line:col");
+
+        foreach (var c in candidates)
+        {
+            var filePath = UriToPath(c.Location.Uri);
+            var line = c.Location.StartLine + 1;
+            var col = c.Location.StartChar + 1;
+            var label = string.IsNullOrEmpty(c.ContainerName)
+                ? c.Name
+                : $"{c.ContainerName}.{c.Name}";
+            sb.AppendLine();
+            sb.Append($"  {c.Kind} {label}  {filePath}:{line}:{col}");
+        }
+
+        return sb.ToString();
+    }
+
+    internal static string UriToPath(string uri)
     {
         if (uri.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
         {

@@ -87,7 +87,7 @@ public sealed partial class DotnetRestoreFilter : IOutputFilter
         if (errors.Count > 0)
         {
             sb.AppendLine(Ansi.Red("Errors:"));
-            foreach (var e in errors.Take(10))
+            foreach (var e in errors)
                 sb.AppendLine($"  {e}");
         }
         else if (exitCode != 0)
@@ -98,7 +98,7 @@ public sealed partial class DotnetRestoreFilter : IOutputFilter
         if (nugetWarnings.Count > 0)
         {
             sb.AppendLine(Ansi.Yellow("NuGet Vulnerabilities:"));
-            foreach (var pair in nugetWarnings.Take(8))
+            foreach (var pair in nugetWarnings)
             {
                 var suffix = pair.Value > 1 ? $" (x{pair.Value})" : "";
                 sb.AppendLine($"  {pair.Key}{suffix}");

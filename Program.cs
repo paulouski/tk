@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reflection;
 using Tk;
 using Tk.Commands;
@@ -27,10 +28,17 @@ var registry = new BuiltinRegistry(
         .Where(m => moduleConfig.IsEnabled(m))
         .SelectMany(m => m.Commands));
 
+var sw = Stopwatch.StartNew();
+
 if (registry.TryResolve(commandArgs[0], out var builtin))
 {
-    var ctx = CommandContext.FromCli(cliOptions, Console.Out, Console.Error);
-    return await builtin.RunAsync(ctx);
+    var countingWriter = new CountingTextWriter(Console.Out);
+    var ctx = CommandContext.FromCli(cliOptions, countingWriter, Console.Error);
+    var exit = await builtin.RunAsync(ctx);
+    sw.Stop();
+    Analytics.Record(commandArgs, exit, DetailString(cliOptions), sw.ElapsedMilliseconds,
+        countingWriter.CharCount, countingWriter.Lines, ctx.RawCharCount, ctx.RawLineCount);
+    return exit;
 }
 
 var filter = cliOptions.Raw
@@ -54,9 +62,15 @@ if (exitCode != 0)
     filtered = RawOutputStore.AppendFailureReference(raw, filtered, commandArgs);
 
 Console.Write(filtered);
+sw.Stop();
+Analytics.Record(commandArgs, exitCode, DetailString(cliOptions), sw.ElapsedMilliseconds,
+    filtered.Length, HiddenLinesFooter.CountLines(filtered), raw.Length, HiddenLinesFooter.CountLines(raw));
 return exitCode;
 
 static void PrintHelp()
 {
     Console.Write(HelpRenderer.BuildHelp(ModuleConfig.ResolveEnabled()));
 }
+
+static string DetailString(CliOptions opts) =>
+    opts.Raw ? "raw" : opts.DetailLevel == DetailLevel.More ? "more" : "default";

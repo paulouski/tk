@@ -14,6 +14,10 @@ public sealed class CommandContext
     public TextWriter Err { get; }
     public IProcessRunner Process { get; }
 
+    // Settable by compacting commands to report pre-compaction size for analytics.
+    public long? RawCharCount { get; set; }
+    public int? RawLineCount { get; set; }
+
     public CommandContext(
         string[] args,
         DetailLevel detailLevel,

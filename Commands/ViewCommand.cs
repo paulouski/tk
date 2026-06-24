@@ -11,7 +11,6 @@ public sealed partial class ViewCommand : ICommand
     private const int SmallFileCharLimit = 3000;
     private const int MaxSymbols = 8;
     private const int MaxHotRanges = 5;
-    private const int MaxPreviewLines = 12;
 
     public Task<int> RunAsync(CommandContext ctx)
     {
@@ -67,13 +66,13 @@ public sealed partial class ViewCommand : ICommand
 
         var allSymbols = ExtractSymbols(lines).ToList();
         if (symbolsOnly)
-            return RenderSummary(path, lines, allSymbols, includePreview: false, more);
+            return RenderSummary(path, lines, allSymbols, more);
 
         var totalChars = lines.Sum(l => l.Length);
         if (lines.Length <= SmallFileLineLimit && totalChars <= SmallFileCharLimit)
             return RenderWholeFile(path, lines);
 
-        return RenderSummary(path, lines, allSymbols, includePreview: true, more);
+        return RenderSummary(path, lines, allSymbols, more);
     }
 
     private static (string PathTarget, string? Symbol) SplitSymbolSuffix(string target)
@@ -123,7 +122,7 @@ public sealed partial class ViewCommand : ICommand
         return sb.ToString();
     }
 
-    private static string RenderSummary(string path, string[] lines, List<Symbol> symbols, bool includePreview, bool more)
+    private static string RenderSummary(string path, string[] lines, List<Symbol> symbols, bool more)
     {
         var sb = new StringBuilder();
         sb.AppendLine($"view {Path.GetFileName(path)} lines={lines.Length}");
@@ -135,16 +134,6 @@ public sealed partial class ViewCommand : ICommand
 
             foreach (var range in BuildHotRanges(symbols, lines.Length).Take(more ? MaxHotRanges + 3 : MaxHotRanges))
                 sb.AppendLine($"  {range.Start}-{range.End} {range.Name}");
-        }
-
-        if (includePreview)
-        {
-            var preview = PickPreviewRange(symbols, lines, more ? MaxPreviewLines * 2 : MaxPreviewLines);
-            if (preview.Start <= preview.End)
-            {
-                sb.AppendLine("preview:");
-                AppendLines(sb, lines, preview.Start, preview.End, indent: "  ");
-            }
         }
 
         return sb.ToString();
@@ -239,26 +228,6 @@ public sealed partial class ViewCommand : ICommand
             var end = Math.Max(current.Line, nextLine - 1);
             yield return new HotRange(current.Name, current.Line, Math.Min(end, totalLines));
         }
-    }
-
-    private static (int Start, int End) PickPreviewRange(List<Symbol> symbols, string[] lines, int maxLines)
-    {
-        if (symbols.Count > 0)
-        {
-            var first = symbols[0].Line;
-            return (first, Math.Min(lines.Length, first + maxLines - 1));
-        }
-
-        return FirstNonEmptyRange(lines, maxLines);
-    }
-
-    private static (int Start, int End) FirstNonEmptyRange(string[] lines, int maxLines)
-    {
-        var start = Array.FindIndex(lines, line => !string.IsNullOrWhiteSpace(line));
-        if (start < 0)
-            return (0, -1);
-
-        return (start + 1, Math.Min(lines.Length, start + maxLines));
     }
 
     [GeneratedRegex(@"^(?<path>.+):(?<start>\d+)(?:-(?<end>\d+))?$")]

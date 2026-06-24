@@ -175,7 +175,7 @@ If none is found, `tk refs` / `tk rename` report that the server is unavailable 
 - `unity` — `tk unity tree|files|status`
 - `lsp` — `tk refs`, `tk rename`, `tk lsp …`
 
-`tk module list|enable <name>|disable <name>` toggles a group. The set of enabled modules also determines which instruction snippets `tk init` writes into `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`, so disabling a module both removes its commands and stops advertising it to your agents. Config lives at `~/.claude/tk/modules`; with no config file, all modules are enabled.
+`tk module list|enable <name>|disable <name>` toggles a group. The set of enabled modules also determines which instruction snippets `tk init` writes into `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`, so disabling a module both removes its commands and stops advertising it to your agents. Config lives at `~/.local/state/tk/modules` (or `$XDG_STATE_HOME/tk/modules`); with no config file, all modules are enabled.
 
 ## Configuring with Claude Code
 

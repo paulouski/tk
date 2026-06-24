@@ -173,7 +173,7 @@ public class DaemonStateMachineTests
     public void SocketPath_lives_in_daemons_dir()
     {
         var path = DaemonSocket.GetSocketPath("/some/root");
-        Assert.Contains(Path.Combine(".claude", "tk", "daemons"), path);
+        Assert.Contains(Path.Combine("tk", "daemons"), path);
     }
 
     // ── WorkspaceReady predicate correctness ─────────────────────────────────

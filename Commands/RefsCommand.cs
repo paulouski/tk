@@ -34,6 +34,7 @@ public sealed class RefsCommand : ICommand
         }
         else
         {
+            // Symbol name: let the daemon resolve it via workspace/symbol
             request = new DaemonRequest("refs", null, 0, 0, arg);
         }
 
@@ -49,9 +50,14 @@ public sealed class RefsCommand : ICommand
                 return 1;
             }
 
-            var symbol = arg;
+            if (response.Candidates is { Length: > 0 } candidates)
+            {
+                ctx.Out.WriteLine(RefsFormatter.FormatCandidates(arg, candidates));
+                return 0;
+            }
+
             var locations = response.Locations ?? [];
-            ctx.Out.WriteLine(RefsFormatter.Format(symbol, locations));
+            ctx.Out.WriteLine(RefsFormatter.Format(arg, locations));
             return 0;
         }
         catch (OperationCanceledException)

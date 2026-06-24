@@ -41,6 +41,9 @@ public sealed class ChangesCommand : ICommand
             return 0;
         }
 
+        ctx.RawCharCount = statusRaw.Length + diffRaw.Length;
+        ctx.RawLineCount = HiddenLinesFooter.CountLines(statusRaw) + HiddenLinesFooter.CountLines(diffRaw);
+
         var statusOutput = new GitStatusFilter(ctx.DetailLevel).Apply(statusRaw, 0).TrimEnd();
         var diffOutput = new GitDiffFilter(ctx.DetailLevel).Apply(diffRaw, 0).TrimEnd();
 
@@ -48,6 +51,12 @@ public sealed class ChangesCommand : ICommand
         sb.AppendLine(statusOutput);
         if (!string.Equals(diffOutput, "ok diff f=0", StringComparison.Ordinal))
             sb.AppendLine(diffOutput);
+
+        var originalLines = HiddenLinesFooter.CountLines(statusRaw) + HiddenLinesFooter.CountLines(diffRaw);
+        var shownLines = HiddenLinesFooter.CountLines(sb.ToString());
+        var footer = HiddenLinesFooter.Format(originalLines, shownLines, ctx.DetailLevel);
+        if (footer is not null)
+            sb.AppendLine(footer);
 
         ctx.Out.Write(sb.ToString());
         return 0;

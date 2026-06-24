@@ -46,6 +46,8 @@ public sealed class GitCommand : ICommand
         var porcelainArgs = BuildGitArgs(globalArgs, ["status", "--porcelain=v1", "--branch"]);
         var (exitCode, stdout, stderr) = await ctx.Process.RunAsync(porcelainArgs);
         var raw = ProcessOutput.Combine(stdout, stderr);
+        ctx.RawCharCount = raw.Length;
+        ctx.RawLineCount = HiddenLinesFooter.CountLines(raw);
         var filtered = new GitStatusFilter(ctx.DetailLevel).Apply(raw, exitCode, plainRaw);
         if (!ctx.Raw)
             filtered = AppendHiddenLinesFooter(raw, filtered, ctx.DetailLevel);
@@ -76,7 +78,7 @@ public sealed class GitCommand : ICommand
         var wantsMerges = userArgs.Any(a => a == "--merges" || a == "--min-parents=2");
 
         if (!hasFormat)
-            effective.Add("--pretty=format:%h %s (%ar) <%an>%n%b%n---END---");
+            effective.Add("--pretty=format:%h %s (%ar) <%an>");
         if (!hasLimit)
             effective.Add("-10");
         if (!wantsMerges && !hasFormat && !hasLimit)
@@ -91,6 +93,8 @@ public sealed class GitCommand : ICommand
     {
         var (exitCode, stdout, stderr) = await ctx.Process.RunAsync(args);
         var raw = ProcessOutput.Combine(stdout, stderr);
+        ctx.RawCharCount = raw.Length;
+        ctx.RawLineCount = HiddenLinesFooter.CountLines(raw);
         var filtered = filter.Apply(raw, exitCode);
         if (!ctx.Raw)
             filtered = AppendHiddenLinesFooter(raw, filtered, ctx.DetailLevel);
