@@ -21,6 +21,7 @@ public static class ModuleCatalog
         - `tk view <file>`
         - `tk git status|diff|log`
         - `tk log <file>`
+        - `tk mv <old> <new>` — move a file preserving git history (use instead of delete+recreate; keeps git blame and saves tokens). When moving across folders, check the file's namespace and update references afterward — tk does not rewrite them.
 
         Escalate detail as:
         - default `tk ...`
@@ -32,6 +33,7 @@ public static class ModuleCatalog
         - `nu=NuGet vulnerabilities`, `pass=passed`, `fail=failed`, `skip=skipped`
         - `st=staged`, `mod=modified`, `untr=untracked`, `f=files`, `d=directories`, `m=matches`
         - `n=count`, `top=top items`, `br=branch`, `up=up to date`, `file=file`
+        - `hid=hidden/total lines`
 
         If compact output is enough to choose the next step, do not rerun raw.
         If compact output is ambiguous, try `--more`.
@@ -52,6 +54,7 @@ public static class ModuleCatalog
         - `tk view <file>`
         - `tk git status|diff|log`
         - `tk log <file>`
+        - `tk mv <old> <new>` — move a file preserving git history; NEVER delete and recreate a file to rename/relocate it — use this instead to keep git blame and avoid re-emitting file content. After moving across folders, check the file's namespace and update references — tk does not rewrite them.
 
         Escalation order:
         1. `tk ...`
@@ -64,6 +67,7 @@ public static class ModuleCatalog
         - `st`, `mod`, `untr`
         - `f`, `d`, `m`, `n`
         - `top`, `br`, `up`, `file`
+        - `hid` (hidden/total lines when output was filtered)
 
         If compact output is sufficient to choose the next action, do not rerun the raw command.
         If `tk` emits a raw tail fallback, treat it as parser uncertainty and inspect more carefully.
@@ -113,6 +117,7 @@ public static class ModuleCatalog
                 new FocusCommand(),
                 new SwitchCommand(),
                 new ModuleCommand(),
+                new MvCommand(),
             ],
             AlwaysOn: true,
             InitSnippet: CoreSnippet),

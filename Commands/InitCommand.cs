@@ -19,8 +19,7 @@ public sealed class InitCommand : ICommand
         if (_enabledModules is not null)
             return _enabledModules;
 
-        var config = ModuleConfig.Load();
-        return ModuleCatalog.All.Where(m => config.IsEnabled(m)).ToList();
+        return ModuleConfig.ResolveEnabled();
     }
 
     public string Name => "init";

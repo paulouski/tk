@@ -102,6 +102,19 @@ public sealed class ModuleConfig
         return true;
     }
 
+    /// <summary>
+    /// Returns the list of enabled modules from the default config path.
+    /// Equivalent to <c>ModuleCatalog.All.Where(config.IsEnabled)</c>.
+    /// </summary>
+    public static IReadOnlyList<ModuleDescriptor> ResolveEnabled() =>
+        ResolveEnabled(Load());
+
+    /// <summary>
+    /// Returns the list of enabled modules from the given config.
+    /// </summary>
+    public static IReadOnlyList<ModuleDescriptor> ResolveEnabled(ModuleConfig config) =>
+        ModuleCatalog.All.Where(m => config.IsEnabled(m)).ToList();
+
     private static void EnsureDirectory(string path)
     {
         var dir = Path.GetDirectoryName(path);

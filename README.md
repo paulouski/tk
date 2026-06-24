@@ -1,14 +1,16 @@
-# tk -- Token Killer
+# tk — Token Killer
 
-CLI proxy that sits between AI coding assistants (Claude Code, Copilot, Cursor) and your dev tools. It intercepts command output and strips the noise -- build logs, git verbosity, NuGet warnings, startup spam -- so the AI sees only what matters.
+A CLI proxy between AI coding agents (Claude Code, Codex, Cursor) and your dev tools. It runs your command, strips the noise from the output — build logs, git verbosity, NuGet warnings, startup spam — and hands the agent only what it needs to act.
 
-Result: **60-99% fewer tokens** per command, which means faster responses, cheaper API calls, and more room in the context window for actual work.
+Result: **60–99% fewer tokens** per command, which means faster responses, cheaper API calls, and more room in the context window for actual work.
+
+Built by a .NET developer for .NET work, so the deepest filters target the C#/.NET toolchain (builds, restore, semantic refactors). But most of `tk` — git, repo navigation, file reading, search, log triage — is language-agnostic and useful in any repo. The design is one filter per command, so growing into other ecosystems later is a matter of adding filters, not reworking the tool.
 
 ## Why
 
-AI assistants run `dotnet build` and get back 200 lines. 195 of them are NuGet restore messages, MSBuild banners, and duplicated vulnerability warnings. The assistant reads all of it, burning tokens on noise. `tk` reduces that to 2-3 lines with just the outcome, errors, and warnings.
+An agent runs `dotnet build` and gets back 200 lines. 195 of them are NuGet restore messages, MSBuild banners, and duplicated vulnerability warnings. The agent reads all of it, burning tokens on noise. `tk` reduces that to 2–3 lines with just the outcome, errors, and warnings.
 
-Same idea for `git status`, `git diff`, `git log`, and service log files.
+Same idea for `git status`, `git diff`, `git log`, file reading, repo search, and service log files.
 
 ## Install
 
@@ -57,9 +59,9 @@ dotnet publish Tk.csproj -c Release -r win-x64 --self-contained false -p:Publish
 tk init   # optional: install global Claude + AGENTS instructions
 ```
 
-## Usage (current)
+## Usage
 
-Prefix any command with `tk`. If a filter exists, output is compressed. If not, the command passes through unchanged -- so `tk` is always safe to use.
+Prefix any command with `tk`. If a filter exists, output is compressed. If not, the command passes through unchanged — so `tk` is always safe to use.
 
 `tk` also supports two global output controls:
 
@@ -88,29 +90,33 @@ tk git commit            # ultra-compact
 
 # Repo navigation
 tk tree                  # shallow repo tree with directory/file counts
-tk tree --code          # code-focused tree: trims docs/assets/generated noise
+tk tree --code           # code-focused tree: trims docs/assets/generated noise
 tk files                 # compact key-file inventory
-tk files --code         # code-focused inventory: entrypoints/interfaces/configs first
+tk files --code          # code-focused inventory: entrypoints/interfaces/configs first
 tk files --changed       # changed files only
 tk files --ext cs        # files filtered by extension
-tk focus CommandRunner   # code-first repo search with top files + samples
+tk focus CommandRunner           # code-first repo search with top files + samples
 tk focus CommandRunner . --code  # strict code-only search
 tk focus CommandRunner tk --files-only  # only likely files, no sample lines
-tk focus Refit . --docs # docs/specs/guides only
-tk focus Refit . --all  # include docs/logs/other in the ranking
+tk focus Refit . --docs  # docs/specs/guides only
+tk focus Refit . --all   # include docs/logs/other in the ranking
 tk focus "RunAsync(" tk  # same, scoped to a path
 
-# Unity (explicit, opt-in -- never changes the plain commands above)
+# Unity (explicit, opt-in — never changes the plain commands above)
 tk unity tree            # tree that hides Library/Temp/Logs and .meta sidecars
 tk unity files           # file inventory aware of Unity dirs and code extensions (.shader/.asmdef/...)
 tk unity tree --code     # code-focused, keeps Assets/ as the source root
 tk unity status          # git status that folds .meta noise into a meta= count
 
+# File moves (always available)
+tk mv src/OldName.cs src/NewName.cs  # git mv when tracked (preserves history), else filesystem move
+tk mv src/OldName.cs src/            # moves into directory, destination = src/OldName.cs
+
 # Semantic navigation (LSP-backed, opt-in module)
-tk refs src/Mediator.cs:7:18    # all references to the symbol at file:line:col
+tk refs src/Mediator.cs:7:18         # all references to the symbol at file:line:col
 tk rename src/Mediator.cs:7:18 IBus  # rename a symbol everywhere, editing files IN PLACE
-tk lsp status                    # warm-daemon status for the current workspace
-tk lsp stop                      # stop the workspace daemon
+tk lsp status                        # warm-daemon status for the current workspace
+tk lsp stop                          # stop the workspace daemon
 
 # Modules (enable/disable feature groups)
 tk module list                   # show modules and enabled state
@@ -122,10 +128,10 @@ tk quality .                     # dotnet build + dotnet format verify
 tk quality . --test-filter Onboarding  # add targeted tests
 
 # File reading
-tk view src/Program.cs          # compact file card: line count, symbols, hot ranges
-tk view src/Program.cs:40-90    # numbered exact range
+tk view src/Program.cs           # compact file card: line count, symbols, hot ranges
+tk view src/Program.cs:40-90     # numbered exact range
 tk view src/Program.cs --symbols # symbols only
-tk --raw view src/Program.cs    # full file with numbered lines
+tk --raw view src/Program.cs     # full file with numbered lines
 
 # Service logs (ASP.NET / Kestrel / MassTransit)
 tk log app.log           # strip startup noise, dedup, keep warnings+errors
@@ -133,17 +139,22 @@ tk log app.log --errors  # errors/critical only
 tk log app.log --last 20 # last 20 entries
 tk log app.log --all     # raw output, no filtering
 
-# Anything else -- passthrough
+# Anything else — passthrough
 tk cargo build           # no filter exists, runs as-is
-tk npm test              # same -- passthrough
+tk npm test              # same — passthrough
 ```
 
-## Semantic navigation (`tk refs` / `tk rename`)
+### Output format
 
-Beyond text filtering, the `lsp` module gives agents real semantic operations backed by a warm language server, so navigation and refactors are accurate instead of guessed from grep:
+Filtered output is compact and outcome-first: a short summary line in stable `key=value` fields, details only after it. Common keys: `p`=projects, `e`=errors, `w`=warnings, `t`=time, `pass/fail/skip`=tests, `nu`=NuGet vulnerabilities, `st/mod/untr`=staged/modified/untracked, `f`=files, `m`=matches. The format is meant to be cheap for an agent to parse and easy to scan. When a parser is unsure, `tk` falls back to a short raw tail rather than guessing. Escalate detail with `--more`, get the original output with `--raw`. When lines are dropped by filtering, the output ends with a footer such as `hid=42/200 (--more, --raw)` showing how many lines were hidden and the escape hatches available; at `--more` level only `(--raw)` is shown.
 
-- `tk refs <file:line:col>` — exact references to a symbol (declaration + all usages), grouped by file.
-- `tk rename <file:line:col> <newName>` — rename a symbol across the whole workspace, applying edits **in place** (the files are modified, not recreated), so git history and unrelated lines are preserved. Intended for refactoring existing code, not atomic single-file micro-edits.
+## Semantic navigation (`tk refs` / `tk rename` / `tk mv`)
+
+`tk` started as a read-only proxy, but text filtering only covers half of what burns an agent's context. The other half is editing. When an agent renames a symbol or moves a file without semantic tooling, it often rewrites the file from scratch (or deletes and recreates it) — re-emitting hundreds of lines into the context, losing git history, and risking unrelated changes. `tk mv` and the `lsp` module replace that with real semantic operations:
+
+- `tk mv <old> <new>` — move a file **preserving git history** (`git mv` when tracked, filesystem move otherwise), so it shows up as a rename instead of a delete+add. Never delete and recreate a file to rename or relocate it — use this instead, then fix any namespace/reference fallout the compiler flags (a one-line edit, not a full-file rewrite).
+- `tk refs <file:line:col>` — exact references to a symbol (declaration + all usages), grouped by file. Accurate, instead of guessed from grep.
+- `tk rename <file:line:col> <newName>` — rename a symbol across the whole workspace, applying edits **in place** (files are modified, not recreated), so git history and unrelated lines are preserved. Intended for refactoring existing code, not atomic single-file micro-edits.
 
 A per-workspace daemon hosts the language server and stays warm across calls; the first call pays a cold load, later calls are fast. Edits made on disk between calls are picked up automatically. `tk lsp status` / `tk lsp stop` inspect and control it.
 
@@ -165,201 +176,6 @@ If none is found, `tk refs` / `tk rename` report that the server is unavailable 
 - `lsp` — `tk refs`, `tk rename`, `tk lsp …`
 
 `tk module list|enable <name>|disable <name>` toggles a group. The set of enabled modules also determines which instruction snippets `tk init` writes into `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`, so disabling a module both removes its commands and stops advertising it to your agents. Config lives at `~/.claude/tk/modules`; with no config file, all modules are enabled.
-
-## Agent-First vNext (planned)
-
-The current filters already save a lot of tokens, but the next 80/20 step is to optimize for how coding agents actually work:
-
-Several parts of this direction are now already present in the current command set (`git diff`, `rg`/`grep`, `view`, `changes`, `tree`, `files`, `focus`). This section remains the design direction and output target for continued tightening.
-
-1. **Show a tiny summary first**
-2. **Show only the top few hot spots**
-3. **Expand only when explicitly asked**
-
-This means `tk` should prefer a **state card + targeted drill-down** model over "compressed full output".
-
-### Output style
-
-Planned default output is a short, stable, machine-friendly text format:
-
-```text
-ok build p=12 t=0.9s
-FAIL build p=12 e=3 w=1 t=2.1s
-ok test pass=148 skip=2 t=4.3s
-FAIL test pass=147 fail=1 t=4.3s
-status st=2 mod=5 untr=12
-diff f=8 +120 -34
-rg m=53 f=7 top=Program.cs(18),Api.cs(12),Repo.cs(9)
-```
-
-Goals:
-
-- **Minimal wording**: fewer tokens than prose-heavy summaries
-- **Stable fields**: easier for agents to parse mentally and consistently
-- **Fast scanning**: outcome first, details second
-- **Safe fallback**: if parsing is uncertain, show a short raw tail instead of guessing
-
-### Planned detail levels
-
-Every high-volume command should eventually support three levels:
-
-- `default` - tiny summary, best token savings
-- `--more` - summary plus top few relevant details
-- `--raw` - original unfiltered output
-
-Examples:
-
-```bash
-tk git diff
-tk git diff --more
-tk git diff --raw
-```
-
-### Priority commands
-
-These are the highest-ROI additions and upgrades for agent workflows.
-
-#### 1. `tk git diff` -> summary-first diff
-
-Why first: diffs are one of the biggest token sinks.
-
-Planned default:
-
-- file count
-- total `+` / `-`
-- top changed files
-- hunk headers only
-- changed lines only, no context by default
-
-Example:
-
-```text
-diff f=6 +84 -19
-top=Program.cs(+20 -4),Api.cs(+18 -2),README.md(+9 -1)
-@@ Program.cs 42-60
-+ added validation for null command args
-- removed duplicate stderr merge branch
-```
-
-#### 2. `tk rg` / `tk grep` -> summary by file, not by line dump
-
-Why next: agents often search broadly, and raw grep output explodes quickly.
-
-Planned default:
-
-- total matches
-- file count
-- top files by match count
-- 1-3 representative snippets only
-
-Example:
-
-```text
-rg m=53 f=7
-top=Program.cs(18),Api.cs(12),Repo.cs(9)
-samples:
-  "ExecuteAsync(command, ct)"
-  "command failed before test results were produced"
-```
-
-#### 3. `tk view <file>` -> compact file reader
-
-Why next: reading large files is often a bigger token cost than build logs.
-
-Planned behavior:
-
-- compact file preview instead of raw full-file dump
-- collapse repeated blank lines
-- trim long comment blocks
-- show symbols/sections first for large files
-- support line ranges
-
-Examples:
-
-```bash
-tk view src/Program.cs
-tk view src/Program.cs:120-180
-tk view src/Program.cs --symbols
-```
-
-Possible output:
-
-```text
-view Program.cs lines=240
-symbols: Main(12), RunAsync(48), EscapeArg(133)
-hot:
-  48-97 RunAsync
-  133-141 EscapeArg
-```
-
-#### 4. `tk tree` / `tk files` -> compact repo map
-
-Why: agents often need a repo map before touching code.
-
-Planned behavior:
-
-- 2-3 levels max
-- ignore `.git`, `bin`, `obj`, `node_modules`, generated files
-- show counts per directory
-- optionally show largest or most relevant files
-
-Examples:
-
-```bash
-tk tree
-tk files
-tk files --top 30
-```
-
-#### 5. Existing filters to tighten further
-
-Planned tweaks with strong ROI:
-
-- `dotnet build` / `test` / `restore`: keep success output ultra-short
-- `git status`: prefer counts first, then a few paths
-- `git log`: reduce default history depth
-- `find`: return counts + top directories before long flat lists
-- `log`: keep error/warn-centric summary and collapse repeated entries more aggressively
-
-### Proposed command set
-
-This is the preliminary "best for agents" surface area:
-
-| Command | Purpose | Default shape |
-|--------|---------|---------------|
-| `tk dotnet build` | build summary | `ok/FAIL build ...` |
-| `tk dotnet test` | test summary | `ok/FAIL test ...` |
-| `tk dotnet restore` | restore summary | `ok/FAIL restore ...` |
-| `tk git status` | worktree state | counts first, few paths |
-| `tk git diff` | change summary | stat + top hunks |
-| `tk git log` | recent history | short capped list |
-| `tk rg` / `tk grep` | search summary | matches/files/top files |
-| `tk find` | path discovery | count + top results |
-| `tk view <file>` | compact file reading | symbols + targeted lines |
-| `tk tree` / `tk files` | repo map | shallow structure |
-| `tk log <file>` | log triage | compact warn/error summary |
-
-### Design rules
-
-Planned rules for all filters:
-
-- Prefer counts over prose
-- Prefer top-N examples over exhaustive lists
-- Never hide failures behind optimistic summaries
-- If unsure, show a short raw tail
-- Default output should fit in a few lines
-- Expansion should be explicit, not automatic
-
-### What this optimizes for
-
-This roadmap is optimized for:
-
-- less context waste
-- faster agent iteration loops
-- fewer follow-up "show me more" retries
-- safer debugging when parsers miss a case
-
-Implementation status: **planned / not yet implemented unless already described in the current Usage and Filters sections above**.
 
 ## Configuring with Claude Code
 

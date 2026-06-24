@@ -47,6 +47,8 @@ public sealed class GitCommand : ICommand
         var (exitCode, stdout, stderr) = await ctx.Process.RunAsync(porcelainArgs);
         var raw = ProcessOutput.Combine(stdout, stderr);
         var filtered = new GitStatusFilter(ctx.DetailLevel).Apply(raw, exitCode, plainRaw);
+        if (!ctx.Raw)
+            filtered = AppendHiddenLinesFooter(raw, filtered, ctx.DetailLevel);
         ctx.Out.Write(filtered);
         return exitCode;
     }
@@ -90,10 +92,23 @@ public sealed class GitCommand : ICommand
         var (exitCode, stdout, stderr) = await ctx.Process.RunAsync(args);
         var raw = ProcessOutput.Combine(stdout, stderr);
         var filtered = filter.Apply(raw, exitCode);
+        if (!ctx.Raw)
+            filtered = AppendHiddenLinesFooter(raw, filtered, ctx.DetailLevel);
         if (exitCode != 0)
             filtered = RawOutputStore.AppendFailureReference(raw, filtered, ["git", .. ctx.Args]);
         ctx.Out.Write(filtered);
         return exitCode;
+    }
+
+    private static string AppendHiddenLinesFooter(string raw, string filtered, DetailLevel level)
+    {
+        var footer = HiddenLinesFooter.Format(
+            HiddenLinesFooter.CountLines(raw),
+            HiddenLinesFooter.CountLines(filtered),
+            level);
+        if (footer is null)
+            return filtered;
+        return filtered.EndsWith('\n') ? $"{filtered}{footer}\n" : $"{filtered}\n{footer}\n";
     }
 
     private static string[] BuildGitArgs(IEnumerable<string> globalArgs, IEnumerable<string> args) =>

@@ -90,4 +90,38 @@ public class GitCommandTests
         Assert.DoesNotContain("--no-merges", runner.Calls[0]);
         Assert.DoesNotContain(runner.Calls[0], arg => arg.StartsWith("--pretty=format:", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public async Task Reducing_diff_emits_hidden_lines_footer()
+    {
+        var sb = new System.Text.StringBuilder();
+        for (var i = 0; i < 5; i++)
+        {
+            sb.AppendLine($"diff --git a/f{i}.cs b/f{i}.cs");
+            sb.AppendLine("index aaa..bbb 100644");
+            sb.AppendLine($"--- a/f{i}.cs");
+            sb.AppendLine($"+++ b/f{i}.cs");
+            sb.AppendLine("@@ -1 +1 @@");
+            sb.AppendLine("-old");
+            sb.AppendLine("+new");
+        }
+        var runner = new FakeProcessRunner().Returns(stdout: sb.ToString());
+
+        var (_, output, _) = await RunAsync(["diff"], runner);
+
+        Assert.Contains("hid=", output);
+        Assert.Contains("(--more, --raw)", output);
+    }
+
+    [Fact]
+    public async Task Raw_diff_has_no_hidden_lines_footer()
+    {
+        var raw = "diff --git a/a.cs b/a.cs\n@@ -1 +1 @@\n-old\n+new\n";
+        var runner = new FakeProcessRunner().Returns(stdout: raw);
+
+        var (_, output, _) = await RunAsync(["diff"], runner, raw: true);
+
+        Assert.DoesNotContain("hid=", output);
+        Assert.Equal(raw, output);
+    }
 }
