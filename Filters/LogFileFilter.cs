@@ -141,15 +141,7 @@ public static partial class LogFileFilter
                 continue;
             }
 
-            // Trim stack traces for exceptions
-            if (entry.Level is "fail" or "crit")
-            {
-                TrimStackTrace(entry);
-                result.Add(entry);
-                continue;
-            }
-
-            // Keep warn+
+            // Keep warn+ (fail/crit included — full stack preserved; the stack is the signal)
             if (entry.Level is "warn" or "fail" or "crit" or "error")
             {
                 result.Add(entry);
@@ -281,31 +273,6 @@ public static partial class LogFileFilter
             if (pathStart >= 0) return url[pathStart..];
         }
         return url;
-    }
-
-    private static void TrimStackTrace(LogEntry entry)
-    {
-        if (entry.Continuation.Count <= 3) return;
-
-        // Keep exception message + first 3 stack frames
-        var kept = new List<string>();
-        var frameCount = 0;
-        foreach (var line in entry.Continuation)
-        {
-            if (line.TrimStart().StartsWith("at ") || line.TrimStart().StartsWith("---"))
-            {
-                frameCount++;
-                if (frameCount <= 3)
-                    kept.Add(line);
-                continue;
-            }
-            kept.Add(line); // Exception type/message lines
-        }
-
-        if (frameCount > 3)
-            kept.Add($"             ... +{frameCount - 3} more frames");
-
-        entry.Continuation = kept;
     }
 
     private static List<LogEntry> DeduplicateEntries(List<LogEntry> entries)

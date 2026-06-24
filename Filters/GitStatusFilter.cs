@@ -8,13 +8,11 @@ namespace Tk.Filters;
 public sealed partial class GitStatusFilter : IOutputFilter
 {
     private readonly DetailLevel _detailLevel;
-    private readonly int _maxTopPaths;
     private readonly bool _unityMode;
 
     public GitStatusFilter(DetailLevel detailLevel, bool unityMode = false)
     {
         _detailLevel = detailLevel;
-        _maxTopPaths = detailLevel == DetailLevel.More ? 12 : 5;
         _unityMode = unityMode;
     }
 
@@ -119,7 +117,7 @@ public sealed partial class GitStatusFilter : IOutputFilter
         top.AddRange(modified.Select(p => $"m:{p}"));
         top.AddRange(untracked.Select(p => $"u:{p}"));
         if (top.Count > 0)
-            sb.AppendLine($"top={string.Join(",", top.Take(_maxTopPaths))}");
+            sb.AppendLine($"top={string.Join(",", top)}");
 
         if (_detailLevel == DetailLevel.More)
         {

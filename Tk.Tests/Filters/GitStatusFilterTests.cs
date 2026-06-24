@@ -97,7 +97,7 @@ public class GitStatusFilterTests
     }
 
     [Fact]
-    public void Top_paths_truncated_to_default_max_5()
+    public void Top_paths_lists_all_files_by_default()
     {
         var lines = new[]
         {
@@ -113,12 +113,15 @@ public class GitStatusFilterTests
         var raw = string.Join("\n", lines);
         var actual = new GitStatusFilter(DetailLevel.Default).Apply(raw, 0);
         Assert.Contains("mod=7", actual);
-        Assert.Contains("top=m:a.cs,m:b.cs,m:c.cs,m:d.cs,m:e.cs\n", actual);
-        Assert.DoesNotContain("m:f.cs", actual);
+        // All 7 paths must appear — set is complete
+        var topLine = actual.Split('\n').First(l => l.StartsWith("top="));
+        Assert.Equal(7, topLine.Split(',').Length);
+        Assert.Contains("m:a.cs", actual);
+        Assert.Contains("m:g.cs", actual);
     }
 
     [Fact]
-    public void Top_paths_truncated_to_more_max_12()
+    public void Top_paths_lists_all_files_with_more_detail()
     {
         var lines = new List<string> { "## main" };
         for (var i = 0; i < 15; i++)
@@ -126,8 +129,9 @@ public class GitStatusFilterTests
         var raw = string.Join("\n", lines);
         var actual = new GitStatusFilter(DetailLevel.More).Apply(raw, 0);
         Assert.Contains("mod=15", actual);
+        // All 15 paths must appear in top= — set is complete
         var topLine = actual.Split('\n').First(l => l.StartsWith("top="));
-        Assert.Equal(12, topLine.Split(',').Length);
+        Assert.Equal(15, topLine.Split(',').Length);
     }
 
     [Fact]

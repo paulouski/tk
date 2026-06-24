@@ -7,7 +7,6 @@ namespace Tk.Filters;
 /// <summary>Compact git diff/show: stat summary + truncated hunks.</summary>
 public sealed partial class GitDiffFilter : IOutputFilter
 {
-    private readonly int _maxTopFiles;
     private readonly int _maxPreviewFiles;
     private readonly int _maxPreviewHunks;
     private readonly int _maxLinesPerHunk;
@@ -16,7 +15,7 @@ public sealed partial class GitDiffFilter : IOutputFilter
     public GitDiffFilter(DetailLevel detailLevel)
     {
         var more = detailLevel == DetailLevel.More;
-        _maxTopFiles = more ? 6 : 3;
+        // top= always lists ALL files; these control the hunk preview only
         _maxPreviewFiles = more ? 6 : 3;
         _maxPreviewHunks = more ? 14 : 6;
         _maxLinesPerHunk = more ? 8 : 4;
@@ -73,16 +72,21 @@ public sealed partial class GitDiffFilter : IOutputFilter
                 continue;
             }
 
-            // Count additions/deletions
+            // Count additions/deletions; capture context lines around changes
             if (line.StartsWith("+"))
             {
                 current.Additions++;
-                AddChangedLine(currentHunk, line);
+                AddHunkLine(currentHunk, line, isChanged: true);
             }
             else if (line.StartsWith("-"))
             {
                 current.Deletions++;
-                AddChangedLine(currentHunk, line);
+                AddHunkLine(currentHunk, line, isChanged: true);
+            }
+            else if (line.StartsWith(" "))
+            {
+                // Context line — include for interpretability
+                AddHunkLine(currentHunk, line, isChanged: false);
             }
         }
 
@@ -102,8 +106,8 @@ public sealed partial class GitDiffFilter : IOutputFilter
 
         if (ranked.Count > 0)
         {
-            var top = string.Join(",",
-                ranked.Take(_maxTopFiles).Select(FormatTopFile));
+            // All changed files are listed — the set is always complete
+            var top = string.Join(",", ranked.Select(FormatTopFile));
             sb.AppendLine($"top={top}");
         }
 
@@ -125,14 +129,22 @@ public sealed partial class GitDiffFilter : IOutputFilter
                 sb.AppendLine(hunk.Header);
                 hunksShown++;
 
-                foreach (var line in hunk.ChangedLines)
+                foreach (var entry in hunk.Lines)
                 {
-                    if (changedLinesShown >= _maxChangedLines)
+                    if (entry.IsChanged && changedLinesShown >= _maxChangedLines)
                         break;
 
-                    var colored = line.StartsWith("+") ? Ansi.Green(line) : Ansi.Red(line);
-                    sb.AppendLine(colored);
-                    changedLinesShown++;
+                    if (entry.IsChanged)
+                    {
+                        var colored = entry.Text.StartsWith("+") ? Ansi.Green(entry.Text) : Ansi.Red(entry.Text);
+                        sb.AppendLine(colored);
+                        changedLinesShown++;
+                    }
+                    else
+                    {
+                        // Context line — show as-is (dim)
+                        sb.AppendLine(Ansi.Dim(entry.Text));
+                    }
                 }
             }
 
@@ -140,15 +152,10 @@ public sealed partial class GitDiffFilter : IOutputFilter
                 break;
         }
 
-        var hiddenFiles = ranked.Count - previewFiles.Count;
+        // All files are in top=; report only hidden hunk previews
         var hiddenHunks = ranked.Sum(f => f.Hunks.Count) - hunksShown;
-        if (hiddenFiles > 0 || hiddenHunks > 0)
-        {
-            var parts = new List<string>();
-            if (hiddenFiles > 0) parts.Add($"{hiddenFiles} files");
-            if (hiddenHunks > 0) parts.Add($"{hiddenHunks} hunks");
-            sb.AppendLine(Ansi.Dim($"+{string.Join(", ", parts)} more"));
-        }
+        if (hiddenHunks > 0)
+            sb.AppendLine(Ansi.Dim($"+{hiddenHunks} hunks more (all files listed above)"));
 
         return sb.ToString();
     }
@@ -166,12 +173,13 @@ public sealed partial class GitDiffFilter : IOutputFilter
     [GeneratedRegex(@"^@@ -(?<oldStart>\d+)(?:,(?<oldCount>\d+))? \+(?<newStart>\d+)(?:,(?<newCount>\d+))? @@")]
     private static partial Regex HunkHeaderRe();
 
-    private void AddChangedLine(Hunk? hunk, string line)
+    private void AddHunkLine(Hunk? hunk, string line, bool isChanged)
     {
-        if (hunk == null || hunk.ChangedLines.Count >= _maxLinesPerHunk)
-            return;
-
-        hunk.ChangedLines.Add(TruncateChangedLine(line));
+        if (hunk == null) return;
+        // Cap changed lines per hunk; context lines are always included (up to same cap)
+        if (isChanged && hunk.ChangedLineCount >= _maxLinesPerHunk) return;
+        hunk.Lines.Add(new HunkLine(TruncateChangedLine(line), isChanged));
+        if (isChanged) hunk.ChangedLineCount++;
     }
 
     private static string TruncateChangedLine(string line)
@@ -226,6 +234,13 @@ public sealed partial class GitDiffFilter : IOutputFilter
     private class Hunk(string header)
     {
         public string Header { get; } = header;
-        public List<string> ChangedLines { get; } = [];
+        public List<HunkLine> Lines { get; } = [];
+        public int ChangedLineCount { get; set; }
+    }
+
+    private class HunkLine(string text, bool isChanged)
+    {
+        public string Text { get; } = text;
+        public bool IsChanged { get; } = isChanged;
     }
 }

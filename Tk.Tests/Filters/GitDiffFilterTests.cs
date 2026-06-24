@@ -90,7 +90,7 @@ public class GitDiffFilterTests
     }
 
     [Fact]
-    public void Top_files_capped_to_3_default()
+    public void Top_lists_all_files_set_is_complete()
     {
         var sb = new System.Text.StringBuilder();
         for (var i = 0; i < 5; i++)
@@ -104,9 +104,31 @@ public class GitDiffFilterTests
             sb.AppendLine("+new");
         }
         var actual = new GitDiffFilter(DetailLevel.Default).Apply(sb.ToString(), 0);
+        // All 5 files must appear in top= — set is complete
         var topLine = actual.Split('\n').First(l => l.StartsWith("top="));
-        Assert.Equal(3, topLine["top=".Length..].Split(',').Length);
-        Assert.Contains("more", actual); // "+N files, M hunks more" or similar
+        Assert.Equal(5, topLine["top=".Length..].Split(',').Length);
+        // Hunk preview is bounded; overflow is explicit
+        Assert.Contains("hunks more", actual);
+    }
+
+    [Fact]
+    public void Context_lines_shown_around_changed_lines()
+    {
+        var raw = """
+            diff --git a/src/a.cs b/src/a.cs
+            index aaa..bbb 100644
+            --- a/src/a.cs
+            +++ b/src/a.cs
+            @@ -10,5 +10,5 @@ namespace X
+             ctx_before
+            -old
+            +new
+             ctx_after
+             ctx_after2
+            """;
+        var actual = new GitDiffFilter(DetailLevel.Default).Apply(raw, 0);
+        Assert.Contains("ctx_before", actual);
+        Assert.Contains("ctx_after", actual);
     }
 
     [Fact]

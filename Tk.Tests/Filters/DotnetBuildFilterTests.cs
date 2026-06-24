@@ -95,12 +95,49 @@ public class DotnetBuildFilterTests
     }
 
     [Fact]
-    public void Long_diagnostic_message_truncated()
+    public void Error_message_shown_in_full_not_truncated()
     {
         var longMsg = new string('m', 200);
         var raw = $"Foo.cs(1,1): error CS9999: {longMsg}";
         var actual = new DotnetBuildFilter().Apply(raw, 1);
+        // Errors must not be truncated — the full message must appear
+        Assert.Contains(new string('m', 200), actual);
+        Assert.DoesNotContain("...", actual);
+    }
+
+    [Fact]
+    public void Warning_message_still_truncated_at_140()
+    {
+        var longMsg = new string('w', 200);
+        var raw = $"Foo.cs(1,1): warning CS0168: {longMsg}";
+        var actual = new DotnetBuildFilter().Apply(raw, 0);
         Assert.Contains("...", actual);
-        Assert.DoesNotContain(new string('m', 141), actual);
+        Assert.DoesNotContain(new string('w', 141), actual);
+    }
+
+    [Fact]
+    public void More_than_20_distinct_errors_all_shown()
+    {
+        var sb = new System.Text.StringBuilder();
+        for (var i = 0; i < 25; i++)
+            sb.AppendLine($"File{i:D2}.cs(1,1): error CS{i:D4}: Unique error {i}");
+        var actual = new DotnetBuildFilter().Apply(sb.ToString(), 1);
+        Assert.Contains("e=25", actual);
+        // All 25 distinct errors must appear — no cap
+        for (var i = 0; i < 25; i++)
+            Assert.Contains($"Unique error {i}", actual);
+    }
+
+    [Fact]
+    public void Error_files_all_shown_without_plus_n_truncation()
+    {
+        // Same code, 5 different files — all sites must be visible
+        var sb = new System.Text.StringBuilder();
+        for (var i = 0; i < 5; i++)
+            sb.AppendLine($"File{i}.cs(1,1): error CS1002: ; expected [/repo/A.csproj]");
+        var actual = new DotnetBuildFilter().Apply(sb.ToString(), 1);
+        for (var i = 0; i < 5; i++)
+            Assert.Contains($"File{i}.cs", actual);
+        Assert.DoesNotContain("+2]", actual); // no "+N more files" truncation
     }
 }

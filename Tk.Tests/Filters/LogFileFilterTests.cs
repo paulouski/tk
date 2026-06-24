@@ -136,4 +136,41 @@ public class LogFileFilterTests : IDisposable
         Assert.Contains("WidgetService:", actual);
         Assert.DoesNotContain("My.Long.Namespace", actual);
     }
+
+    [Fact]
+    public void Full_stack_trace_preserved_for_kept_errors()
+    {
+        // Build a fail entry with 10 stack frames — all must appear in output
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("fail: My.Service[0]");
+        sb.AppendLine("      Something went wrong");
+        sb.AppendLine("System.InvalidOperationException: boom");
+        for (var i = 0; i < 10; i++)
+            sb.AppendLine($"   at Method{i}() in File.cs:line {i}");
+        var path = WriteLog(sb.ToString());
+        var actual = LogFileFilter.Apply(path, []);
+        // All 10 frames must be present — no 3-frame cap
+        for (var i = 0; i < 10; i++)
+            Assert.Contains($"Method{i}()", actual);
+        Assert.DoesNotContain("more frames", actual);
+    }
+
+    [Fact]
+    public void Deduplication_collapse_remains_visible_with_count()
+    {
+        var path = WriteLog("""
+            fail: My.Service[0]
+                  database error
+               at Method1() in File.cs:line 1
+               at Method2() in File.cs:line 2
+            fail: My.Service[0]
+                  database error
+               at Method1() in File.cs:line 1
+               at Method2() in File.cs:line 2
+            """);
+        var actual = LogFileFilter.Apply(path, []);
+        // Deduplicated: only one entry, but count shown
+        Assert.Contains("(x2)", actual);
+        Assert.Single(actual.Split('\n'), l => l.Contains("database error"));
+    }
 }

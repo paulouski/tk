@@ -71,16 +71,31 @@ public class DotnetTestFilterTests
     }
 
     [Fact]
-    public void More_than_15_failed_tests_truncated_with_more_marker()
+    public void All_failed_tests_shown_no_truncation()
     {
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("Failed!  - Failed: 20, Passed: 0, Skipped: 0, Total: 20, Duration: 1 s");
         for (var i = 0; i < 20; i++)
             sb.AppendLine($"  Failed Test{i:D2} [1 ms]");
         var actual = new DotnetTestFilter().Apply(sb.ToString(), 1);
-        Assert.Contains("Test00", actual);
-        Assert.Contains("Test14", actual);
-        Assert.DoesNotContain("Test15", actual);
-        Assert.Contains("+5 more", actual);
+        // All 20 failed tests must be listed — set is complete
+        for (var i = 0; i < 20; i++)
+            Assert.Contains($"Test{i:D2}", actual);
+        Assert.DoesNotContain("more", actual);
+    }
+
+    [Fact]
+    public void Failed_test_detail_shown_in_full()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 s");
+        sb.AppendLine("  Failed MyTest [1 ms]");
+        // More than 5 detail lines
+        for (var i = 0; i < 10; i++)
+            sb.AppendLine($"    Detail line {i}");
+        var actual = new DotnetTestFilter().Apply(sb.ToString(), 1);
+        // All 10 detail lines must appear — no 5-line cap
+        for (var i = 0; i < 10; i++)
+            Assert.Contains($"Detail line {i}", actual);
     }
 }

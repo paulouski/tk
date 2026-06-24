@@ -192,30 +192,33 @@ The installer is marker-based and idempotent: rerunning `tk init` updates the tk
 
 ## Token savings
 
-| Command | Typical output | After tk | Savings |
+These are noise-reduction figures. `tk` is completeness-first: it drops irrelevant things (framework banners, restore spam, duplicate messages) but never silently omits relevant things (changed files, error sites, test failure detail, stack frames). Actual savings depend on noise ratio.
+
+| Command | Typical output | After tk | Savings (noise dropped) |
 |---------|---------------|----------|---------|
 | `dotnet build` (success, 12 projects) | ~180 lines | 1 line | ~99% |
-| `dotnet build` (3 errors, 5 warnings) | ~180 lines | 8 lines | ~95% |
+| `dotnet build` (3 errors, 5 warnings) | ~180 lines | ~8-10 lines | ~94% |
 | `dotnet test` (all pass) | ~60 lines | 1 line | ~98% |
-| `git status` (15 files) | ~30 lines | ~12 lines | ~60% |
-| `git diff` (500-line diff) | 500 lines | ~10-20 lines | ~95% |
-| `changes` (status + diff startup check) | ~530 lines | ~3-12 lines | ~98% |
+| `dotnet test` (failures) | varies | full failure detail per test | noise dropped, signal kept |
+| `git status` (15 files) | ~30 lines | ~16 lines (all paths) | ~45% |
+| `git diff` (10 files, 500 lines) | 500 lines | summary + all files listed + hunk preview | depends on diff size |
+| `changes` (status + diff startup check) | ~530 lines | ~3-15 lines | ~97% |
 | `tree` (medium repo) | ~100-500 lines | ~5-15 lines | ~90-98% |
 | `focus` (broad search) | ~50-500 lines | ~3-10 lines | ~85-98% |
 | `git log` (full format) | ~200 lines | ~30 lines | ~85% |
 | `view Program.cs` (250-line file) | 250 lines | ~5-15 lines | ~94% |
-| Service log (5000 lines) | 5000 lines | ~40 lines | ~99% |
+| Service log (5000 lines) | 5000 lines | ~40+ lines (full stacks kept) | ~99% (noise), stacks intact |
 
 ## Filters
 
 | Filter | Trigger | What it does |
 |--------|---------|-------------|
-| **DotnetBuild** | `tk dotnet build` | Groups errors/warnings by code, deduplicates NuGet vulnerability warnings, shows project count and duration |
-| **DotnetTest** | `tk dotnet test` | Shows pass/fail/skip counts; on failure, lists failed test names with first 5 lines of detail |
+| **DotnetBuild** | `tk dotnet build` | Every distinct error site shown (no cap, no file truncation, full message); warnings grouped/capped; NuGet vulns deduplicated; project count and duration |
+| **DotnetTest** | `tk dotnet test` | Pass/fail/skip counts; on failure, all failed test names listed with full assertion diff and stack trace per test |
 | **DotnetRestore** | `tk dotnet restore` | Counts restored projects, surfaces errors, collapses NuGet noise |
-| **GitStatus** | `tk git status` | Count-first status summary with staged/modified/untracked counts, branch, and top paths |
+| **GitStatus** | `tk git status` | Count-first status summary with staged/modified/untracked counts, branch, and all changed paths (complete set, never capped) |
 | **GitLog** | `tk git log` | Converts full-format log to one-line-per-commit, caps at 30 |
-| **GitDiff** | `tk git diff`, `tk git show` | Summary-first diff: file stats, top changed files, compact hunk preview with changed lines only |
+| **GitDiff** | `tk git diff`, `tk git show` | Summary-first diff: all changed files listed with stats (complete set); hunk preview includes context lines around changes; large diffs cap hunk preview with an explicit overflow note |
 | **Changes** | `tk changes` | Compact repo state card combining `git status` and `git diff` |
 | **GitCompact** | `tk git add/commit/push/pull/...` | Keeps first 3 + last 2 lines for verbose operations |
 | **Find** | `tk find <path> [flags]` | Count-first find summary with top groups and a few representative paths |
@@ -223,7 +226,7 @@ The installer is marker-based and idempotent: rerunning `tk init` updates the tk
 | **Tree** | `tk tree [path]` | Shallow repo tree with directory/file counts |
 | **Files** | `tk files [path]` | Compact inventory of key files, optional extension or changed-file filtering |
 | **Focus** | `tk focus <query> [path]` | Narrow repo search using compact summary output |
-| **LogFile** | `tk log <file>` | Parses ASP.NET logs: strips startup/framework noise, collapses HTTP request pairs, deduplicates, trims stack traces to 3 frames |
+| **LogFile** | `tk log <file>` | Parses ASP.NET logs: strips startup/framework noise, collapses HTTP request pairs, deduplicates repeated entries (count shown), preserves full stack traces for kept errors |
 
 Unrecognized commands pass through without modification.
 

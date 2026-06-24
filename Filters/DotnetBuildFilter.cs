@@ -67,21 +67,21 @@ public sealed partial class DotnetBuildFilter : IOutputFilter
         if (!succeeded && realErrors.Count == 0 && realWarnings.Count == 0)
             AppendRawTail(sb, lines, 12);
 
-        // Errors (grouped by code)
+        // Errors — every distinct error site shown; no cap
         if (realErrors.Count > 0)
         {
             sb.AppendLine(Ansi.Dim("---"));
             sb.AppendLine(Ansi.Red("Errors:"));
-            foreach (var group in GroupByCode(realErrors).Take(20))
-                sb.AppendLine(FormatGroup(group, "error"));
+            foreach (var group in GroupByCode(realErrors))
+                sb.AppendLine(FormatGroup(group, "error", capFiles: false));
         }
 
-        // Warnings (grouped by code)
+        // Warnings — grouped/capped (lower signal); cap is explicit via the +N note
         if (realWarnings.Count > 0)
         {
             sb.AppendLine(Ansi.Yellow("Warnings:"));
             foreach (var group in GroupByCode(realWarnings).Take(15))
-                sb.AppendLine(FormatGroup(group, "warning"));
+                sb.AppendLine(FormatGroup(group, "warning", capFiles: true));
         }
 
         // NuGet vulnerability summary
@@ -181,10 +181,11 @@ public sealed partial class DotnetBuildFilter : IOutputFilter
         return order.Select(k => groups[k]);
     }
 
-    private static string FormatGroup(DiagnosticGroup g, string kind)
+    private static string FormatGroup(DiagnosticGroup g, string kind, bool capFiles)
     {
         var code = string.IsNullOrEmpty(g.Code) ? "" : $" {g.Code}";
-        var msg = g.Message.Length > 140 ? g.Message[..140] + "..." : g.Message;
+        // Errors: full message (no truncation). Warnings: keep 140-char cap.
+        var msg = (!capFiles || g.Message.Length <= 140) ? g.Message : g.Message[..140] + "...";
 
         if (g.Count == 1)
         {
@@ -192,12 +193,25 @@ public sealed partial class DotnetBuildFilter : IOutputFilter
             return $"  {file}{kind}{code}: {msg}";
         }
 
-        var files = g.Files.Count switch
+        string files;
+        if (capFiles)
         {
-            0 => "",
-            <= 3 => $" [{string.Join(", ", g.Files)}]",
-            _ => $" [{string.Join(", ", g.Files.Take(3))} +{g.Files.Count - 3}]"
-        };
+            files = g.Files.Count switch
+            {
+                0 => "",
+                <= 3 => $" [{string.Join(", ", g.Files)}]",
+                _ => $" [{string.Join(", ", g.Files.Take(3))} +{g.Files.Count - 3}]"
+            };
+        }
+        else
+        {
+            // Errors: show every file site — no truncation
+            files = g.Files.Count switch
+            {
+                0 => "",
+                _ => $" [{string.Join(", ", g.Files)}]"
+            };
+        }
 
         return $"  {kind}{code} (x{g.Count}): {msg}{files}";
     }

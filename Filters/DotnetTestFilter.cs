@@ -43,11 +43,10 @@ public sealed partial class DotnetTestFilter : IOutputFilter
                 continue;
             }
 
-            // Stack trace / error details for current failure (indented lines)
+            // Stack trace / error details for current failure (indented lines) — captured in full
             if (currentFailure != null && line.StartsWith("    ") && !string.IsNullOrWhiteSpace(line))
             {
-                if (currentFailure.Details.Count < 5) // Limit detail lines
-                    currentFailure.Details.Add(line.Trim());
+                currentFailure.Details.Add(line.Trim());
                 continue;
             }
 
@@ -94,26 +93,21 @@ public sealed partial class DotnetTestFilter : IOutputFilter
         if (commandFailed && failedTests.Count == 0)
             AppendRawTail(sb, lines, 12);
 
-        // Show failed tests
+        // Show failed tests — full detail (assertion diff + stack) for every failed test
         if (failedTests.Count > 0)
         {
             sb.AppendLine(Ansi.Dim("---"));
             sb.AppendLine(Ansi.Red("Failed:"));
-            foreach (var ft in failedTests.Take(15))
+            foreach (var ft in failedTests)
             {
                 sb.AppendLine($"  {ft.Name}");
                 foreach (var detail in ft.Details)
-                    sb.AppendLine($"    {Truncate(detail, 200)}");
+                    sb.AppendLine($"    {detail}");
             }
-            if (failedTests.Count > 15)
-                sb.AppendLine($"  ... +{failedTests.Count - 15} more");
         }
 
         return sb.ToString();
     }
-
-    private static string Truncate(string s, int max) =>
-        s.Length > max ? s[..max] + "..." : s;
 
     [GeneratedRegex(@"(?:Passed|Failed)!\s+-\s+Failed:\s*(?<failed>\d+),\s*Passed:\s*(?<passed>\d+),\s*Skipped:\s*(?<skipped>\d+),\s*Total:\s*(?<total>\d+)")]
     private static partial Regex SummaryRe();
