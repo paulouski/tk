@@ -51,7 +51,9 @@ public sealed class DefCommand : ICommand
                 return 0;
             }
 
-            ctx.Out.WriteLine(DefFormatter.Format(arg, response.Locations ?? []));
+            var locations = response.Locations ?? [];
+            ctx.ResultCount = locations.Length;
+            ctx.Out.WriteLine(DefFormatter.Format(arg, locations));
             return 0;
         }
         catch (OperationCanceledException)

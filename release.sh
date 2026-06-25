@@ -59,7 +59,28 @@ codesign --force --sign - "$EXE"
 # --- record the release: commit everything pending, tag, push ---
 echo "==> commit & tag"
 git add -A
-git commit -m "Release v$NEW"
+
+# --- generate commit message via Claude (falls back to plain "Release vX" if unavailable) ---
+COMMIT_MSG=""
+if command -v claude > /dev/null 2>&1; then
+  DIFFSTAT="$(git diff --staged --stat 2>/dev/null || true)"
+  DIFF="$(git diff --staged 2>/dev/null | head -c 100000 || true)"
+  if [ -n "$DIFF" ]; then
+    COMMIT_MSG="$(printf '%s\n\n%s\n' "$DIFFSTAT" "$DIFF" | claude -p \
+      'Ты пишешь сообщение git-коммита для релиза CLI-утилиты tk по приведённому staged-диффу. Выдай: первая строка — краткий императивный subject (≤72 символов, что сделано); затем пустая строка; затем 1-3 коротких булета «что изменилось → какой эффект». Только текст сообщения, без преамбул, без markdown-заголовков, без обрамляющих кавычек. КАТЕГОРИЧЕСКИ НЕ добавляй строки Co-Authored-By, «Generated with Claude», эмодзи-роботов или любые упоминания ассистента.' \
+      2>/dev/null || true)"
+  fi
+fi
+
+if [ -n "$COMMIT_MSG" ]; then
+  echo "==> commit message:"
+  echo "$COMMIT_MSG"
+  echo "Release v$NEW"
+  git commit -m "$COMMIT_MSG" -m "Release v$NEW"
+else
+  echo "==> commit message: Release v$NEW"
+  git commit -m "Release v$NEW"
+fi
 git tag "v$NEW"
 
 echo "==> push (triggers GitHub release workflow)"

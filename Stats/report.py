@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from ingest import _parse_cli_dt  # type: ignore[import]
 from join import run_join  # type: ignore[import]
 from detect import annotate  # type: ignore[import]
+from pricing import get_unknown_models  # type: ignore[import]
 
 
 # ---------------------------------------------------------------------------
@@ -39,7 +40,7 @@ def _build_report(model: dict) -> dict:
 
     # -- by_command ----------------------------------------------------------
     cmd_stats: dict[str, dict] = defaultdict(lambda: {
-        "n": 0, "matched": 0, "win": 0, "net_negative": 0,
+        "n": 0, "matched": 0, "win": 0, "neutral": 0, "net_negative": 0,
         "empty_n": 0, "fallback_n": 0, "result_used_n": 0, "retry_n": 0,
         "sum_shown": 0, "sum_raw": 0, "n_shown": 0, "n_raw": 0,
     })
@@ -72,6 +73,9 @@ def _build_report(model: dict) -> dict:
             if outcome == "WIN":
                 cs["win"] += 1
                 cs["matched"] += 1
+            elif outcome == "NEUTRAL":
+                cs["neutral"] += 1
+                cs["matched"] += 1
             elif outcome == "NET_NEGATIVE":
                 cs["net_negative"] += 1
                 cs["matched"] += 1
@@ -88,7 +92,7 @@ def _build_report(model: dict) -> dict:
             if ev.get("retry"):
                 cs["retry_n"] += 1
 
-            shown = ev.get("shown_chars")
+            shown = ev.get("shown_chars_ownlog")
             if shown is not None:
                 cs["sum_shown"] += shown
                 cs["n_shown"] += 1
@@ -113,6 +117,7 @@ def _build_report(model: dict) -> dict:
             "n": cs["n"],
             "matched": cs["matched"],
             "win": cs["win"],
+            "neutral": cs["neutral"],
             "net_negative": cs["net_negative"],
             "empty_n": cs["empty_n"],
             "fallback_n": cs["fallback_n"],
@@ -184,6 +189,77 @@ def _build_report(model: dict) -> dict:
 
     net_saved = agg["win"]["saved_chars"] - agg["net_negative"]["extra_chars"]
 
+    # -- cost summary --------------------------------------------------------
+    total_usd = sum((s.get("cost") or {}).get("usd", 0.0) for s in sessions)
+    main_usd  = sum(
+        (s.get("cost") or {}).get("usd", 0.0) for s in sessions if not s.get("is_subagent")
+    )
+    sub_usd   = sum(
+        (s.get("cost") or {}).get("usd", 0.0) for s in sessions if s.get("is_subagent")
+    )
+
+    groups = model.get("groups") or []
+    top_groups = [
+        {
+            "group_id": g["group_id"],
+            "main_session_id": g["main_session_id"],
+            "n_subs": g["n_subs"],
+            "main_usd": g["main_usd"],
+            "subs_usd": g["subs_usd"],
+            "total_usd": g["total_usd"],
+            "delegation_delta_usd": g["delegation_delta_usd"],
+            "inline_estimate_usd": g["inline_estimate_usd"],
+        }
+        for g in groups[:5]
+    ]
+
+    cost_summary = {
+        "total_usd": round(total_usd, 6),
+        "main_usd": round(main_usd, 6),
+        "sub_usd": round(sub_usd, 6),
+        "top_groups": top_groups,
+        "unknown_models": get_unknown_models(),
+    }
+
+    # -- by_version ----------------------------------------------------------
+    ver_stats: dict[str, dict] = defaultdict(lambda: {
+        "n": 0,
+        "WIN": 0, "NEUTRAL": 0, "NET_NEGATIVE": 0, "UNKNOWN": 0,
+        "saved_chars": 0,
+    })
+    for session in sessions:
+        for ev in session.get("events", []):
+            if not ev.get("is_tk"):
+                continue
+            ver = ev.get("tk_version") or "unknown"
+            vs = ver_stats[ver]
+            vs["n"] += 1
+            outcome = ev.get("outcome", "UNKNOWN")
+            vs[outcome] = vs.get(outcome, 0) + 1
+            if outcome == "WIN":
+                raw = ev.get("raw_chars") or 0
+                shown = ev.get("shown_chars_ownlog") or 0
+                vs["saved_chars"] += raw - shown
+
+    def _ver_sort_key(ver: str) -> tuple:
+        if ver == "unknown":
+            return (1, [])
+        parts = []
+        for p in ver.split("."):
+            try:
+                parts.append(int(p))
+            except ValueError:
+                parts.append(p)
+        return (0, parts)
+
+    by_version = [
+        {"version": ver, **vs}
+        for ver, vs in sorted(ver_stats.items(), key=lambda kv: _ver_sort_key(kv[0]), reverse=True)
+    ]
+    # Fix reversed sort: unknown last, versions descending
+    by_version.sort(key=lambda x: _ver_sort_key(x["version"]))
+    by_version.reverse()
+
     return {
         "range": {
             "from": rng.get("from"),
@@ -203,8 +279,10 @@ def _build_report(model: dict) -> dict:
             "net_negative_extra_chars": agg["net_negative"]["extra_chars"],
             "net_chars": net_saved,
         },
+        "cost": cost_summary,
         "by_command": by_command,
         "by_agent_type": by_agent_type,
+        "by_version": by_version,
         "findings": findings,
     }
 
@@ -258,7 +336,7 @@ def _print_summary(report: dict) -> None:
     print(f"Range:         {af[:10]} -> {at[:10]}")
     print(f"Sessions:      {t['sessions']}")
     print(f"tk events:     {t['tk_events']}  (matched {t['matched']}, rate {t['match_rate']*100:.1f}%)")
-    print(f"Outcomes:      WIN={oc['WIN']}  NET_NEG={oc['NET_NEGATIVE']}  UNK={oc['UNKNOWN']}")
+    print(f"Outcomes:      WIN={oc['WIN']}  NEU={oc.get('NEUTRAL', 0)}  NET_NEG={oc['NET_NEGATIVE']}  UNK={oc['UNKNOWN']}")
     print(f"Savings:       saved={sv['win_saved_chars']:,}  extra={sv['net_negative_extra_chars']:,}  net={sv['net_chars']:,}")
     print()
 
@@ -284,6 +362,52 @@ def _print_summary(report: dict) -> None:
         print("Findings:")
         for f in report["findings"]:
             print(f"  [{f['type']}] {f['detail']}")
+
+    bv = report.get("by_version") or []
+    if bv:
+        print()
+        print("By tk version:")
+        for v in bv:
+            ver = v["version"]
+            saved = v.get("saved_chars", 0)
+            print(
+                f"  {ver:10s}  n={v['n']:4d}  WIN={v.get('WIN',0):3d}  "
+                f"NEU={v.get('NEUTRAL',0):3d}  NEG={v.get('NET_NEGATIVE',0):3d}  "
+                f"UNK={v.get('UNKNOWN',0):3d}  saved={saved:,}"
+            )
+
+    cs = report.get("cost") or {}
+    if cs:
+        print()
+        print("Cost (USD):")
+        print(f"  Total:  ${cs['total_usd']:.4f}")
+        print(f"  Main:   ${cs['main_usd']:.4f}")
+        print(f"  Subs:   ${cs['sub_usd']:.4f}")
+        top = cs.get("top_groups") or []
+        if top:
+            print()
+            print("  Top groups by cost:")
+            for g in top:
+                delta = g.get("delegation_delta_usd")
+                inline = g.get("inline_estimate_usd")
+                gid_short = (g["group_id"] or "")[:8]
+                n_subs = g["n_subs"]
+                delta_str = ""
+                if delta is not None:
+                    sign = "+" if delta >= 0 else ""
+                    delta_str = f"  delta={sign}{delta:.4f} ({'saved' if delta >= 0 else 'overhead'}, upper-bound est)"
+                inline_str = f"  inline≈${inline:.4f}" if inline is not None else ""
+                print(
+                    f"    {gid_short}  subs={n_subs}"
+                    f"  main=${g['main_usd']:.4f}"
+                    f"  subs=${g['subs_usd']:.4f}"
+                    f"  total=${g['total_usd']:.4f}"
+                    f"{inline_str}{delta_str}"
+                )
+        unknown = cs.get("unknown_models") or []
+        if unknown:
+            print()
+            print(f"  WARNING: unknown models (cost not calculated): {', '.join(unknown)}")
 
 
 # ---------------------------------------------------------------------------
@@ -312,6 +436,14 @@ def main() -> None:
 
     # Build and write report.json
     report = _build_report(model)
+
+    # Expose by_version in model.json so the dashboard can render it
+    model["by_version"] = report["by_version"]
+
+    # Re-write model.json with by_version included
+    with open(model_path, "w", encoding="utf-8") as f:
+        json.dump(model, f, indent=2)
+
     report_path = result_dir / "report.json"
     with open(report_path, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)

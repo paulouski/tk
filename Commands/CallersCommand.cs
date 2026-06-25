@@ -52,6 +52,7 @@ public sealed class CallersCommand : ICommand
             }
 
             var callers = response.Callers ?? [];
+            ctx.ResultCount = callers.Length;
             ctx.Out.WriteLine(CallersFormatter.Format(arg, callers));
             return 0;
         }

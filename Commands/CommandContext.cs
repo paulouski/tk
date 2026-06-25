@@ -17,6 +17,8 @@ public sealed class CommandContext
     // Settable by compacting commands to report pre-compaction size for analytics.
     public long? RawCharCount { get; set; }
     public int? RawLineCount { get; set; }
+    // Settable by search/list commands to report the result count for empty-detection analytics.
+    public int? ResultCount { get; set; }
 
     public CommandContext(
         string[] args,

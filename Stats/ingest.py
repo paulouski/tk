@@ -28,6 +28,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+sys.path.insert(0, str(Path(__file__).parent))
+from pricing import cost_for_usage, cost_tokens_by_type  # type: ignore[import]
+
 
 # ---------------------------------------------------------------------------
 # Path helpers
@@ -313,6 +316,58 @@ def _agent_type_for_subagent(jsonl_path: Path) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Cost aggregation
+# ---------------------------------------------------------------------------
+
+def _aggregate_cost(turn_costs: list[dict]) -> dict:
+    """
+    Aggregate per-turn cost records into a session-level cost dict.
+    Dominant model = model of the turn with the most total tokens.
+    """
+    total_usd = 0.0
+    tok_input = tok_output = tok_cr = tok_cw5m = tok_cw1h = 0
+    usd_input = usd_output = usd_cr = usd_cw = 0.0
+
+    dominant_model = ""
+    dominant_tok = -1
+
+    for t in turn_costs:
+        total_usd += t["usd"]
+        tok_input  += t["input"]
+        tok_output += t["output"]
+        tok_cr     += t["cache_read"]
+        tok_cw5m   += t["cw5m"]
+        tok_cw1h   += t["cw1h"]
+        m = t["model"]
+        usd_input  += cost_tokens_by_type(t["input"],      "input",         m)
+        usd_output += cost_tokens_by_type(t["output"],     "output",        m)
+        usd_cr     += cost_tokens_by_type(t["cache_read"], "cache_read",    m)
+        usd_cw     += cost_tokens_by_type(t["cw5m"],       "cache_write_5m", m)
+        usd_cw     += cost_tokens_by_type(t["cw1h"],       "cache_write_1h", m)
+        if t["tok_total"] > dominant_tok:
+            dominant_tok = t["tok_total"]
+            dominant_model = m
+
+    return {
+        "model": dominant_model,
+        "usd": round(total_usd, 6),
+        "tokens": {
+            "input":        tok_input,
+            "output":       tok_output,
+            "cache_read":   tok_cr,
+            "cache_write_5m": tok_cw5m,
+            "cache_write_1h": tok_cw1h,
+        },
+        "usd_by_type": {
+            "input":      round(usd_input,  6),
+            "output":     round(usd_output, 6),
+            "cache_read": round(usd_cr,     6),
+            "cache_write": round(usd_cw,   6),
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
 # Session parsing
 # ---------------------------------------------------------------------------
 
@@ -332,9 +387,15 @@ def _parse_session(jsonl_path: Path, projects_dir: Path) -> dict | None:
     if is_subagent:
         agent_type = _agent_type_for_subagent(jsonl_path)
         session_id = jsonl_path.stem  # agent-<id>
+        # Parent is the folder containing "subagents"
+        sub_idx = list(parts).index("subagents")
+        parent_session_id: str | None = parts[sub_idx - 1]
+        group_id = parent_session_id
     else:
         agent_type = "main"
         session_id = jsonl_path.stem  # uuid
+        parent_session_id = None
+        group_id = jsonl_path.stem
 
     # Session-level metadata (collected from lines)
     cwd: str | None = None
@@ -345,6 +406,9 @@ def _parse_session(jsonl_path: Path, projects_dir: Path) -> dict | None:
     # Two-pass: first collect tool_uses, then join tool_results
     tool_uses: dict[str, dict] = {}   # tool_use_id -> event dict (partial)
     tool_results: dict[str, dict] = {}  # tool_use_id -> result info
+
+    # Cost accumulation: per-turn records for aggregation
+    _turn_costs: list[dict] = []  # each: {model, usd, input, output, cache_read, cw5m, cw1h}
 
     try:
         with open(jsonl_path, encoding="utf-8", errors="replace") as f:
@@ -367,8 +431,38 @@ def _parse_session(jsonl_path: Path, projects_dir: Path) -> dict | None:
                 if session_id_from_file is None and line.get("sessionId"):
                     session_id_from_file = line["sessionId"]
 
+                # Collect assistant-turn usage for cost calculation
+                msg = line.get("message", {})
+                if isinstance(msg, dict) and msg.get("role") == "assistant":
+                    usage = msg.get("usage")
+                    turn_model = msg.get("model") or ""
+                    if usage and isinstance(usage, dict):
+                        cache_obj = usage.get("cache_creation") or {}
+                        cw_5m = cache_obj.get("ephemeral_5m_input_tokens", 0) or 0
+                        cw_1h = cache_obj.get("ephemeral_1h_input_tokens", 0) or 0
+                        if cw_5m == 0 and cw_1h == 0:
+                            cw_5m = usage.get("cache_creation_input_tokens", 0) or 0
+                        turn_usd = cost_for_usage(usage, turn_model)
+                        # total token weight for dominant model detection
+                        tok_total = (
+                            (usage.get("input_tokens") or 0)
+                            + (usage.get("output_tokens") or 0)
+                            + (usage.get("cache_read_input_tokens") or 0)
+                            + cw_5m + cw_1h
+                        )
+                        _turn_costs.append({
+                            "model": turn_model,
+                            "usd": turn_usd,
+                            "tok_total": tok_total,
+                            "input": usage.get("input_tokens") or 0,
+                            "output": usage.get("output_tokens") or 0,
+                            "cache_read": usage.get("cache_read_input_tokens") or 0,
+                            "cw5m": cw_5m,
+                            "cw1h": cw_1h,
+                        })
+
                 ts_str = line.get("timestamp")
-                content = line.get("message", {}).get("content", [])
+                content = msg.get("content", []) if isinstance(msg, dict) else line.get("message", {}).get("content", [])
                 if not isinstance(content, list):
                     continue
 
@@ -454,11 +548,16 @@ def _parse_session(jsonl_path: Path, projects_dir: Path) -> dict | None:
     ts_end = max(ts_values) if ts_values else None
     n_tk = sum(1 for e in events if e.get("is_tk"))
 
+    # Aggregate cost from per-turn records
+    cost = _aggregate_cost(_turn_costs)
+
     session_summary = {
         "session_id": session_id_from_file or session_id,
         "session_file": rel_path,
         "agent_type": agent_type,
         "is_subagent": is_subagent,
+        "parent_session_id": parent_session_id,
+        "group_id": group_id,
         "cwd": cwd,
         "git_branch": git_branch,
         "cc_version": cc_version,
@@ -466,6 +565,7 @@ def _parse_session(jsonl_path: Path, projects_dir: Path) -> dict | None:
         "ts_end": ts_end,
         "n_events": len(events),
         "n_tk_events": n_tk,
+        "cost": cost,
         "events": events,
     }
     return session_summary

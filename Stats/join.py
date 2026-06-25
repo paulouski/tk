@@ -25,6 +25,7 @@ from pathlib import Path
 # Allow running from the repo root without installing
 sys.path.insert(0, str(Path(__file__).parent))
 from ingest import load_sessions, _parse_ts, _parse_cli_dt  # type: ignore[import]
+from pricing import cost_tokens_by_type, get_unknown_models  # type: ignore[import]
 
 
 # ---------------------------------------------------------------------------
@@ -136,16 +137,114 @@ def _find_match(
 
 
 def _outcome(event: dict) -> str:
-    """Classify: WIN / NET_NEGATIVE / UNKNOWN."""
+    """Classify: WIN / NEUTRAL / NET_NEGATIVE / UNKNOWN."""
     raw_chars = event.get("raw_chars")
     if raw_chars is None:
         return "UNKNOWN"
-    shown = event.get("shown_chars")
+    shown = event.get("shown_chars_ownlog")
     if shown is None:
         return "UNKNOWN"
     if shown < raw_chars:
         return "WIN"
+    if shown == raw_chars:
+        return "NEUTRAL"
     return "NET_NEGATIVE"
+
+
+# ---------------------------------------------------------------------------
+# Group rollup (cost economics of delegation)
+# ---------------------------------------------------------------------------
+
+def _build_groups(session_models: list[dict]) -> list[dict]:
+    """
+    Group sessions by group_id and compute delegation economics per group.
+    """
+    from collections import defaultdict
+
+    # Collect by group_id
+    by_group: dict[str, list[dict]] = defaultdict(list)
+    for sm in session_models:
+        gid = sm.get("group_id") or sm.get("session_id", "")
+        by_group[gid].append(sm)
+
+    groups: list[dict] = []
+    for gid, members in by_group.items():
+        mains = [m for m in members if not m.get("is_subagent")]
+        subs  = [m for m in members if m.get("is_subagent")]
+
+        main_sm = mains[0] if mains else None
+        main_session_id = main_sm.get("session_id") if main_sm else None
+
+        def _cost(sm: dict) -> dict:
+            return sm.get("cost") or {}
+
+        def _tok(sm: dict) -> dict:
+            return _cost(sm).get("tokens") or {}
+
+        def _usd_by(sm: dict) -> dict:
+            return _cost(sm).get("usd_by_type") or {}
+
+        main_usd = _cost(main_sm).get("usd", 0.0) if main_sm else 0.0
+        subs_usd = sum(_cost(s).get("usd", 0.0) for s in subs)
+        total_usd = main_usd + subs_usd
+
+        main_output_usd = _usd_by(main_sm).get("output", 0.0) if main_sm else 0.0
+        main_read_usd = (
+            (_usd_by(main_sm).get("input", 0.0) or 0.0)
+            + (_usd_by(main_sm).get("cache_read", 0.0) or 0.0)
+            + (_usd_by(main_sm).get("cache_write", 0.0) or 0.0)
+        ) if main_sm else 0.0
+
+        subs_output_usd = sum(_usd_by(s).get("output", 0.0) for s in subs)
+        subs_read_usd = sum(
+            (_usd_by(s).get("input", 0.0) or 0.0)
+            + (_usd_by(s).get("cache_read", 0.0) or 0.0)
+            + (_usd_by(s).get("cache_write", 0.0) or 0.0)
+            for s in subs
+        )
+
+        # Counterfactual inline estimate (upper-bound heuristic)
+        inline_estimate_usd: float | None = None
+        delegation_delta_usd: float | None = None
+        if main_sm and subs:
+            main_model = (_cost(main_sm).get("model") or "").strip()
+            if main_model:
+                # Sub output tokens, priced at main's output rate
+                sub_out_tok = sum(_tok(s).get("output", 0) for s in subs)
+                sub_in_tok  = sum(_tok(s).get("input", 0) for s in subs)
+                sub_cr_tok  = sum(_tok(s).get("cache_read", 0) for s in subs)
+                inline_sub_cost = (
+                    cost_tokens_by_type(sub_out_tok, "output", main_model)
+                    + cost_tokens_by_type(sub_in_tok + sub_cr_tok, "input", main_model)
+                )
+                inline_estimate_usd = round(main_usd + inline_sub_cost, 6)
+                delegation_delta_usd = round(inline_estimate_usd - total_usd, 6)
+
+        groups.append({
+            "group_id": gid,
+            "main_session_id": main_session_id,
+            "main_usd": round(main_usd, 6),
+            "subs_usd": round(subs_usd, 6),
+            "total_usd": round(total_usd, 6),
+            "n_subs": len(subs),
+            "main_output_usd": round(main_output_usd, 6),
+            "main_read_usd": round(main_read_usd, 6),
+            "subs_output_usd": round(subs_output_usd, 6),
+            "subs_read_usd": round(subs_read_usd, 6),
+            "inline_estimate_usd": inline_estimate_usd,
+            "delegation_delta_usd": delegation_delta_usd,
+            "assumptions": (
+                "inline_estimate is an UPPER-BOUND heuristic: it prices sub OUTPUT at main's "
+                "output rate and sub INPUT/cache_read at main's input rate (assumes main would "
+                "re-read the same context). It does NOT model that some sub context was already "
+                "in main's window, nor the review-read of sub output (which already happened "
+                "and is in main_usd). Treat delegation_delta as indicative, not authoritative."
+            ) if subs else None,
+        })
+
+    # Sort by total_usd descending
+    groups.sort(key=lambda g: g["total_usd"], reverse=True)
+    return groups
 
 
 # ---------------------------------------------------------------------------
@@ -165,7 +264,7 @@ def run_join(
 
     total_tk = 0
     matched = 0
-    outcome_counts: dict[str, int] = {"WIN": 0, "NET_NEGATIVE": 0, "UNKNOWN": 0}
+    outcome_counts: dict[str, int] = {"WIN": 0, "NEUTRAL": 0, "NET_NEGATIVE": 0, "UNKNOWN": 0}
     agg_raw_win = 0
     agg_shown_win = 0
     agg_raw_neg = 0
@@ -209,6 +308,8 @@ def run_join(
             ev["duration_ms"] = match.get("durationMs")
             ev["exit"] = match.get("exit")
             ev["detail"] = match.get("detail")
+            ev["tk_version"] = match.get("tkVersion")
+            ev["result_count"] = match.get("resultCount")
         else:
             ev["raw_chars"] = None
             ev["raw_lines"] = None
@@ -216,6 +317,8 @@ def run_join(
             ev["duration_ms"] = None
             ev["exit"] = None
             ev["detail"] = None
+            ev["tk_version"] = None
+            ev["result_count"] = None
 
         outcome = _outcome(ev)
         ev["outcome"] = outcome
@@ -223,12 +326,12 @@ def run_join(
 
         if outcome == "WIN":
             rc = ev["raw_chars"] or 0
-            sc = ev["shown_chars"] or 0
+            sc = ev["shown_chars_ownlog"] or 0
             agg_raw_win += rc
             agg_shown_win += sc
         elif outcome == "NET_NEGATIVE":
             rc = ev["raw_chars"] or 0
-            sc = ev["shown_chars"] or 0
+            sc = ev["shown_chars_ownlog"] or 0
             agg_raw_neg += rc
             agg_shown_neg += sc
 
@@ -252,8 +355,15 @@ def run_join(
         sm = {k: v for k, v in session.items() if k != "events"}
         sm["ts_start"] = session.get("ts_start")
         sm["ts_end"] = session.get("ts_end")
+        # Ensure new grouping/cost fields are present even if ingest didn't emit them
+        sm.setdefault("parent_session_id", None)
+        sm.setdefault("group_id", sm.get("session_id", ""))
+        sm.setdefault("cost", {"model": "", "usd": 0.0, "tokens": {}, "usd_by_type": {}})
         sm["events"] = session["events"]
         session_models.append(sm)
+
+    # Build group rollup
+    groups = _build_groups(session_models)
 
     match_rate = matched / total_tk if total_tk else 0.0
 
@@ -284,6 +394,7 @@ def run_join(
             },
         },
         "sessions": session_models,
+        "groups": groups,
     }
     return model
 
@@ -324,6 +435,7 @@ def main() -> None:
     print()
     print("Outcomes:")
     print(f"  WIN:          {oc['WIN']}")
+    print(f"  NEUTRAL:      {oc['NEUTRAL']}")
     print(f"  NET_NEGATIVE: {oc['NET_NEGATIVE']}")
     print(f"  UNKNOWN:      {oc['UNKNOWN']}")
     print()

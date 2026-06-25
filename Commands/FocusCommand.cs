@@ -18,13 +18,17 @@ public sealed class FocusCommand : ICommand
         var words = new List<string>();
         var flags = new List<string>();
         var path = ".";
+        var pathExplicit = false;
         for (var i = 0; i < ctx.Args.Length; i++)
         {
             var arg = ctx.Args[i];
             if (arg is "-p" or "--path")
             {
                 if (i + 1 < ctx.Args.Length)
+                {
                     path = ctx.Args[++i];
+                    pathExplicit = true;
+                }
                 continue;
             }
 
@@ -32,6 +36,18 @@ public sealed class FocusCommand : ICommand
                 flags.Add(arg);
             else
                 words.Add(arg);
+        }
+
+        // Хвост A: позиционный [path] — последнее слово, если оно — существующая директория
+        // и путь не задан явно через -p/--path, и слов больше одного.
+        if (!pathExplicit && words.Count > 1)
+        {
+            var last = words[^1];
+            if (Directory.Exists(last))
+            {
+                path = last;
+                words.RemoveAt(words.Count - 1);
+            }
         }
 
         if (words.Count == 0 || words.All(string.IsNullOrWhiteSpace))
@@ -90,8 +106,36 @@ public sealed class FocusCommand : ICommand
                 return exitCode;
             }
 
+            // Хвост B: спасение закавыченной фразы — ровно одна повторная попытка.
+            // Срабатывает когда: один термин с пробелами, не --raw режим, rg нашёл ноль совпадений (exitCode == 1).
+            if (!ctx.Raw && exitCode == 1 && terms.Length == 1 && terms[0].Any(char.IsWhiteSpace))
+            {
+                var splitTerms = terms[0].Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+                if (splitTerms.Length > 1)
+                {
+                    var retryArgs = new List<string>(args.Count);
+                    // Копируем args без -e <term> и <path> (последние три элемента: -e, term, path),
+                    // затем добавляем новые -e для каждого splitTerm и path заново.
+                    var baseArgs = args[..^3]; // всё до первого -e <term>
+                    retryArgs.AddRange(baseArgs);
+                    foreach (var t in splitTerms)
+                    {
+                        retryArgs.Add("-e");
+                        retryArgs.Add(t);
+                    }
+                    retryArgs.Add(path);
+
+                    var (retryCode, retryOut, retryErr) = await ctx.Process.RunAsync([.. retryArgs]);
+                    raw = ProcessOutput.Combine(retryOut, retryErr);
+                    exitCode = retryCode;
+                    terms = splitTerms;
+                }
+            }
+
             ctx.RawCharCount = raw.Length;
             ctx.RawLineCount = HiddenLinesFooter.CountLines(raw);
+            // rg -n emits one line per match; exitCode 1 = no matches → empty result.
+            ctx.ResultCount = exitCode == 1 ? 0 : ctx.RawLineCount;
             ctx.Out.Write(Render(raw, exitCode, ctx.DetailLevel, options, terms));
             return exitCode;
         }

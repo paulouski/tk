@@ -16,6 +16,7 @@
     --warn:  #D4913A;
     --err:   #C95F45;
     --ok:    #4CAF82;
+    --neu:   #b5912f;
     --txt:   #C5D1DC;
     --muted: #6B7A8A;
     --dim:   #364148;
@@ -68,6 +69,7 @@
   }
   .outcome-bar .seg { height: 100%; min-width: 1px; }
   .outcome-bar .seg-win { background: var(--ok); }
+  .outcome-bar .seg-neu { background: var(--neu); }
   .outcome-bar .seg-neg { background: var(--err); }
   .outcome-bar .seg-unk { background: var(--dim); }
   .outcome-legend {
@@ -79,6 +81,7 @@
     margin-right: 5px; vertical-align: middle;
   }
   .outcome-legend .ol-win::before { background: var(--ok); }
+  .outcome-legend .ol-neu::before { background: var(--neu); }
   .outcome-legend .ol-neg::before { background: var(--err); }
   .outcome-legend .ol-unk::before { background: var(--dim); }
 
@@ -154,6 +157,7 @@
     white-space: nowrap;
   }
   .badge.b-win { background: #0d1f16; color: var(--ok); border: 1px solid #1a3525; }
+  .badge.b-neu { background: #1f1808; color: var(--neu); border: 1px solid #332510; }
   .badge.b-neg { background: #1a0f0a; color: var(--err); border: 1px solid #2a1810; }
   .badge.b-unk { background: var(--s2); color: var(--muted); border: 1px solid var(--bd); }
   .badge.b-flag { background: #201808; color: var(--warn); border: 1px solid #382510; }
@@ -174,6 +178,35 @@
 
   /* empty */
   .empty { color: var(--muted); text-align: center; padding: 80px 0; font-size: 16px; }
+
+  /* cost / delegation */
+  .cost-usd { font-variant-numeric: tabular-nums; color: var(--txt); }
+  .cost-usd.zero { color: var(--dim); }
+  .group-panel {
+    background: var(--s0); border: 1px solid var(--bd); border-radius: 2px;
+    padding: 8px 12px; margin: 6px 0 4px 24px; font-family: var(--mono); font-size: 11px;
+  }
+  .group-panel .gp-row { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-bottom: 3px; color: var(--muted); }
+  .group-panel .gp-val { color: var(--txt); font-weight: 600; }
+  .group-panel .gp-save { color: var(--ok); font-weight: 700; }
+  .group-panel .gp-overhead { color: var(--err); font-weight: 700; }
+  .group-panel .gp-note { color: var(--dim); font-size: 10px; margin-top: 2px; }
+  .sub-indent { padding-left: 28px; }
+  .sub-marker { color: var(--muted); margin-right: 4px; }
+
+  /* version panel */
+  .ver-panel { margin-bottom: 24px; }
+  .ver-table { border-collapse: collapse; font-family: var(--mono); font-size: 12px; }
+  .ver-table th {
+    text-align: left; padding: 5px 14px 5px 0; font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim);
+    white-space: nowrap;
+  }
+  .ver-table th.num { text-align: right; }
+  .ver-table td { padding: 4px 14px 4px 0; vertical-align: middle; }
+  .ver-table td.num { text-align: right; font-variant-numeric: tabular-nums; color: var(--txt); }
+  .ver-table td.dim { color: var(--muted); }
+  .badge.b-ver { background: var(--s2); color: var(--acc); border: 1px solid var(--bd2); font-size: 8px; letter-spacing: 0; }
 </style>
 </head>
 <body>
@@ -185,6 +218,16 @@
 
 function h(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 function fmt(n) { return n != null ? Number(n).toLocaleString('en-US') : '-'; }
+
+function fmtUsd(v) {
+  if (v == null || v === 0) return '<span class="cost-usd zero">—</span>';
+  var s;
+  if (v < 0.001) s = '$' + v.toFixed(5);
+  else if (v < 0.01) s = '$' + v.toFixed(4);
+  else if (v < 1)    s = '$' + v.toFixed(3);
+  else               s = '$' + v.toFixed(2);
+  return '<span class="cost-usd">' + s + '</span>';
+}
 
 function fmtDt(iso) {
   if (!iso) return '-';
@@ -218,6 +261,7 @@ function fmtMs(ms) {
 function outcomeBadge(o) {
   if (!o) return '';
   if (o === 'WIN') return '<span class="badge b-win">WIN</span>';
+  if (o === 'NEUTRAL') return '<span class="badge b-neu">NEU</span>';
   if (o === 'NET_NEGATIVE') return '<span class="badge b-neg">NEG</span>';
   return '<span class="badge b-unk">UNK</span>';
 }
@@ -256,12 +300,13 @@ function render(m) {
     + '</header>';
 
   // ── Overview strip: match stats + outcome counts + savings
-  var ocTotal = (oc.WIN || 0) + (oc.NET_NEGATIVE || 0) + (oc.UNKNOWN || 0);
+  var ocTotal = (oc.WIN || 0) + (oc.NEUTRAL || 0) + (oc.NET_NEGATIVE || 0) + (oc.UNKNOWN || 0);
   out += '<div class="overview">';
   out += '<span class="ov-item">matched: <span class="ov-val">' + fmt(ms.matched) + '</span>/' + fmt(ms.total_tk_events)
     + ' <span class="ov-sep">(</span>' + Math.round((ms.match_rate || 0) * 100) + '%<span class="ov-sep">)</span></span>';
   out += '<span class="ov-item">unmatched: <span class="ov-val">' + fmt(ms.unmatched) + '</span></span>';
   out += '<span class="ov-item">WIN: <span class="ov-ok">' + (oc.WIN || 0) + '</span></span>';
+  out += '<span class="ov-item">NEU: <span style="color:var(--neu);font-weight:600;">' + (oc.NEUTRAL || 0) + '</span></span>';
   out += '<span class="ov-item">NEG: <span class="ov-err">' + (oc.NET_NEGATIVE || 0) + '</span></span>';
   out += '<span class="ov-item">UNK: <span class="ov-val">' + (oc.UNKNOWN || 0) + '</span></span>';
   out += '<span class="ov-item">saved: <span class="ov-ok">' + fmt(ag.win.saved_chars) + '</span> chars</span>';
@@ -273,15 +318,48 @@ function render(m) {
     out += '<div class="outcome-bar-wrap">';
     out += '<div class="outcome-bar">';
     if (oc.WIN) out += '<div class="seg seg-win" style="width:' + ((oc.WIN / ocTotal) * 100) + '%"></div>';
+    if (oc.NEUTRAL) out += '<div class="seg seg-neu" style="width:' + ((oc.NEUTRAL / ocTotal) * 100) + '%"></div>';
     if (oc.NET_NEGATIVE) out += '<div class="seg seg-neg" style="width:' + ((oc.NET_NEGATIVE / ocTotal) * 100) + '%"></div>';
     if (oc.UNKNOWN) out += '<div class="seg seg-unk" style="width:' + ((oc.UNKNOWN / ocTotal) * 100) + '%"></div>';
     out += '</div>';
     out += '<div class="outcome-legend">'
       + '<span class="ol-win">WIN ' + (oc.WIN || 0) + '</span>'
+      + '<span class="ol-neu">NEU ' + (oc.NEUTRAL || 0) + '</span>'
       + '<span class="ol-neg">NEG ' + (oc.NET_NEGATIVE || 0) + '</span>'
       + '<span class="ol-unk">UNK ' + (oc.UNKNOWN || 0) + '</span>'
       + '</div>';
     out += '</div>';
+  }
+
+  // ── By tk version panel
+  var bv = m.by_version || [];
+  if (bv.length > 0) {
+    out += '<div class="sec">By tk version</div>';
+    out += '<div class="ver-panel"><table class="ver-table">';
+    out += '<thead><tr>'
+      + '<th>Version</th>'
+      + '<th class="num">n</th>'
+      + '<th class="num">WIN</th>'
+      + '<th class="num">NEU</th>'
+      + '<th class="num">NEG</th>'
+      + '<th class="num">UNK</th>'
+      + '<th class="num">Saved chars</th>'
+      + '</tr></thead><tbody>';
+    for (var vi = 0; vi < bv.length; vi++) {
+      var vr = bv[vi];
+      var vname = vr.version === 'unknown' ? '<span style="color:var(--muted)">unknown</span>' : '<span style="color:var(--acc)">' + h(vr.version) + '</span>';
+      var saved = vr.saved_chars || 0;
+      out += '<tr>'
+        + '<td>' + vname + '</td>'
+        + '<td class="num">' + (vr.n || 0) + '</td>'
+        + '<td class="num" style="color:var(--ok)">' + (vr.WIN || 0) + '</td>'
+        + '<td class="num" style="color:var(--neu)">' + (vr.NEUTRAL || 0) + '</td>'
+        + '<td class="num" style="color:var(--err)">' + (vr.NET_NEGATIVE || 0) + '</td>'
+        + '<td class="num" style="color:var(--muted)">' + (vr.UNKNOWN || 0) + '</td>'
+        + '<td class="num" style="color:' + (saved > 0 ? 'var(--ok)' : 'var(--muted)') + '">' + fmt(saved) + '</td>'
+        + '</tr>';
+    }
+    out += '</tbody></table></div>';
   }
 
   // ── Date filter
@@ -297,7 +375,8 @@ function render(m) {
   // ── Badge legend
   out += '<details class="legend"><summary>badge legend</summary><div class="legend-body">'
     + '<div class="lg"><span class="badge b-win">WIN</span> tk output &lt; raw (compaction helped)</div>'
-    + '<div class="lg"><span class="badge b-neg">NEG</span> NET_NEGATIVE: tk output &ge; raw</div>'
+    + '<div class="lg"><span class="badge b-neu">NEU</span> tk output == raw (pass-through, no change)</div>'
+    + '<div class="lg"><span class="badge b-neg">NEG</span> NET_NEGATIVE: tk output &gt; raw (strictly more)</div>'
     + '<div class="lg"><span class="badge b-unk">UNK</span> no own-log match (savings unmeasurable)</div>'
     + '<div class="lg"><span style="color:var(--acc);font-size:9px;">TK</span> tk-proxied call &middot; <span class="badge b-sub">sub</span> sub-agent session</div>'
     + '<div class="lg"><span class="badge b-win">ru</span> result_used: tk search &rarr; Read (agent used tk\'s result)</div>'
@@ -308,11 +387,46 @@ function render(m) {
     + '<div class="lg"><span class="badge b-flag">empty/emp</span> tk returned empty / not-found</div>'
     + '</div></details>';
 
-  // ── Session table
+  // ── Session table (grouped by group_id)
+  // Build group index from model.groups
+  var groupMap = {};
+  if (m.groups) {
+    for (var gi = 0; gi < m.groups.length; gi++) {
+      groupMap[m.groups[gi].group_id] = m.groups[gi];
+    }
+  }
+
   // Sort sessions by ts_start descending (newest first)
   var sorted = sessions.slice().sort(function(a, b) {
     return new Date(b.ts_start) - new Date(a.ts_start);
   });
+
+  // Build ordered render list: group mains first, then their subs, orphan subs at end
+  var rendered = [];   // {type: 'main'|'sub'|'orphan', session, idx, groupId, groupFirst}
+  var seenGroups = {};
+  var orphans = [];
+  for (var i = 0; i < sorted.length; i++) {
+    var s = sorted[i];
+    if (!s.is_subagent) {
+      var gid = s.group_id || s.session_id;
+      seenGroups[gid] = true;
+      rendered.push({type: 'main', session: s, idx: i, groupId: gid, groupFirst: true});
+      // Find subs for this group from sorted list (keep their relative order)
+      for (var j = 0; j < sorted.length; j++) {
+        var ss = sorted[j];
+        if (ss.is_subagent && ss.group_id === gid) {
+          rendered.push({type: 'sub', session: ss, idx: j, groupId: gid, groupFirst: false});
+        }
+      }
+    }
+  }
+  for (var i = 0; i < sorted.length; i++) {
+    var s = sorted[i];
+    if (s.is_subagent && !seenGroups[s.group_id]) {
+      orphans.push({type: 'orphan', session: s, idx: i, groupId: s.group_id, groupFirst: false});
+    }
+  }
+  rendered = rendered.concat(orphans);
 
   out += '<table class="sess-table" id="sess-table">';
   out += '<thead><tr>'
@@ -320,15 +434,37 @@ function render(m) {
     + '<th data-sort="agent_type">Agent</th>'
     + '<th class="num" data-sort="n_events">Events</th>'
     + '<th class="num" data-sort="n_tk_events">tk</th>'
+    + '<th>Cost</th>'
     + '<th>Outcome</th>'
     + '<th>Branch</th>'
     + '<th>Flags</th>'
     + '</tr></thead>';
   out += '<tbody id="sess-body">';
-  for (var i = 0; i < sorted.length; i++) {
-    var s = sorted[i];
-    out += sessRow(s, i);
-    out += traceRow(s, i);
+  for (var ri = 0; ri < rendered.length; ri++) {
+    var entry = rendered[ri];
+    out += sessRow(entry.session, entry.idx, entry.type, entry.groupId, groupMap);
+    out += traceRow(entry.session, entry.idx, entry.type);
+    // After the last sub of a group (or after main if no subs), show group panel
+    if (entry.type === 'main') {
+      var grp = groupMap[entry.groupId];
+      if (grp && grp.n_subs > 0) {
+        // Peek: next entry is the first sub — group panel will be emitted after all subs
+        // Find last sub index
+        var nextIsSubOfGroup = ri + 1 < rendered.length && rendered[ri+1].type === 'sub' && rendered[ri+1].groupId === entry.groupId;
+        if (!nextIsSubOfGroup) {
+          out += groupPanel(grp, entry.idx);
+        }
+      }
+    }
+    if (entry.type === 'sub') {
+      var nextIsSibSub = ri + 1 < rendered.length && rendered[ri+1].type === 'sub' && rendered[ri+1].groupId === entry.groupId;
+      if (!nextIsSibSub) {
+        var grp = groupMap[entry.groupId];
+        if (grp && grp.n_subs > 0) {
+          out += groupPanel(grp, entry.idx);
+        }
+      }
+    }
   }
   out += '</tbody></table>';
 
@@ -347,14 +483,27 @@ function render(m) {
   wireSortHeaders();
 }
 
-function sessRow(s, idx) {
+function sessRow(s, idx, rowType, groupId, groupMap) {
   var subBadge = s.is_subagent ? '<span class="badge b-sub">sub</span>' : '';
+  var agentLabel = h(s.agent_type || '');
+  var agentCell = '';
+  if (rowType === 'sub' || rowType === 'orphan') {
+    agentCell = '<span class="sub-marker">↳</span>'
+      + agentLabel + ' ' + subBadge;
+    if (s.agent_type && s.agent_type !== 'unknown' && s.agent_type !== 'main') {
+      agentCell = '<span class="sub-marker">↳</span>'
+        + '<span style="color:var(--acc);font-size:11px;">' + agentLabel + '</span> ' + subBadge;
+    }
+  } else {
+    agentCell = agentLabel + ' ' + subBadge;
+  }
 
   // Outcome summary — use session-level outcomes if present, else count from events
   var outcomeStr = '';
   var so = s.outcomes;
   if (so) {
     if (so.WIN) outcomeStr += '<span class="badge b-win">W:' + so.WIN + '</span>';
+    if (so.NEUTRAL) outcomeStr += '<span class="badge b-neu">P:' + so.NEUTRAL + '</span>';
     if (so.NET_NEGATIVE) outcomeStr += '<span class="badge b-neg">N:' + so.NET_NEGATIVE + '</span>';
     if (so.UNKNOWN) outcomeStr += '<span class="badge b-unk">U:' + so.UNKNOWN + '</span>';
   }
@@ -367,20 +516,80 @@ function sessRow(s, idx) {
   if (s.n_escalated) flagStr += '<span class="badge b-flag">esc:' + s.n_escalated + '</span>';
   if (s.n_empty) flagStr += '<span class="badge b-flag">emp:' + s.n_empty + '</span>';
 
-  return '<tr class="sess-row" data-idx="' + idx + '" data-ts="' + h(s.ts_start || '') + '">'
-    + '<td>' + fmtDt(s.ts_start) + '</td>'
-    + '<td>' + h(s.agent_type || '') + ' ' + subBadge + '</td>'
+  // Cost cell
+  var cost = s.cost || {};
+  var usd = cost.usd != null ? cost.usd : null;
+  var modelShort = (cost.model || '').replace('claude-', '');
+  var costCell = fmtUsd(usd);
+  if (usd && modelShort) costCell += ' <span style="color:var(--dim);font-size:10px;">' + h(modelShort) + '</span>';
+
+  var rowClass = 'sess-row';
+  var indentStyle = (rowType === 'sub' || rowType === 'orphan') ? ' style="background:var(--s0);"' : '';
+
+  return '<tr class="' + rowClass + '" data-idx="' + idx + '" data-ts="' + h(s.ts_start || '') + '"' + indentStyle + '>'
+    + '<td>' + (rowType === 'sub' || rowType === 'orphan' ? '<span style="color:var(--dim);">' + fmtTime(s.ts_start) + '</span>' : fmtDt(s.ts_start)) + '</td>'
+    + '<td>' + agentCell + '</td>'
     + '<td class="num">' + (s.n_events || 0) + '</td>'
     + '<td class="num">' + (s.n_tk_events || 0) + '</td>'
+    + '<td>' + costCell + '</td>'
     + '<td>' + outcomeStr + '</td>'
     + '<td class="muted-val">' + h(s.git_branch || '') + '</td>'
     + '<td>' + flagStr + '</td>'
     + '</tr>';
 }
 
-function traceRow(s, idx) {
+function groupPanel(grp, afterIdx) {
+  var delta = grp.delegation_delta_usd;
+  var inline = grp.inline_estimate_usd;
+  var deltaHtml = '';
+  if (delta != null) {
+    var cls = delta >= 0 ? 'gp-save' : 'gp-overhead';
+    var amt = Math.abs(delta).toFixed(3);
+    var tip = grp.assumptions ? ' title="' + h(grp.assumptions) + '"' : '';
+    var label, valStr;
+    if (delta >= 0) {
+      label = 'delegation saved up to';
+      valStr = '≤ +$' + amt;
+    } else {
+      label = 'delegation overhead up to';
+      valStr = '≤ −$' + amt;
+    }
+    deltaHtml = '<span' + tip + '>' + label + ': <span class="' + cls + '">' + valStr
+      + '</span> <span style="color:var(--dim)">(upper-bound est.)</span></span>';
+    if (inline != null) {
+      deltaHtml += ' <span style="color:var(--dim)">(vs inline≈$' + inline.toFixed(3) + ')</span>';
+    }
+  }
+
+  var splitHtml = '';
+  if (grp.main_session_id) {
+    splitHtml = '<span>main: write $' + (grp.main_output_usd||0).toFixed(3)
+      + ' / read $' + (grp.main_read_usd||0).toFixed(3) + '</span>'
+      + '<span>subs: write $' + (grp.subs_output_usd||0).toFixed(3)
+      + ' / read $' + (grp.subs_read_usd||0).toFixed(3) + '</span>';
+  }
+
+  var html = '<tr class="trace-row" data-trace-idx="grp-' + afterIdx + '"><td colspan="8">'
+    + '<div class="group-panel">'
+    + '<div class="gp-row">'
+    + '<span>group total: <span class="gp-val">$' + (grp.total_usd||0).toFixed(3) + '</span></span>'
+    + '<span>main: <span class="gp-val">$' + (grp.main_usd||0).toFixed(3) + '</span></span>'
+    + '<span>subs×' + grp.n_subs + ': <span class="gp-val">$' + (grp.subs_usd||0).toFixed(3) + '</span></span>'
+    + (deltaHtml ? deltaHtml : '')
+    + '</div>';
+  if (splitHtml) {
+    html += '<div class="gp-row">' + splitHtml + '</div>';
+  }
+  if (grp.assumptions) {
+    html += '<div class="gp-note" title="' + h(grp.assumptions) + '">⚠ upper-bound estimate: prices sub re-reads at main\'s full input rate; actual saving is lower — hover for details</div>';
+  }
+  html += '</div></td></tr>';
+  return html;
+}
+
+function traceRow(s, idx, rowType) {
   var events = s.events || [];
-  var out = '<tr class="trace-row hidden" data-trace-idx="' + idx + '"><td colspan="7"><div class="trace-wrap">';
+  var out = '<tr class="trace-row hidden" data-trace-idx="' + idx + '"><td colspan="8"><div class="trace-wrap">';
 
   if (events.length === 0) {
     out += '<span style="color:var(--muted);font-size:12px;">No events</span>';
@@ -390,6 +599,7 @@ function traceRow(s, idx) {
       + '<th>Time</th>'
       + '<th>Tool</th>'
       + '<th>Command</th>'
+      + '<th>Ver</th>'
       + '<th>Outcome</th>'
       + '<th class="num">Shown</th>'
       + '<th class="num">Raw</th>'
@@ -418,10 +628,12 @@ function traceRow(s, idx) {
         cmdStr = '<span style="color:var(--muted);font-family:monospace;font-size:11px;">' + h(sm) + '</span>';
       }
 
+      var verBadge = (isTk && ev.tk_version) ? '<span class="badge b-ver">' + h(ev.tk_version) + '</span>' : '';
       out += '<tr class="' + rowCls + '">'
         + '<td>' + fmtTime(ev.ts) + '</td>'
         + '<td>' + h(ev.tool || '') + (isTk ? ' <span style="color:var(--acc);font-size:9px;">TK</span>' : '') + '</td>'
         + '<td>' + cmdStr + '</td>'
+        + '<td>' + verBadge + '</td>'
         + '<td>' + (isTk ? outcomeBadge(ev.outcome) : '') + '</td>'
         + '<td class="num">' + (ev.shown_chars != null ? fmt(ev.shown_chars) : '') + '</td>'
         + '<td class="num">' + (isTk && ev.raw_chars != null ? fmt(ev.raw_chars) : '') + '</td>'

@@ -19,11 +19,11 @@ public static class ModuleCatalog
         - `tk log <file>` — compacted file history
         - `tk changes` — working-tree change summary
         - `tk mv <old> <new>` — move a file preserving git history (use instead of delete+recreate; keeps git blame and saves tokens). When moving across folders, check the file's namespace and update references afterward — tk does not rewrite them.
-        - plus the `dotnet` (build/test/restore) and `lsp` (refs/callers/def/rename) module commands listed below, when enabled — prefer these.
+        - `tk refs` / `tk callers` / `tk def` — find a symbol's usages, callers, or definition; the right tool for locating code, and better than grepping for `class X\|record X`. `tk rename` refactors across the repo. (lsp module — full commands listed below when enabled.)
 
         Orientation only — prefer native Grep/Read for real work:
         - `tk tree`, `tk files` — quick repo shape
-        - `tk focus <word...> [-p path]` (`--files-only`) — rough first sweep only. Multiple words = OR sweep ranked by how many distinct words each file matches (term coverage); `-p <path>` to scope; quote `"exact phrase"` for a literal phrase. To find a symbol, its callers, or its definition use `tk refs`/`tk callers`/`tk def` (or native Grep), not focus
+        - `tk focus <word...> [-p path]` (`--files-only`) — rough first sweep only. Multiple words = OR sweep ranked by how many distinct words each file matches (term coverage); `-p <path>` to scope; quote `"exact phrase"` for a literal phrase. To find a symbol, its callers, or its definition use `tk refs`/`tk callers`/`tk def`, not focus
         - `tk view <file>` — large-file map (symbols/hot TOC) only; to read a file, use native Read
 
         Escalate detail as:
@@ -55,11 +55,11 @@ public static class ModuleCatalog
         - `tk log <file>` — compacted file history
         - `tk changes` — working-tree change summary
         - `tk mv <old> <new>` — move a file preserving git history; NEVER delete and recreate a file to rename/relocate it — use this instead to keep git blame and avoid re-emitting file content. After moving across folders, check the file's namespace and update references — tk does not rewrite them.
-        - plus the `dotnet` (build/test/restore) and `lsp` (refs/callers/def/rename) module commands listed below, when enabled — prefer these.
+        - `tk refs` / `tk callers` / `tk def` — the preferred way to find a symbol's usages, callers, or definition; use these instead of grepping `class X\|record X`. `tk rename` refactors across the repo. (lsp module — full commands listed below when enabled.)
 
         Orientation only — prefer native Grep/Read for real work:
         - `tk tree`, `tk files` — quick repo shape
-        - `tk focus <word...> [-p path]` (`--files-only`) — rough first sweep only. Multiple words = OR sweep ranked by how many distinct words each file matches (term coverage); `-p <path>` to scope; quote `"exact phrase"` for a literal phrase. To find a symbol, its callers, or its definition use `tk refs`/`tk callers`/`tk def` (or native Grep), not focus
+        - `tk focus <word...> [-p path]` (`--files-only`) — rough first sweep only. Multiple words = OR sweep ranked by how many distinct words each file matches (term coverage); `-p <path>` to scope; quote `"exact phrase"` for a literal phrase. To find a symbol, its callers, or its definition use `tk refs`/`tk callers`/`tk def`, not focus
         - `tk view <file>` — large-file map (symbols/hot TOC) only; to read a file, use native Read
 
         Escalation order:

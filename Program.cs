@@ -37,7 +37,7 @@ if (registry.TryResolve(commandArgs[0], out var builtin))
     var exit = await builtin.RunAsync(ctx);
     sw.Stop();
     Analytics.Record(commandArgs, exit, DetailString(cliOptions), sw.ElapsedMilliseconds,
-        countingWriter.CharCount, countingWriter.Lines, ctx.RawCharCount, ctx.RawLineCount);
+        countingWriter.CharCount, countingWriter.Lines, ctx.RawCharCount, ctx.RawLineCount, ctx.ResultCount);
     return exit;
 }
 

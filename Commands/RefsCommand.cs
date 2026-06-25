@@ -57,6 +57,7 @@ public sealed class RefsCommand : ICommand
             }
 
             var locations = response.Locations ?? [];
+            ctx.ResultCount = locations.Length;
             ctx.Out.WriteLine(RefsFormatter.Format(arg, locations));
             return 0;
         }

@@ -35,11 +35,16 @@ _RESULT_USED_TOOLS = frozenset({"Read"})
 def _looks_empty(ev: dict) -> bool:
     """Best-effort check whether a tk event produced an empty/not-found result.
 
-    Heuristics (any → True):
+    Explicit signal (preferred): result_count from own-log.
+    Heuristics (fallback, any → True):
     - Non-zero exit code (command failed).
     - shown_chars == 0 (nothing displayed).
     - empty_marker == True (ingest detected empty/not-found text in output).
     """
+    result_count = ev.get("result_count")
+    if result_count is not None:
+        return result_count == 0
+
     exit_code = ev.get("exit")
     if exit_code is not None and exit_code != 0:
         return True
@@ -184,7 +189,7 @@ def _rollup_session(session: dict) -> None:
     n_retry = 0
     n_escalated = 0
     n_empty = 0
-    outcomes: dict[str, int] = {"WIN": 0, "NET_NEGATIVE": 0, "UNKNOWN": 0}
+    outcomes: dict[str, int] = {"WIN": 0, "NEUTRAL": 0, "NET_NEGATIVE": 0, "UNKNOWN": 0}
 
     for ev in events:
         if not ev.get("is_tk"):

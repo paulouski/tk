@@ -35,6 +35,7 @@ public static class Analytics
         int ShownLines,
         long? RawChars,
         int? RawLines,
+        int? ResultCount,
         string Ws,
         string TkVersion);
 
@@ -46,7 +47,8 @@ public static class Analytics
         long shownChars,
         int shownLines,
         long? rawChars,
-        int? rawLines)
+        int? rawLines,
+        int? resultCount = null)
     {
         try
         {
@@ -75,6 +77,7 @@ public static class Analytics
                 ShownLines: shownLines,
                 RawChars: rawChars,
                 RawLines: rawLines,
+                ResultCount: resultCount,
                 Ws: ws,
                 TkVersion: Version);
 
