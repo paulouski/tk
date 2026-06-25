@@ -31,7 +31,7 @@ internal static class HelpRenderer
         sb.AppendLine("  tk branch [base]           Branch state vs base (commits + diff)");
         sb.AppendLine("  tk tree [path]             Compact repo tree for agents");
         sb.AppendLine("  tk files [path]            Compact file inventory");
-        sb.AppendLine("  tk focus <query> [path]    Code-first repo search with top files and samples");
+        sb.AppendLine("  tk focus <word...> [-p path] OR-search words (ranked by coverage); quote for exact phrase");
         sb.AppendLine("  tk init                    Install global Claude + AGENTS instructions");
         sb.AppendLine("  tk switch                  Toggle between two Claude Code accounts");
         sb.AppendLine("  tk mv <old> <new>          Move file preserving git history (git mv when tracked)");
@@ -45,7 +45,7 @@ internal static class HelpRenderer
         sb.AppendLine("  tk branch [base]               Branch vs base (auto: upstream/main/master)");
         sb.AppendLine("  tk tree [path]                 Repo tree with compact depth and counts; add --code");
         sb.AppendLine("  tk files [path]                Key files and top directories; add --code");
-        sb.AppendLine("  tk focus <query> [path]        Code-first search; use --code/--docs/--all");
+        sb.AppendLine("  tk focus <word...> [-p path]   Multi-word OR search ranked by coverage; quote for phrase; --code/--docs/--all");
         sb.AppendLine("  tk mv <old> <new>              Move file; git mv when tracked (preserves history), else filesystem");
         sb.AppendLine("  tk module list|enable|disable  Manage enabled modules");
         sb.AppendLine("  tk git status|log|diff|show    Git compact output");

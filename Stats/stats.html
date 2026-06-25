@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tk stats</title>
+<style>
+  :root {
+    --bg:    #0B0F14;
+    --s0:    #131920;
+    --s1:    #1A222C;
+    --s2:    #212B36;
+    --bd:    #26303C;
+    --bd2:   #2E3C4A;
+    --acc:   #36BFAB;
+    --warn:  #D4913A;
+    --err:   #C95F45;
+    --ok:    #4CAF82;
+    --txt:   #C5D1DC;
+    --muted: #6B7A8A;
+    --dim:   #364148;
+    --mono:  ui-monospace, 'Cascadia Code', 'JetBrains Mono', Menlo, monospace;
+    --sans:  system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--txt);
+    font-family: var(--sans); font-size: 14px; line-height: 1.5;
+    padding: 48px 24px 96px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1060px; margin: 0 auto; }
+
+  /* header */
+  header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    padding-bottom: 24px; border-bottom: 1px solid var(--bd); margin-bottom: 24px;
+  }
+  .logo {
+    font-family: var(--mono); font-size: 22px; font-weight: 700;
+    color: var(--acc); letter-spacing: -0.5px; line-height: 1;
+  }
+  .logo .sl { color: var(--dim); font-weight: 400; }
+  .logo .cm { color: var(--txt); font-weight: 400; }
+  .hdr-meta {
+    font-family: var(--mono); font-size: 12px;
+    color: var(--muted); text-align: right; line-height: 1.7;
+  }
+
+  /* overview strip */
+  .overview {
+    display: flex; flex-wrap: wrap; gap: 6px 24px;
+    padding: 14px 18px; margin-bottom: 24px;
+    background: var(--s0); border: 1px solid var(--bd);
+    font-family: var(--mono); font-size: 13px; color: var(--muted);
+  }
+  .overview .ov-item { white-space: nowrap; }
+  .overview .ov-val { color: var(--txt); font-weight: 600; }
+  .overview .ov-ok { color: var(--ok); font-weight: 600; }
+  .overview .ov-warn { color: var(--warn); font-weight: 600; }
+  .overview .ov-err { color: var(--err); font-weight: 600; }
+  .overview .ov-sep { color: var(--dim); margin: 0 2px; }
+
+  /* outcome bar */
+  .outcome-bar-wrap { margin-bottom: 24px; }
+  .outcome-bar {
+    display: flex; height: 10px; border-radius: 2px; overflow: hidden; margin-bottom: 6px;
+  }
+  .outcome-bar .seg { height: 100%; min-width: 1px; }
+  .outcome-bar .seg-win { background: var(--ok); }
+  .outcome-bar .seg-neg { background: var(--err); }
+  .outcome-bar .seg-unk { background: var(--dim); }
+  .outcome-legend {
+    display: flex; gap: 16px;
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+  }
+  .outcome-legend span::before {
+    content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+    margin-right: 5px; vertical-align: middle;
+  }
+  .outcome-legend .ol-win::before { background: var(--ok); }
+  .outcome-legend .ol-neg::before { background: var(--err); }
+  .outcome-legend .ol-unk::before { background: var(--dim); }
+
+  /* section label */
+  .sec {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.1em; color: var(--dim); margin-bottom: 10px; margin-top: 24px;
+  }
+
+  /* date filter */
+  .date-filter {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+  }
+  .date-filter label { white-space: nowrap; }
+  .date-filter input[type="date"] {
+    background: var(--s1); border: 1px solid var(--bd); color: var(--txt);
+    font-family: var(--mono); font-size: 12px; padding: 4px 8px; border-radius: 2px;
+  }
+  .date-filter .filter-info { color: var(--dim); font-size: 11px; margin-left: 8px; }
+  .date-filter button {
+    background: var(--s2); border: 1px solid var(--bd); color: var(--muted);
+    font-family: var(--mono); font-size: 11px; padding: 4px 10px; border-radius: 2px; cursor: pointer;
+  }
+  .date-filter button:hover { border-color: var(--acc); color: var(--txt); }
+
+  /* session table */
+  .sess-table { width: 100%; border-collapse: collapse; }
+  .sess-table th {
+    text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--bd);
+    font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--dim); font-family: var(--sans); cursor: pointer; user-select: none;
+    white-space: nowrap;
+  }
+  .sess-table th:hover { color: var(--muted); }
+  .sess-table th.num { text-align: right; }
+  .sess-table td {
+    padding: 7px 12px; border-bottom: 1px solid var(--bd);
+    font-family: var(--mono); font-size: 12px; color: var(--txt);
+    vertical-align: top;
+  }
+  .sess-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .sess-table td.muted-val { color: var(--muted); }
+  .sess-table tr.sess-row { cursor: pointer; }
+  .sess-table tr.sess-row:hover { background: var(--s1); }
+  .sess-table tr.sess-row.expanded { background: var(--s0); }
+  .sess-table tr.hidden { display: none; }
+
+  /* session drill-in (call trace) */
+  .trace-row td { padding: 0; background: var(--s0); }
+  .trace-wrap { padding: 8px 12px 12px 24px; }
+  .trace-table { width: 100%; border-collapse: collapse; }
+  .trace-table th {
+    text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--bd);
+    font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--dim); font-family: var(--sans); white-space: nowrap;
+  }
+  .trace-table th.num { text-align: right; }
+  .trace-table td {
+    padding: 4px 8px; border-bottom: 1px solid var(--bd);
+    font-family: var(--mono); font-size: 11px; color: var(--txt);
+    vertical-align: top;
+  }
+  .trace-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .trace-table tr.tk-row { background: rgba(54, 191, 171, 0.04); }
+  .trace-table tr.native-row { }
+
+  /* badges */
+  .badge {
+    font-family: var(--mono); font-size: 9px; font-weight: 700;
+    letter-spacing: 0.06em; padding: 1px 5px; border-radius: 2px;
+    text-transform: uppercase; display: inline-block; margin-right: 3px;
+    white-space: nowrap;
+  }
+  .badge.b-win { background: #0d1f16; color: var(--ok); border: 1px solid #1a3525; }
+  .badge.b-neg { background: #1a0f0a; color: var(--err); border: 1px solid #2a1810; }
+  .badge.b-unk { background: var(--s2); color: var(--muted); border: 1px solid var(--bd); }
+  .badge.b-flag { background: #201808; color: var(--warn); border: 1px solid #382510; }
+  .badge.b-sub { background: var(--s2); color: var(--muted); border: 1px solid var(--bd); font-size: 8px; }
+
+  /* legend */
+  .legend { margin: 8px 0 4px; font-size: 12px; color: var(--muted); }
+  .legend summary { cursor: pointer; user-select: none; }
+  .legend-body { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 4px 16px; padding: 8px 4px 4px; }
+  .legend-body .lg { display: flex; align-items: center; gap: 6px; }
+
+  /* footer */
+  footer {
+    margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--bd);
+    font-family: var(--mono); font-size: 11px; color: var(--dim);
+    display: flex; justify-content: space-between;
+  }
+
+  /* empty */
+  .empty { color: var(--muted); text-align: center; padding: 80px 0; font-size: 16px; }
+</style>
+</head>
+<body>
+<div class="page" id="app"></div>
+<script>
+/*__DATA__*/
+
+// ── Helpers (formatting only, no analytics) ────────────
+
+function h(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function fmt(n) { return n != null ? Number(n).toLocaleString('en-US') : '-'; }
+
+function fmtDt(iso) {
+  if (!iso) return '-';
+  var d = new Date(iso);
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var hh = String(d.getHours()).padStart(2, '0');
+  var mm = String(d.getMinutes()).padStart(2, '0');
+  return months[d.getMonth()] + ' ' + d.getDate() + ', ' + hh + ':' + mm;
+}
+
+function fmtDateOnly(iso) {
+  if (!iso) return '-';
+  var d = new Date(iso);
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+}
+
+function fmtTime(iso) {
+  if (!iso) return '';
+  var d = new Date(iso);
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':' + String(d.getSeconds()).padStart(2, '0');
+}
+
+function fmtMs(ms) {
+  if (ms == null) return '-';
+  if (ms < 1000) return Math.round(ms) + 'ms';
+  if (ms < 60000) return (ms / 1000).toFixed(1) + 's';
+  return (ms / 60000).toFixed(1) + 'm';
+}
+
+function outcomeBadge(o) {
+  if (!o) return '';
+  if (o === 'WIN') return '<span class="badge b-win">WIN</span>';
+  if (o === 'NET_NEGATIVE') return '<span class="badge b-neg">NEG</span>';
+  return '<span class="badge b-unk">UNK</span>';
+}
+
+function flagBadges(ev) {
+  var out = '';
+  if (ev.fallback) out += '<span class="badge b-neg">fb</span>';
+  if (ev.result_used) out += '<span class="badge b-win">ru</span>';
+  if (ev.fallback_same_target) out += '<span class="badge b-flag">same-tgt</span>';
+  if (ev.result_used_same_target) out += '<span class="badge b-flag">same-tgt</span>';
+  if (ev.retry) out += '<span class="badge b-flag">retry</span>';
+  if (ev.escalated) out += '<span class="badge b-flag">esc</span>';
+  if (ev.empty_result) out += '<span class="badge b-flag">empty</span>';
+  return out;
+}
+
+// ── Render ──────────────────────────────────────────────
+
+function render(m) {
+  var app = document.getElementById('app');
+  var r = m.generated_for_range;
+  var ms = m.match_stats;
+  var oc = m.outcome_counts;
+  var ag = m.aggregates;
+  var sessions = m.sessions || [];
+
+  var out = '';
+
+  // ── Header
+  var rangeStr = fmtDateOnly(r.actual_from) + ' – ' + fmtDateOnly(r.actual_to);
+  out += '<header>'
+    + '<div class="logo">tk<span class="sl">/</span><span class="cm">stats</span></div>'
+    + '<div class="hdr-meta">' + rangeStr + '<br>'
+    + sessions.length + ' session' + (sessions.length !== 1 ? 's' : '')
+    + ' &middot; ' + fmt(ms.total_tk_events) + ' tk events</div>'
+    + '</header>';
+
+  // ── Overview strip: match stats + outcome counts + savings
+  var ocTotal = (oc.WIN || 0) + (oc.NET_NEGATIVE || 0) + (oc.UNKNOWN || 0);
+  out += '<div class="overview">';
+  out += '<span class="ov-item">matched: <span class="ov-val">' + fmt(ms.matched) + '</span>/' + fmt(ms.total_tk_events)
+    + ' <span class="ov-sep">(</span>' + Math.round((ms.match_rate || 0) * 100) + '%<span class="ov-sep">)</span></span>';
+  out += '<span class="ov-item">unmatched: <span class="ov-val">' + fmt(ms.unmatched) + '</span></span>';
+  out += '<span class="ov-item">WIN: <span class="ov-ok">' + (oc.WIN || 0) + '</span></span>';
+  out += '<span class="ov-item">NEG: <span class="ov-err">' + (oc.NET_NEGATIVE || 0) + '</span></span>';
+  out += '<span class="ov-item">UNK: <span class="ov-val">' + (oc.UNKNOWN || 0) + '</span></span>';
+  out += '<span class="ov-item">saved: <span class="ov-ok">' + fmt(ag.win.saved_chars) + '</span> chars</span>';
+  out += '<span class="ov-item">extra: <span class="ov-err">' + fmt(ag.net_negative.extra_chars) + '</span> chars</span>';
+  out += '</div>';
+
+  // ── Outcome bar
+  if (ocTotal > 0) {
+    out += '<div class="outcome-bar-wrap">';
+    out += '<div class="outcome-bar">';
+    if (oc.WIN) out += '<div class="seg seg-win" style="width:' + ((oc.WIN / ocTotal) * 100) + '%"></div>';
+    if (oc.NET_NEGATIVE) out += '<div class="seg seg-neg" style="width:' + ((oc.NET_NEGATIVE / ocTotal) * 100) + '%"></div>';
+    if (oc.UNKNOWN) out += '<div class="seg seg-unk" style="width:' + ((oc.UNKNOWN / ocTotal) * 100) + '%"></div>';
+    out += '</div>';
+    out += '<div class="outcome-legend">'
+      + '<span class="ol-win">WIN ' + (oc.WIN || 0) + '</span>'
+      + '<span class="ol-neg">NEG ' + (oc.NET_NEGATIVE || 0) + '</span>'
+      + '<span class="ol-unk">UNK ' + (oc.UNKNOWN || 0) + '</span>'
+      + '</div>';
+    out += '</div>';
+  }
+
+  // ── Date filter
+  out += '<div class="sec">Sessions</div>';
+  out += '<div class="date-filter">'
+    + '<label>From</label><input type="date" id="df-from">'
+    + '<label>To</label><input type="date" id="df-to">'
+    + '<button id="df-apply">Filter</button>'
+    + '<button id="df-clear">Clear</button>'
+    + '<span class="filter-info" id="df-info"></span>'
+    + '</div>';
+
+  // ── Badge legend
+  out += '<details class="legend"><summary>badge legend</summary><div class="legend-body">'
+    + '<div class="lg"><span class="badge b-win">WIN</span> tk output &lt; raw (compaction helped)</div>'
+    + '<div class="lg"><span class="badge b-neg">NEG</span> NET_NEGATIVE: tk output &ge; raw</div>'
+    + '<div class="lg"><span class="badge b-unk">UNK</span> no own-log match (savings unmeasurable)</div>'
+    + '<div class="lg"><span style="color:var(--acc);font-size:9px;">TK</span> tk-proxied call &middot; <span class="badge b-sub">sub</span> sub-agent session</div>'
+    + '<div class="lg"><span class="badge b-win">ru</span> result_used: tk search &rarr; Read (agent used tk\'s result)</div>'
+    + '<div class="lg"><span class="badge b-neg">fb</span> fallback: tk search &rarr; native Grep/Glob (agent re-searched manually)</div>'
+    + '<div class="lg"><span class="badge b-flag">same-tgt</span> next tool hit the same operand</div>'
+    + '<div class="lg"><span class="badge b-flag">retry/rt</span> same tk command+operand repeated</div>'
+    + '<div class="lg"><span class="badge b-flag">esc</span> escalated: re-ran with --more/--raw</div>'
+    + '<div class="lg"><span class="badge b-flag">empty/emp</span> tk returned empty / not-found</div>'
+    + '</div></details>';
+
+  // ── Session table
+  // Sort sessions by ts_start descending (newest first)
+  var sorted = sessions.slice().sort(function(a, b) {
+    return new Date(b.ts_start) - new Date(a.ts_start);
+  });
+
+  out += '<table class="sess-table" id="sess-table">';
+  out += '<thead><tr>'
+    + '<th data-sort="ts_start">Time</th>'
+    + '<th data-sort="agent_type">Agent</th>'
+    + '<th class="num" data-sort="n_events">Events</th>'
+    + '<th class="num" data-sort="n_tk_events">tk</th>'
+    + '<th>Outcome</th>'
+    + '<th>Branch</th>'
+    + '<th>Flags</th>'
+    + '</tr></thead>';
+  out += '<tbody id="sess-body">';
+  for (var i = 0; i < sorted.length; i++) {
+    var s = sorted[i];
+    out += sessRow(s, i);
+    out += traceRow(s, i);
+  }
+  out += '</tbody></table>';
+
+  // ── Footer
+  out += '<footer><span>model.json — ' + sessions.length + ' sessions, ' + fmt(ms.total_tk_events) + ' tk events</span>'
+    + '<span>' + rangeStr + '</span></footer>';
+
+  app.innerHTML = out;
+
+  // Store sorted sessions for filtering
+  window._sessions = sorted;
+
+  // Wire up interactions
+  wireSessionClicks();
+  wireDateFilter();
+  wireSortHeaders();
+}
+
+function sessRow(s, idx) {
+  var subBadge = s.is_subagent ? '<span class="badge b-sub">sub</span>' : '';
+
+  // Outcome summary — use session-level outcomes if present, else count from events
+  var outcomeStr = '';
+  var so = s.outcomes;
+  if (so) {
+    if (so.WIN) outcomeStr += '<span class="badge b-win">W:' + so.WIN + '</span>';
+    if (so.NET_NEGATIVE) outcomeStr += '<span class="badge b-neg">N:' + so.NET_NEGATIVE + '</span>';
+    if (so.UNKNOWN) outcomeStr += '<span class="badge b-unk">U:' + so.UNKNOWN + '</span>';
+  }
+
+  // Flag summary from session-level fields (if present)
+  var flagStr = '';
+  if (s.n_fallback) flagStr += '<span class="badge b-neg">fb:' + s.n_fallback + '</span>';
+  if (s.n_result_used) flagStr += '<span class="badge b-win">ru:' + s.n_result_used + '</span>';
+  if (s.n_retry) flagStr += '<span class="badge b-flag">rt:' + s.n_retry + '</span>';
+  if (s.n_escalated) flagStr += '<span class="badge b-flag">esc:' + s.n_escalated + '</span>';
+  if (s.n_empty) flagStr += '<span class="badge b-flag">emp:' + s.n_empty + '</span>';
+
+  return '<tr class="sess-row" data-idx="' + idx + '" data-ts="' + h(s.ts_start || '') + '">'
+    + '<td>' + fmtDt(s.ts_start) + '</td>'
+    + '<td>' + h(s.agent_type || '') + ' ' + subBadge + '</td>'
+    + '<td class="num">' + (s.n_events || 0) + '</td>'
+    + '<td class="num">' + (s.n_tk_events || 0) + '</td>'
+    + '<td>' + outcomeStr + '</td>'
+    + '<td class="muted-val">' + h(s.git_branch || '') + '</td>'
+    + '<td>' + flagStr + '</td>'
+    + '</tr>';
+}
+
+function traceRow(s, idx) {
+  var events = s.events || [];
+  var out = '<tr class="trace-row hidden" data-trace-idx="' + idx + '"><td colspan="7"><div class="trace-wrap">';
+
+  if (events.length === 0) {
+    out += '<span style="color:var(--muted);font-size:12px;">No events</span>';
+  } else {
+    out += '<table class="trace-table">';
+    out += '<thead><tr>'
+      + '<th>Time</th>'
+      + '<th>Tool</th>'
+      + '<th>Command</th>'
+      + '<th>Outcome</th>'
+      + '<th class="num">Shown</th>'
+      + '<th class="num">Raw</th>'
+      + '<th class="num">Duration</th>'
+      + '<th>Flags</th>'
+      + '</tr></thead><tbody>';
+
+    for (var j = 0; j < events.length; j++) {
+      var ev = events[j];
+      var isTk = ev.is_tk;
+      var rowCls = isTk ? 'tk-row' : 'native-row';
+
+      var cmdStr = '';
+      if (isTk) {
+        cmdStr = h(ev.tk_command || '');
+        if (ev.tk_sub) cmdStr += ' ' + h(ev.tk_sub);
+        if (ev.tk_flags && ev.tk_flags.length) cmdStr += ' ' + h(ev.tk_flags.join(' '));
+        if (ev.tk_operand_values && ev.tk_operand_values.length) {
+          cmdStr += ' ' + h(ev.tk_operand_values.join(' '));
+        } else if (ev.tk_operands) {
+          cmdStr += ' <span style="color:var(--dim)">[' + ev.tk_operands + ' arg' + (ev.tk_operands !== 1 ? 's' : '') + ']</span>';
+        }
+      } else if (ev.tool_input_summary) {
+        var sm = ev.tool_input_summary;
+        if (sm.length > 160) sm = sm.slice(0, 160) + '…';
+        cmdStr = '<span style="color:var(--muted);font-family:monospace;font-size:11px;">' + h(sm) + '</span>';
+      }
+
+      out += '<tr class="' + rowCls + '">'
+        + '<td>' + fmtTime(ev.ts) + '</td>'
+        + '<td>' + h(ev.tool || '') + (isTk ? ' <span style="color:var(--acc);font-size:9px;">TK</span>' : '') + '</td>'
+        + '<td>' + cmdStr + '</td>'
+        + '<td>' + (isTk ? outcomeBadge(ev.outcome) : '') + '</td>'
+        + '<td class="num">' + (ev.shown_chars != null ? fmt(ev.shown_chars) : '') + '</td>'
+        + '<td class="num">' + (isTk && ev.raw_chars != null ? fmt(ev.raw_chars) : '') + '</td>'
+        + '<td class="num">' + (isTk ? fmtMs(ev.duration_ms) : '') + '</td>'
+        + '<td>' + flagBadges(ev) + '</td>'
+        + '</tr>';
+    }
+    out += '</tbody></table>';
+  }
+
+  out += '</div></td></tr>';
+  return out;
+}
+
+// ── Interactions ────────────────────────────────────────
+
+function wireSessionClicks() {
+  var rows = document.querySelectorAll('.sess-row');
+  for (var i = 0; i < rows.length; i++) {
+    rows[i].addEventListener('click', function() {
+      var idx = this.getAttribute('data-idx');
+      var trace = document.querySelector('[data-trace-idx="' + idx + '"]');
+      if (trace) {
+        var wasHidden = trace.classList.contains('hidden');
+        trace.classList.toggle('hidden');
+        this.classList.toggle('expanded', wasHidden);
+      }
+    });
+  }
+}
+
+function wireDateFilter() {
+  var btnApply = document.getElementById('df-apply');
+  var btnClear = document.getElementById('df-clear');
+  var inFrom = document.getElementById('df-from');
+  var inTo = document.getElementById('df-to');
+  var info = document.getElementById('df-info');
+
+  btnApply.addEventListener('click', function() { applyDateFilter(); });
+  btnClear.addEventListener('click', function() {
+    inFrom.value = '';
+    inTo.value = '';
+    applyDateFilter();
+  });
+
+  function applyDateFilter() {
+    var from = inFrom.value ? new Date(inFrom.value + 'T00:00:00') : null;
+    var to = inTo.value ? new Date(inTo.value + 'T23:59:59') : null;
+    var sessRows = document.querySelectorAll('.sess-row');
+    var shown = 0;
+    var total = sessRows.length;
+
+    for (var i = 0; i < sessRows.length; i++) {
+      var ts = sessRows[i].getAttribute('data-ts');
+      var d = ts ? new Date(ts) : null;
+      var hide = false;
+      if (d && from && d < from) hide = true;
+      if (d && to && d > to) hide = true;
+
+      var idx = sessRows[i].getAttribute('data-idx');
+      var trace = document.querySelector('[data-trace-idx="' + idx + '"]');
+
+      if (hide) {
+        sessRows[i].classList.add('hidden');
+        if (trace) trace.classList.add('hidden');
+        sessRows[i].classList.remove('expanded');
+      } else {
+        sessRows[i].classList.remove('hidden');
+        shown++;
+        // Don't auto-show trace rows — leave them collapsed
+      }
+    }
+
+    if (from || to) {
+      info.textContent = '(filtered: ' + shown + ' of ' + total + ' sessions shown)';
+    } else {
+      info.textContent = '';
+    }
+  }
+}
+
+function wireSortHeaders() {
+  var table = document.getElementById('sess-table');
+  var headers = table.querySelectorAll('th[data-sort]');
+  var currentSort = { key: 'ts_start', asc: false };
+
+  for (var i = 0; i < headers.length; i++) {
+    headers[i].addEventListener('click', function() {
+      var key = this.getAttribute('data-sort');
+      var asc = (currentSort.key === key) ? !currentSort.asc : (key === 'ts_start' ? false : true);
+      currentSort = { key: key, asc: asc };
+      sortTable(key, asc);
+    });
+  }
+
+  function sortTable(key, asc) {
+    var sessions = window._sessions;
+    var indices = [];
+    for (var i = 0; i < sessions.length; i++) indices.push(i);
+
+    indices.sort(function(a, b) {
+      var va = sessions[a][key];
+      var vb = sessions[b][key];
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      if (typeof va === 'string') {
+        var cmp = va.localeCompare(vb);
+        return asc ? cmp : -cmp;
+      }
+      return asc ? va - vb : vb - va;
+    });
+
+    var tbody = document.getElementById('sess-body');
+    var fragment = document.createDocumentFragment();
+    for (var i = 0; i < indices.length; i++) {
+      var origIdx = indices[i];
+      var sessR = document.querySelector('.sess-row[data-idx="' + origIdx + '"]');
+      var traceR = document.querySelector('[data-trace-idx="' + origIdx + '"]');
+      if (sessR) fragment.appendChild(sessR);
+      if (traceR) fragment.appendChild(traceR);
+    }
+    tbody.appendChild(fragment);
+  }
+}
+
+// ── Init ────────────────────────────────────────────────
+
+if (typeof model !== 'undefined' && model && model.sessions) {
+  render(model);
+} else {
+  document.getElementById('app').innerHTML = '<p class="empty">No model data found. Run the Python pipeline first.</p>';
+}
+</script>
+</body>
+</html>

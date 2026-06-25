@@ -17,9 +17,9 @@ public sealed class SwitchCommand : ICommand
         if (ctx.Args.Contains("--help") || ctx.Args.Contains("-h"))
         {
             ctx.Out.WriteLine("Usage: tk switch");
-            ctx.Out.WriteLine("  First run:  saves account 1, logs out — log in as account 2, then run again");
-            ctx.Out.WriteLine("  Setup done: saves account 2, restores account 1");
-            ctx.Out.WriteLine("  After setup: toggles between account 1 and 2");
+            ctx.Out.WriteLine("  First run:  saves account 1, logs out, opens Claude Code to log in as account 2");
+            ctx.Out.WriteLine("  Setup done: saves account 2, restores account 1, opens Claude Code");
+            ctx.Out.WriteLine("  After setup: toggles between account 1 and 2, opens Claude Code");
             return 0;
         }
 
@@ -50,8 +50,8 @@ public sealed class SwitchCommand : ICommand
             "-s", MainService, "-a", Environment.UserName]);
 
         WriteState("setup");
-        ctx.Out.WriteLine("Account 1 saved. Log in with `claude` as account 2, then run `tk switch` again.");
-        return 0;
+        ctx.Out.WriteLine("Account 1 saved. Opening Claude Code to log in as account 2.");
+        return await RunClaudeAsync(ctx);
     }
 
     // Second switch: user just logged in as account 2 — save it, restore account 1.
@@ -76,8 +76,8 @@ public sealed class SwitchCommand : ICommand
         if (await WriteMainAsync(ctx, slot1Creds.Trim()) != 0) return 1;
 
         WriteState("1");
-        ctx.Out.WriteLine("Account 2 saved. Switched to account 1. Restart Claude Code to apply.");
-        return 0;
+        ctx.Out.WriteLine("Account 2 saved. Switched to account 1.");
+        return await RunClaudeAsync(ctx);
     }
 
     // Subsequent switches: save current slot, restore other slot.
@@ -98,8 +98,24 @@ public sealed class SwitchCommand : ICommand
         if (await WriteMainAsync(ctx, toCreds.Trim()) != 0) return 1;
 
         WriteState(toName);
-        ctx.Out.WriteLine($"Switched to account {toName}. Restart Claude Code to apply.");
-        return 0;
+        ctx.Out.WriteLine($"Switched to account {toName}.");
+        return await RunClaudeAsync(ctx);
+    }
+
+    private static async Task<int> RunClaudeAsync(CommandContext ctx)
+    {
+        ctx.Out.Flush();
+        ctx.Err.Flush();
+
+        try
+        {
+            return await ctx.Process.RunInteractiveAsync(["claude"]);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            ctx.Err.WriteLine($"tk switch: failed to start claude: {ex.Message}");
+            return 1;
+        }
     }
 
     private Task<(int, string, string)> ReadKeychainAsync(CommandContext ctx, string service) =>

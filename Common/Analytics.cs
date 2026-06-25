@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -7,6 +8,14 @@ namespace Tk.Common;
 
 public static class Analytics
 {
+    private static readonly string Version = ComputeVersion();
+
+    private static string ComputeVersion()
+    {
+        var v = Assembly.GetExecutingAssembly().GetName().Version;
+        return $"{v?.Major}.{v?.Minor}.{v?.Build}";
+    }
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -26,7 +35,8 @@ public static class Analytics
         int ShownLines,
         long? RawChars,
         int? RawLines,
-        string Ws);
+        string Ws,
+        string TkVersion);
 
     public static void Record(
         string[] commandArgs,
@@ -65,7 +75,8 @@ public static class Analytics
                 ShownLines: shownLines,
                 RawChars: rawChars,
                 RawLines: rawLines,
-                Ws: ws);
+                Ws: ws,
+                TkVersion: Version);
 
             var line = JsonSerializer.Serialize(entry, JsonOptions);
 

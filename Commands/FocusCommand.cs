@@ -15,12 +15,26 @@ public sealed class FocusCommand : ICommand
             return 1;
         }
 
-        var query = ctx.Args[0];
-        var remaining = ctx.Args[1..];
-        var path = remaining.FirstOrDefault(a => !a.StartsWith('-')) ?? ".";
-        var flags = remaining.Where(a => a.StartsWith('-')).ToArray();
+        var words = new List<string>();
+        var flags = new List<string>();
+        var path = ".";
+        for (var i = 0; i < ctx.Args.Length; i++)
+        {
+            var arg = ctx.Args[i];
+            if (arg is "-p" or "--path")
+            {
+                if (i + 1 < ctx.Args.Length)
+                    path = ctx.Args[++i];
+                continue;
+            }
 
-        if (string.IsNullOrWhiteSpace(query))
+            if (arg.StartsWith('-'))
+                flags.Add(arg);
+            else
+                words.Add(arg);
+        }
+
+        if (words.Count == 0 || words.All(string.IsNullOrWhiteSpace))
         {
             ctx.Err.Write("tk focus: query is required\n");
             return 1;
@@ -33,6 +47,7 @@ public sealed class FocusCommand : ICommand
         }
 
         var options = FocusOptions.Parse(flags);
+        var terms = words.Where(w => !string.IsNullOrWhiteSpace(w)).ToArray();
 
         try
         {
@@ -59,7 +74,12 @@ public sealed class FocusCommand : ICommand
                 args.Add($"!{glob}");
             }
 
-            args.Add(query);
+            foreach (var term in terms)
+            {
+                args.Add("-e");
+                args.Add(term);
+            }
+
             args.Add(path);
 
             var (exitCode, stdout, stderr) = await ctx.Process.RunAsync([.. args]);
@@ -72,21 +92,22 @@ public sealed class FocusCommand : ICommand
 
             ctx.RawCharCount = raw.Length;
             ctx.RawLineCount = HiddenLinesFooter.CountLines(raw);
-            ctx.Out.Write(Render(raw, exitCode, ctx.DetailLevel, options));
+            ctx.Out.Write(Render(raw, exitCode, ctx.DetailLevel, options, terms));
             return exitCode;
         }
         catch
         {
-            var fallback = FallbackSearch(query, path, ctx.Raw, ctx.DetailLevel, options);
+            var fallback = FallbackSearch(terms, path, ctx.Raw, ctx.DetailLevel, options);
             ctx.Out.Write(fallback.Output);
             return fallback.ExitCode;
         }
     }
 
-    private static (int ExitCode, string Output) FallbackSearch(string query, string path, bool raw, DetailLevel detail, FocusOptions options)
+    private static (int ExitCode, string Output) FallbackSearch(string[] terms, string path, bool raw, DetailLevel detail, FocusOptions options)
     {
-        var ignoreCase = query.All(c => !char.IsLetter(c) || char.IsLower(c));
-        var comparison = ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var comparisons = terms
+            .Select(t => TermComparison(t))
+            .ToArray();
         var matches = new List<string>();
 
         foreach (var file in EnumerateFiles(path))
@@ -98,7 +119,17 @@ public sealed class FocusCommand : ICommand
             foreach (var line in File.ReadLines(file))
             {
                 lineNo++;
-                if (!line.Contains(query, comparison))
+                var hit = false;
+                for (var i = 0; i < terms.Length; i++)
+                {
+                    if (line.Contains(terms[i], comparisons[i]))
+                    {
+                        hit = true;
+                        break;
+                    }
+                }
+
+                if (!hit)
                     continue;
 
                 matches.Add($"{file}:{lineNo}:{line}");
@@ -118,8 +149,14 @@ public sealed class FocusCommand : ICommand
             return (matches.Count > 0 ? 0 : 1, rawOut);
 
         var exitCode = matches.Count > 0 ? 0 : 1;
-        return (exitCode, Render(rawOut, exitCode, detail, options));
+        return (exitCode, Render(rawOut, exitCode, detail, options, terms));
     }
+
+    /// <summary>Smart-case comparison for a term: case-insensitive when it has no uppercase letters.</summary>
+    private static StringComparison TermComparison(string term) =>
+        term.All(c => !char.IsLetter(c) || char.IsLower(c))
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
 
     private static IEnumerable<string> EnumerateFiles(string path)
     {
@@ -144,8 +181,11 @@ public sealed class FocusCommand : ICommand
         return buffer[..read].IndexOf((byte)0) >= 0;
     }
 
-    private static string Render(string raw, int exitCode, DetailLevel detail, FocusOptions options)
+    private static string Render(string raw, int exitCode, DetailLevel detail, FocusOptions options, string[] terms)
     {
+        var multiWord = terms.Length > 1;
+        var termComparisons = terms.Select(TermComparison).ToArray();
+
         var lines = raw.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         var entries = lines
             .Select(ParseMatch)
@@ -159,7 +199,7 @@ public sealed class FocusCommand : ICommand
         var prefix = PathUtils.FindCommonPrefix(entries.Select(e => e.File).Distinct());
         var files = entries
             .GroupBy(e => PathUtils.StripPrefix(e.File, prefix))
-            .Select(g => BuildFileSummary(g.Key, g))
+            .Select(g => BuildFileSummary(g.Key, g, terms, termComparisons))
             .ToList();
 
         var filteredFiles = FilterByScope(files, options.Scope).ToList();
@@ -179,23 +219,23 @@ public sealed class FocusCommand : ICommand
             var codeFiles = filteredFiles.Where(f => f.Kind == FocusKind.Code).ToList();
             if (codeFiles.Count > 0)
             {
-                AppendSection(sb, "code", codeFiles, limit, shownFiles);
+                AppendSection(sb, "code", codeFiles, limit, shownFiles, multiWord);
             }
             else
             {
-                AppendSection(sb, "top", filteredFiles, limit, shownFiles);
+                AppendSection(sb, "top", filteredFiles, limit, shownFiles, multiWord);
             }
 
             if (detail == DetailLevel.More)
             {
                 var docFiles = filteredFiles.Where(f => f.Kind == FocusKind.Docs).ToList();
                 if (docFiles.Count > 0)
-                    AppendSection(sb, "docs", docFiles, docLimit, shownFiles);
+                    AppendSection(sb, "docs", docFiles, docLimit, shownFiles, multiWord);
             }
         }
         else
         {
-            AppendSection(sb, "top", filteredFiles, limit, shownFiles);
+            AppendSection(sb, "top", filteredFiles, limit, shownFiles, multiWord);
         }
 
         if (!options.FilesOnly)
@@ -248,14 +288,17 @@ public sealed class FocusCommand : ICommand
         string label,
         IReadOnlyList<FileSummary> files,
         int limit,
-        ISet<string> shownFiles)
+        ISet<string> shownFiles,
+        bool multiWord)
     {
         var top = files
             .Take(limit)
             .Select(file =>
             {
                 shownFiles.Add(file.Path);
-                return $"{file.Path}({file.Count})";
+                return multiWord
+                    ? $"{file.Path}({file.Count})[{file.Coverage} terms]"
+                    : $"{file.Path}({file.Count})";
             });
 
         sb.AppendLine($"{label}={string.Join(",", top)}");
@@ -280,13 +323,25 @@ public sealed class FocusCommand : ICommand
             sb.AppendLine($"  {sample.Path}:{sample.SampleLine} {sample.Sample}");
     }
 
-    private static FileSummary BuildFileSummary(string relativePath, IGrouping<string, MatchEntry> group)
+    private static FileSummary BuildFileSummary(
+        string relativePath,
+        IGrouping<string, MatchEntry> group,
+        string[] terms,
+        StringComparison[] termComparisons)
     {
         var first = group.OrderBy(entry => entry.Line).First();
+        var coverage = 0;
+        for (var i = 0; i < terms.Length; i++)
+        {
+            if (group.Any(entry => entry.Content.Contains(terms[i], termComparisons[i])))
+                coverage++;
+        }
+
         return new FileSummary(
             relativePath,
             Classify(relativePath),
             group.Count(),
+            coverage,
             first.Line,
             Compact(first.Content));
     }
@@ -296,6 +351,7 @@ public sealed class FocusCommand : ICommand
         var ordered = files
             .Where(file => IsVisible(file.Kind, scope))
             .OrderBy(file => Rank(file.Kind, scope))
+            .ThenByDescending(file => file.Coverage)
             .ThenByDescending(file => file.Count)
             .ThenBy(file => file.Path, StringComparer.Ordinal);
 
@@ -400,7 +456,7 @@ public sealed class FocusCommand : ICommand
 
     private sealed record MatchEntry(string File, int Line, string Content, FocusKind Kind);
 
-    private sealed record FileSummary(string Path, FocusKind Kind, int Count, int SampleLine, string Sample);
+    private sealed record FileSummary(string Path, FocusKind Kind, int Count, int Coverage, int SampleLine, string Sample);
 
     private enum FocusKind
     {

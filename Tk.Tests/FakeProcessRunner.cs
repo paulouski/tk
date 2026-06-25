@@ -27,4 +27,13 @@ public sealed class FakeProcessRunner : IProcessRunner
                 $"FakeProcessRunner: unexpected call #{_index + 1}: {string.Join(' ', args)}");
         return Task.FromResult(_responses[_index++]);
     }
+
+    public Task<int> RunInteractiveAsync(string[] args)
+    {
+        Calls.Add(args);
+        if (_index >= _responses.Count)
+            throw new InvalidOperationException(
+                $"FakeProcessRunner: unexpected call #{_index + 1}: {string.Join(' ', args)}");
+        return Task.FromResult(_responses[_index++].ExitCode);
+    }
 }

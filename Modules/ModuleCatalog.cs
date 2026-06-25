@@ -23,7 +23,7 @@ public static class ModuleCatalog
 
         Orientation only — prefer native Grep/Read for real work:
         - `tk tree`, `tk files` — quick repo shape
-        - `tk focus <query> [path]` (`--files-only`) — rough first sweep only; to find a symbol, its callers, or its definition use `tk refs`/`tk callers`/`tk def` (or native Grep), not focus
+        - `tk focus <word...> [-p path]` (`--files-only`) — rough first sweep only. Multiple words = OR sweep ranked by how many distinct words each file matches (term coverage); `-p <path>` to scope; quote `"exact phrase"` for a literal phrase. To find a symbol, its callers, or its definition use `tk refs`/`tk callers`/`tk def` (or native Grep), not focus
         - `tk view <file>` — large-file map (symbols/hot TOC) only; to read a file, use native Read
 
         Escalate detail as:
@@ -59,7 +59,7 @@ public static class ModuleCatalog
 
         Orientation only — prefer native Grep/Read for real work:
         - `tk tree`, `tk files` — quick repo shape
-        - `tk focus <query> [path]` (`--files-only`) — rough first sweep only; to find a symbol, its callers, or its definition use `tk refs`/`tk callers`/`tk def` (or native Grep), not focus
+        - `tk focus <word...> [-p path]` (`--files-only`) — rough first sweep only. Multiple words = OR sweep ranked by how many distinct words each file matches (term coverage); `-p <path>` to scope; quote `"exact phrase"` for a literal phrase. To find a symbol, its callers, or its definition use `tk refs`/`tk callers`/`tk def` (or native Grep), not focus
         - `tk view <file>` — large-file map (symbols/hot TOC) only; to read a file, use native Read
 
         Escalation order:

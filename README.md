@@ -95,12 +95,13 @@ tk files                 # compact key-file inventory
 tk files --code          # code-focused inventory: entrypoints/interfaces/configs first
 tk files --changed       # changed files only
 tk files --ext cs        # files filtered by extension
-tk focus CommandRunner           # code-first repo search with top files + samples
-tk focus CommandRunner . --code  # strict code-only search
-tk focus CommandRunner tk --files-only  # only likely files, no sample lines
-tk focus Refit . --docs  # docs/specs/guides only
-tk focus Refit . --all   # include docs/logs/other in the ranking
-tk focus "RunAsync(" tk  # same, scoped to a path
+tk focus CommandRunner            # code-first repo search with top files + samples
+tk focus auth token refresh       # OR sweep over words, ranked by term coverage
+tk focus CommandRunner --code     # strict code-only search
+tk focus CommandRunner -p tk --files-only  # scope to a path, only likely files
+tk focus Refit --docs             # docs/specs/guides only
+tk focus Refit --all              # include docs/logs/other in the ranking
+tk focus "RunAsync(" -p tk        # quote for an exact phrase, scoped to a path
 
 # Unity (explicit, opt-in — never changes the plain commands above)
 tk unity tree            # tree that hides Library/Temp/Logs and .meta sidecars
@@ -204,7 +205,7 @@ These are noise-reduction figures. `tk` is completeness-first: it drops irreleva
 | `git diff` (10 files, 500 lines) | 500 lines | summary + all files listed + hunk preview | depends on diff size |
 | `changes` (status + diff startup check) | ~530 lines | ~3-15 lines | ~97% |
 | `tree` (medium repo) | ~100-500 lines | ~5-15 lines | ~90-98% |
-| `focus` (broad search) | ~50-500 lines | ~3-10 lines | ~85-98% |
+| `focus` (multi-word OR search) | ~50-500 lines | ~3-10 lines | ~85-98% |
 | `git log` (full format) | ~200 lines | ~30 lines | ~85% |
 | `view Program.cs` (250-line file) | 250 lines | ~5-15 lines | ~94% |
 | Service log (5000 lines) | 5000 lines | ~40+ lines (full stacks kept) | ~99% (noise), stacks intact |
@@ -225,7 +226,7 @@ These are noise-reduction figures. `tk` is completeness-first: it drops irreleva
 | **View** | `tk view <file[:a-b]>` | Compact file card with symbols/hot ranges, or exact numbered line ranges |
 | **Tree** | `tk tree [path]` | Shallow repo tree with directory/file counts |
 | **Files** | `tk files [path]` | Compact inventory of key files, optional extension or changed-file filtering |
-| **Focus** | `tk focus <query> [path]` | Narrow repo search using compact summary output |
+| **Focus** | `tk focus <word...> [-p path]` | Multi-word OR search ranked by term coverage; quote for an exact phrase; compact summary output |
 | **LogFile** | `tk log <file>` | Parses ASP.NET logs: strips startup/framework noise, collapses HTTP request pairs, deduplicates repeated entries (count shown), preserves full stack traces for kept errors |
 
 Unrecognized commands pass through without modification.
