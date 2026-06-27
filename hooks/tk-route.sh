@@ -40,7 +40,10 @@ if [[ "$unsafe" -eq 0 ]]; then
   new=""
   if [[ "$trimmed" =~ ^dotnet[[:space:]]+(build|test|restore)([[:space:]]|$) ]]; then
     new="tk $trimmed"
-  elif [[ "$trimmed" =~ ^git[[:space:]]+(status|diff|log|show)([[:space:]]|$) ]]; then
+  # Only status/log. diff/show are deliberately NOT routed: the agent often needs
+  # the full diff/patch to understand or apply a change, and tk compacts diffs
+  # (and can drop added/changed lines), which would mislead it.
+  elif [[ "$trimmed" =~ ^git[[:space:]]+(status|log)([[:space:]]|$) ]]; then
     new="tk $trimmed"
   fi
 

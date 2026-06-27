@@ -5,9 +5,11 @@ for compact output, and nudges grep-for-symbol toward `tk` semantic navigation.
 
 ## What it does
 
-- **Rewrites** single `dotnet build|test|restore` and read-only `git status|diff|log|show`
+- **Rewrites** single `dotnet build|test|restore` and `git status|log`
   commands to their `tk` equivalents before execution, so Claude gets compact,
-  token-efficient output instead of raw verbose output.
+  token-efficient output instead of raw verbose output. `git diff`/`git show` are
+  intentionally NOT routed — the agent often needs the full patch, and tk compaction
+  can drop added/changed lines and mislead it.
 - **Nudges** grep commands that look like symbol searches (e.g. `grep -rn "class Foo" src`)
   with a hint to use `tk def|refs|callers <Symbol>` instead, which resolves cross-file
   and crosses interface dispatch.
