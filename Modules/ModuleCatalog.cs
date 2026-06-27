@@ -10,20 +10,22 @@ public static class ModuleCatalog
     private const string CoreSnippet = """
         ## tk Global Compact Workflow
 
-        `tk` turns noisy command and git output into compact, complete summaries. That — plus
-        semantic code navigation — is its real strength. For text search and full file reads,
-        native Grep/Read beat `tk`; treat `tk`'s search/read as orientation only.
+        `tk` turns noisy command and git output into compact, complete summaries, and (with the
+        lsp module) is how you navigate code by symbol. Those are its strengths. For free-text
+        search and reading file contents, native Grep/Read are better — treat `tk`'s text-search
+        and `tk view`/read as orientation only. One hard exception, below: symbol lookup is always
+        `tk`, never grep.
 
         Use `tk` for (where it wins):
+        - Symbol lookup (lsp module): `tk def <symbol>` / `tk refs <symbol>` / `tk callers <symbol>` — where a symbol is defined, all references, who calls it. When lsp is enabled this is the ONLY correct way to locate a symbol — NEVER `grep`/`rg` for `class X` / `record X` / `interface X` / a method name. `tk rename <file:line:col> <new>` refactors repo-wide.
         - `tk git status|diff|log` — compact, complete git output
         - `tk log <file>` — compacted file history
         - `tk changes` — working-tree change summary
         - `tk mv <old> <new>` — move a file preserving git history (use instead of delete+recreate; keeps git blame and saves tokens). When moving across folders, check the file's namespace and update references afterward — tk does not rewrite them.
-        - `tk refs` / `tk callers` / `tk def` — find a symbol's usages, callers, or definition; the right tool for locating code, and better than grepping for `class X\|record X`. `tk rename` refactors across the repo. (lsp module — full commands listed below when enabled.)
 
         Orientation only — prefer native Grep/Read for real work:
         - `tk tree`, `tk files` — quick repo shape
-        - `tk focus <word...> [-p path]` (`--files-only`) — rough first sweep only. Multiple words = OR sweep ranked by how many distinct words each file matches (term coverage); `-p <path>` to scope; quote `"exact phrase"` for a literal phrase. To find a symbol, its callers, or its definition use `tk refs`/`tk callers`/`tk def`, not focus
+        - `tk focus <word...> [-p path]` (`--files-only`) — rough first sweep only. Multiple words = OR sweep ranked by how many distinct words each file matches (term coverage); `-p <path>` to scope; quote `"exact phrase"` for a literal phrase. To find a symbol, its callers, or its definition use `tk def`/`tk refs`/`tk callers`, not focus.
         - `tk view <file>` — large-file map (symbols/hot TOC) only; to read a file, use native Read
 
         Escalate detail as:
@@ -46,20 +48,21 @@ public static class ModuleCatalog
     private const string CoreAgentsSnippet = """
         # tk Global Agent Preset
 
-        `tk` gives compact, complete output for noisy commands and git, plus semantic code
-        navigation. Those are its strengths — reach for them first. For text search and full
-        file reads, native Grep/Read are better; `tk`'s search/read are orientation only.
+        `tk` gives compact, complete output for noisy commands and git, and (with the lsp module)
+        navigates code by symbol. Those are its strengths — reach for them first. For free-text
+        search and reading file contents, native Grep/Read are better; treat `tk`'s text-search and
+        `tk view`/read as orientation only. One hard exception: symbol lookup is always `tk`, never grep.
 
         Prefer `tk` for (where it wins):
+        - Symbol lookup (lsp module): `tk def <symbol>` / `tk refs <symbol>` / `tk callers <symbol>` — definition, all references, callers. When lsp is enabled this is the ONLY correct way to locate a symbol; NEVER `grep`/`rg` for `class X` / `record X` / `interface X` / a method name. `tk rename` refactors repo-wide.
         - `tk git status|diff|log` — compact, complete git output
         - `tk log <file>` — compacted file history
         - `tk changes` — working-tree change summary
         - `tk mv <old> <new>` — move a file preserving git history; NEVER delete and recreate a file to rename/relocate it — use this instead to keep git blame and avoid re-emitting file content. After moving across folders, check the file's namespace and update references — tk does not rewrite them.
-        - `tk refs` / `tk callers` / `tk def` — the preferred way to find a symbol's usages, callers, or definition; use these instead of grepping `class X\|record X`. `tk rename` refactors across the repo. (lsp module — full commands listed below when enabled.)
 
         Orientation only — prefer native Grep/Read for real work:
         - `tk tree`, `tk files` — quick repo shape
-        - `tk focus <word...> [-p path]` (`--files-only`) — rough first sweep only. Multiple words = OR sweep ranked by how many distinct words each file matches (term coverage); `-p <path>` to scope; quote `"exact phrase"` for a literal phrase. To find a symbol, its callers, or its definition use `tk refs`/`tk callers`/`tk def`, not focus
+        - `tk focus <word...> [-p path]` (`--files-only`) — rough first sweep only. Multiple words = OR sweep ranked by how many distinct words each file matches (term coverage); `-p <path>` to scope; quote `"exact phrase"` for a literal phrase. To find a symbol, its callers, or its definition use `tk def`/`tk refs`/`tk callers`, not focus.
         - `tk view <file>` — large-file map (symbols/hot TOC) only; to read a file, use native Read
 
         Escalation order:
@@ -98,6 +101,7 @@ public static class ModuleCatalog
         """;
 
     private const string LspSnippet = """
+        Symbol lookup is ALWAYS these, NEVER `grep`/`rg` for `class X` / `record X` / `interface X` or a method name:
         - `tk refs <symbol>` — all references to a symbol by name (resolves name → position; lists candidates if ambiguous)
         - `tk refs <file:line:col>` — find references at position
         - `tk callers <symbol>` — who calls this symbol (incoming call hierarchy; crosses interface dispatch)
