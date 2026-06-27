@@ -15,6 +15,20 @@ tool=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty')
 cmd=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty')
 [[ -z "$cmd" ]] && exit 0
 
+# Capture cwd to tag log entries. Log to a single global file (~/.claude/) rather
+# than per-repo, so a globally installed hook never drops .tk-hook.log into every
+# repo's working tree. Each line carries the cwd column to disambiguate by repo.
+_cwd=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
+_log_decision() {
+  local decision="$1" raw_cmd="$2"
+  [[ -z "$HOME" ]] && return
+  # Collapse newlines to spaces so each entry stays one line.
+  local one_line
+  one_line=$(printf '%s' "$raw_cmd" | tr '\n' ' ')
+  printf '%s\t%s\t%s\t%s\n' "$(date +%s)" "$decision" "$_cwd" "$one_line" \
+    >> "${HOME}/.claude/tk-hook.log" 2>/dev/null || true
+}
+
 # Strip leading whitespace
 trimmed="${cmd#"${cmd%%[![:space:]]*}"}"
 
@@ -48,6 +62,7 @@ if [[ "$unsafe" -eq 0 ]]; then
   fi
 
   if [[ -n "$new" ]]; then
+    _log_decision "route" "$cmd"
     jq -n --arg c "$new" \
       '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"allow",updatedInput:{command:$c}}}'
     exit 0
@@ -57,6 +72,7 @@ fi
 # NUDGE: suggest tk semantic nav for grep-for-symbol (allowed even when unsafe)
 if [[ "$trimmed" =~ ^(grep|egrep|fgrep|rg)[[:space:]] ]] && \
    [[ "$cmd" =~ (class|record|interface|enum|struct)[[:space:]]+[A-Z] ]]; then
+  _log_decision "nudge" "$cmd"
   jq -n \
     '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"allow",additionalContext:"Symbol lookup via grep detected. For where a symbol is defined / its references / its callers, prefer `tk def|refs|callers <Symbol>` — it resolves cross-file and crosses interface dispatch, unlike a text grep for `class X`/`record X`. (tk lsp module)"}}'
   exit 0

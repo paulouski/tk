@@ -25,30 +25,13 @@ for compact output, and nudges grep-for-symbol toward `tk` semantic navigation.
 
 ## How to activate
 
-### Option 1 — Project-scoped (this repo only)
+`tk` is a global tool (its guidance lives in `~/.claude/CLAUDE.md`), so the hook
+that enforces that guidance belongs in your **global** settings too. Install it
+once, in one place — do not enable both, or it fires twice per command.
 
-Add to `.claude/settings.local.json` (gitignored):
+### Recommended — Global (all repos)
 
-```json
-"hooks": {
-  "PreToolUse": [
-    {
-      "matcher": "Bash",
-      "hooks": [
-        {
-          "type": "command",
-          "command": "${CLAUDE_PROJECT_DIR}/hooks/tk-route.sh",
-          "timeout": 5
-        }
-      ]
-    }
-  ]
-}
-```
-
-### Option 2 — Global (all repos)
-
-Add the same block to `~/.claude/settings.json`, using the absolute path to the script:
+Add to `~/.claude/settings.json`, using the absolute path to the script:
 
 ```json
 "hooks": {
@@ -66,6 +49,34 @@ Add the same block to `~/.claude/settings.json`, using the absolute path to the 
   ]
 }
 ```
+
+### Alternative — Project-scoped (this repo only)
+
+If you'd rather scope it to one repo, add the same block to
+`.claude/settings.local.json` (gitignored) with `${CLAUDE_PROJECT_DIR}/hooks/tk-route.sh`
+as the command instead of the absolute path. Don't combine this with the global
+install.
+
+## Decision log
+
+Every time the hook takes an action it appends one tab-separated line to a single
+global file, `~/.claude/tk-hook.log` (one file, not per-repo, so a globally
+installed hook never litters working trees). Each line carries the `cwd` column to
+attribute the action to a repo:
+
+```
+<epoch_seconds>\t<decision>\t<cwd>\t<command>
+```
+
+`<decision>` is one of:
+
+- `route` — command was rewritten (e.g. `dotnet build` → `tk dotnet build`)
+- `nudge` — symbol-grep was detected and the hint was emitted
+
+Skip-throughs (no match, compound commands, etc.) are not logged; only the two
+active cases above are recorded. The log is append-only and safe to delete at any
+time — the hook will recreate it. If `$HOME` is unavailable or the path is not
+writable, logging is silently skipped; the hook still completes normally.
 
 ## Requirements
 
