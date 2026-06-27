@@ -62,10 +62,11 @@ public sealed class GitCommand : ICommand
         var userArgs = ctx.Args[(subcommandIndex + 1)..];
         var passthrough = userArgs.Any(IsDiffPassthroughFlag)
             || show && userArgs.Any(IsBlobShowArg);
-        var effectiveUserArgs = userArgs.Where(a => a != "--no-compact").ToArray();
+        var summary = userArgs.Any(a => a == "--summary");
+        var effectiveUserArgs = userArgs.Where(a => a != "--no-compact" && a != "--summary").ToArray();
         var normalized = show ? effectiveUserArgs : NormalizeDiffArgs(effectiveUserArgs);
         var args = BuildGitArgs(globalArgs, [subcommand, .. normalized]);
-        return await RunFilteredAsync(args, passthrough ? new PassthroughFilter() : new GitDiffFilter(ctx.DetailLevel), ctx);
+        return await RunFilteredAsync(args, passthrough ? new PassthroughFilter() : new GitDiffFilter(ctx.DetailLevel, summary: summary, isShow: show), ctx);
     }
 
     private static async Task<int> RunLogAsync(CommandContext ctx, int subcommandIndex)

@@ -1,4 +1,3 @@
-using Tk;
 using Tk.Filters;
 using Xunit;
 
@@ -107,7 +106,30 @@ public class GitDiffFilterTests
         // All 5 files must appear in top= — set is complete
         var topLine = actual.Split('\n').First(l => l.StartsWith("top="));
         Assert.Equal(5, topLine["top=".Length..].Split(',').Length);
-        // Hunk preview is bounded; overflow is explicit
+        // Faithful mode: all changed lines must appear
+        Assert.Equal(5, actual.Split('\n').Count(l => l.Contains("-old")));
+        Assert.Equal(5, actual.Split('\n').Count(l => l.Contains("+new")));
+    }
+
+    [Fact]
+    public void Summary_mode_caps_hunk_preview()
+    {
+        var sb = new System.Text.StringBuilder();
+        for (var i = 0; i < 5; i++)
+        {
+            sb.AppendLine($"diff --git a/f{i}.cs b/f{i}.cs");
+            sb.AppendLine("index aaa..bbb 100644");
+            sb.AppendLine($"--- a/f{i}.cs");
+            sb.AppendLine($"+++ b/f{i}.cs");
+            sb.AppendLine("@@ -1 +1 @@");
+            sb.AppendLine("-old");
+            sb.AppendLine("+new");
+        }
+        var actual = new GitDiffFilter(DetailLevel.Default, summary: true).Apply(sb.ToString(), 0);
+        // All 5 files must still appear in top=
+        var topLine = actual.Split('\n').First(l => l.StartsWith("top="));
+        Assert.Equal(5, topLine["top=".Length..].Split(',').Length);
+        // Summary mode caps and shows the overflow notice
         Assert.Contains("hunks more", actual);
     }
 
@@ -131,8 +153,49 @@ public class GitDiffFilterTests
         Assert.Contains("ctx_after", actual);
     }
 
+    // INVARIANT: faithful mode never drops or truncates changed lines.
     [Fact]
-    public void Long_changed_line_truncated_to_120()
+    public void Faithful_mode_preserves_all_changed_lines_beyond_old_cap()
+    {
+        // Build a hunk with more added lines than the old _maxLinesPerHunk cap (4 for Default).
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("diff --git a/big.cs b/big.cs");
+        sb.AppendLine("index aaa..bbb 100644");
+        sb.AppendLine("--- a/big.cs");
+        sb.AppendLine("+++ b/big.cs");
+        sb.AppendLine("@@ -1,0 +1,10 @@");
+        for (var i = 1; i <= 10; i++)
+            sb.AppendLine($"+added_line_{i}");
+
+        var actual = new GitDiffFilter(DetailLevel.Default).Apply(sb.ToString(), 0);
+
+        // Every single added line must appear verbatim — none dropped.
+        for (var i = 1; i <= 10; i++)
+            Assert.Contains($"+added_line_{i}", actual);
+    }
+
+    // INVARIANT: faithful mode never truncates long changed lines.
+    [Fact]
+    public void Faithful_mode_does_not_truncate_long_changed_lines()
+    {
+        var longContent = new string('x', 200);
+        var longLine = "+" + longContent;
+        var raw = $"""
+            diff --git a/a.cs b/a.cs
+            index aaa..bbb 100644
+            --- a/a.cs
+            +++ b/a.cs
+            @@ -1 +1 @@
+            {longLine}
+            """;
+        var actual = new GitDiffFilter(DetailLevel.Default).Apply(raw, 0);
+        // The full 201-char line must appear; no truncation to 120 chars.
+        Assert.Contains(longLine, actual);
+    }
+
+    // Summary mode still truncates long changed lines (old behaviour preserved).
+    [Fact]
+    public void Summary_mode_truncates_long_changed_line_to_120()
     {
         var longLine = "+" + new string('x', 200);
         var raw = $"""
@@ -143,10 +206,41 @@ public class GitDiffFilterTests
             @@ -1 +1 @@
             {longLine}
             """;
-        var actual = new GitDiffFilter(DetailLevel.Default).Apply(raw, 0);
+        var actual = new GitDiffFilter(DetailLevel.Default, summary: true).Apply(raw, 0);
         var hit = actual.Split('\n').First(l => l.StartsWith("+x"));
         Assert.EndsWith("...", hit);
         // Truncate keeps the first 120 chars of the original line ("+" + 119 'x'), then "...".
         Assert.Equal(120 + 3, hit.Length);
+    }
+
+    // git show: commit header/message must appear before the diff section.
+    [Fact]
+    public void Show_mode_preserves_commit_header_and_message()
+    {
+        var raw = """
+            commit abc1234def5678
+            Author: Test User <test@example.com>
+            Date:   Mon Jan 1 00:00:00 2024 +0000
+
+                My commit message here.
+
+                Longer description paragraph.
+
+            diff --git a/src/a.cs b/src/a.cs
+            index aaa..bbb 100644
+            --- a/src/a.cs
+            +++ b/src/a.cs
+            @@ -1 +1 @@
+            -old
+            +new
+            """;
+        var actual = new GitDiffFilter(DetailLevel.Default, isShow: true).Apply(raw, 0);
+        Assert.Contains("commit abc1234def5678", actual);
+        Assert.Contains("Author: Test User", actual);
+        Assert.Contains("My commit message here.", actual);
+        Assert.Contains("Longer description paragraph.", actual);
+        // Diff section must also be present.
+        Assert.Contains("-old", actual);
+        Assert.Contains("+new", actual);
     }
 }

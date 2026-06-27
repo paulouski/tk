@@ -1,4 +1,3 @@
-using Tk;
 using Tk.Commands;
 using Xunit;
 
@@ -123,5 +122,58 @@ public class GitCommandTests
 
         Assert.DoesNotContain("hid=", output);
         Assert.Equal(raw, output);
+    }
+
+    [Fact]
+    public async Task Summary_flag_strips_from_git_args_and_caps_hunk_preview()
+    {
+        // Build a diff with more changed lines than the default cap (18) so summary shows overflow.
+        var sb = new System.Text.StringBuilder();
+        for (var i = 0; i < 5; i++)
+        {
+            sb.AppendLine($"diff --git a/f{i}.cs b/f{i}.cs");
+            sb.AppendLine("index aaa..bbb 100644");
+            sb.AppendLine($"--- a/f{i}.cs");
+            sb.AppendLine($"+++ b/f{i}.cs");
+            sb.AppendLine("@@ -1 +1 @@");
+            sb.AppendLine("-old");
+            sb.AppendLine("+new");
+        }
+        var runner = new FakeProcessRunner().Returns(stdout: sb.ToString());
+
+        var (_, output, _) = await RunAsync(["diff", "--summary"], runner);
+
+        // --summary must NOT be forwarded to git
+        Assert.DoesNotContain("--summary", runner.Calls[0]);
+        // Summary mode: overflow notice present
+        Assert.Contains("hunks more", output);
+    }
+
+    [Fact]
+    public async Task Show_passes_isShow_so_commit_header_is_emitted()
+    {
+        var showOutput = """
+            commit abc1234def5678
+            Author: Test User <test@example.com>
+            Date:   Mon Jan 1 00:00:00 2024 +0000
+
+                My commit message.
+
+            diff --git a/a.cs b/a.cs
+            index aaa..bbb 100644
+            --- a/a.cs
+            +++ b/a.cs
+            @@ -1 +1 @@
+            -old
+            +new
+            """;
+        var runner = new FakeProcessRunner().Returns(stdout: showOutput);
+
+        var (_, output, _) = await RunAsync(["show", "abc1234"], runner);
+
+        Assert.Contains("commit abc1234def5678", output);
+        Assert.Contains("My commit message.", output);
+        Assert.Contains("-old", output);
+        Assert.Contains("+new", output);
     }
 }

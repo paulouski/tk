@@ -4,18 +4,25 @@ using Tk.Common;
 
 namespace Tk.Filters;
 
-/// <summary>Compact git diff/show: stat summary + truncated hunks.</summary>
+/// <summary>Compact git diff/show: stat summary + faithful hunk output (all changed lines verbatim).
+/// Pass summary:true for the old lossy preview behaviour (capped changed lines).</summary>
 public sealed partial class GitDiffFilter : IOutputFilter
 {
+    private readonly bool _summary;
+    private readonly bool _isShow;
+
+    // Summary-mode caps (old behaviour, now opt-in)
     private readonly int _maxPreviewFiles;
     private readonly int _maxPreviewHunks;
     private readonly int _maxLinesPerHunk;
     private readonly int _maxChangedLines;
 
-    public GitDiffFilter(DetailLevel detailLevel)
+    public GitDiffFilter(DetailLevel detailLevel, bool summary = false, bool isShow = false)
     {
+        _summary = summary;
+        _isShow = isShow;
         var more = detailLevel == DetailLevel.More;
-        // top= always lists ALL files; these control the hunk preview only
+        // top= always lists ALL files; these control the hunk preview in summary mode only
         _maxPreviewFiles = more ? 6 : 3;
         _maxPreviewHunks = more ? 14 : 6;
         _maxLinesPerHunk = more ? 8 : 4;
@@ -28,11 +35,25 @@ public sealed partial class GitDiffFilter : IOutputFilter
         if (string.IsNullOrWhiteSpace(raw)) return "ok diff f=0\n";
 
         var lines = raw.Split('\n').Select(l => l.TrimEnd('\r')).ToArray();
+
+        // For git show: collect everything before the first "diff --git" line as the commit header.
+        string? commitHeader = null;
+        int diffStartIdx = 0;
+        if (_isShow)
+        {
+            var firstDiff = Array.FindIndex(lines, l => l.StartsWith("diff --git "));
+            if (firstDiff > 0)
+            {
+                commitHeader = string.Join("\n", lines[..firstDiff]).TrimEnd();
+                diffStartIdx = firstDiff;
+            }
+        }
+
         var fileDiffs = new List<FileDiff>();
         FileDiff? current = null;
         Hunk? currentHunk = null;
 
-        foreach (var line in lines)
+        foreach (var line in lines[diffStartIdx..])
         {
             // New file diff
             if (line.StartsWith("diff --git "))
@@ -91,6 +112,13 @@ public sealed partial class GitDiffFilter : IOutputFilter
         }
 
         var sb = new StringBuilder();
+
+        // Emit commit header (git show only)
+        if (commitHeader != null)
+        {
+            sb.AppendLine(commitHeader);
+        }
+
         var totalAdd = fileDiffs.Sum(f => f.Additions);
         var totalDel = fileDiffs.Sum(f => f.Deletions);
         var totalBinary = fileDiffs.Count(f => f.IsBinary);
@@ -111,6 +139,41 @@ public sealed partial class GitDiffFilter : IOutputFilter
             sb.AppendLine($"top={top}");
         }
 
+        if (_summary)
+            EmitSummaryHunks(sb, ranked);
+        else
+            EmitFaithfulHunks(sb, ranked);
+
+        return sb.ToString();
+    }
+
+    // Faithful mode: emit ALL hunks from ALL files; every changed line verbatim.
+    private static void EmitFaithfulHunks(StringBuilder sb, List<FileDiff> ranked)
+    {
+        foreach (var file in ranked)
+        {
+            foreach (var hunk in file.Hunks)
+            {
+                sb.AppendLine(hunk.Header);
+                foreach (var entry in hunk.Lines)
+                {
+                    if (entry.IsChanged)
+                    {
+                        var colored = entry.Text.StartsWith("+") ? Ansi.Green(entry.Text) : Ansi.Red(entry.Text);
+                        sb.AppendLine(colored);
+                    }
+                    else
+                    {
+                        sb.AppendLine(Ansi.Dim(entry.Text));
+                    }
+                }
+            }
+        }
+    }
+
+    // Summary mode: old capped/lossy preview behaviour.
+    private void EmitSummaryHunks(StringBuilder sb, List<FileDiff> ranked)
+    {
         var previewFiles = ranked
             .Where(f => f.Hunks.Count > 0)
             .Take(_maxPreviewFiles)
@@ -156,8 +219,6 @@ public sealed partial class GitDiffFilter : IOutputFilter
         var hiddenHunks = ranked.Sum(f => f.Hunks.Count) - hunksShown;
         if (hiddenHunks > 0)
             sb.AppendLine(Ansi.Dim($"+{hiddenHunks} hunks more (all files listed above)"));
-
-        return sb.ToString();
     }
 
     private static string ExtractFileName(string diffLine)
@@ -176,9 +237,17 @@ public sealed partial class GitDiffFilter : IOutputFilter
     private void AddHunkLine(Hunk? hunk, string line, bool isChanged)
     {
         if (hunk == null) return;
-        // Cap changed lines per hunk; context lines are always included (up to same cap)
-        if (isChanged && hunk.ChangedLineCount >= _maxLinesPerHunk) return;
-        hunk.Lines.Add(new HunkLine(TruncateChangedLine(line), isChanged));
+        if (_summary)
+        {
+            // In summary mode: cap changed lines per hunk
+            if (isChanged && hunk.ChangedLineCount >= _maxLinesPerHunk) return;
+            hunk.Lines.Add(new HunkLine(TruncateChangedLine(line), isChanged));
+        }
+        else
+        {
+            // Faithful mode: no caps, no truncation
+            hunk.Lines.Add(new HunkLine(line, isChanged));
+        }
         if (isChanged) hunk.ChangedLineCount++;
     }
 
