@@ -178,6 +178,63 @@ def _detect_empty(events: list[dict]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Symbol-grep detection
+# ---------------------------------------------------------------------------
+
+import re as _re
+
+# Grep-like binaries that count as a native grep when invoked via Bash
+_GREP_CMDS = frozenset({"grep", "rg", "egrep", "fgrep"})
+
+# Declaration keyword followed by a capital letter (mirrors tk-route.sh nudge)
+_DECL_PATTERN = _re.compile(
+    r'\b(class|record|interface|enum|struct)\s+[A-Z]'
+)
+
+# Bare PascalCase identifier: starts with uppercase, all alnum, ≥2 chars
+_PASCAL_PATTERN = _re.compile(r'^[A-Z][A-Za-z0-9]+$')
+
+
+def _is_symbol_grep(ev: dict) -> bool:
+    """Return True if this event is a native grep that looks like a symbol lookup."""
+    tool = ev.get("tool", "")
+    summary = ev.get("tool_input_summary", "")
+
+    if tool == "Grep":
+        # Native Grep tool — check the pattern portion (everything before any space+path)
+        # tool_input_summary for Grep = "{pattern} {path}".strip()
+        # Extract the pattern: everything up to the first space that looks like a path
+        # Simpler: just check the whole summary for symbol patterns
+        pattern_part = summary.split(" ")[0] if summary else ""
+        return bool(
+            _DECL_PATTERN.search(summary)
+            or _PASCAL_PATTERN.match(pattern_part)
+        )
+
+    if tool == "Bash":
+        # Must not be a tk command
+        if ev.get("is_tk"):
+            return False
+        # command must start with a grep binary
+        cmd = summary  # tool_input_summary for Bash is the command string (truncated)
+        first_token = cmd.split()[0] if cmd.split() else ""
+        if first_token not in _GREP_CMDS:
+            return False
+        return bool(
+            _DECL_PATTERN.search(cmd)
+            or (len(cmd.split()) >= 2 and _PASCAL_PATTERN.match(cmd.split()[1]))
+        )
+
+    return False
+
+
+def _detect_symbol_grep(events: list[dict]) -> None:
+    """Annotate events with symbol_grep=True when they are native symbol-lookup greps."""
+    for ev in events:
+        ev["symbol_grep"] = _is_symbol_grep(ev)
+
+
+# ---------------------------------------------------------------------------
 # Session rollups
 # ---------------------------------------------------------------------------
 
@@ -189,9 +246,12 @@ def _rollup_session(session: dict) -> None:
     n_retry = 0
     n_escalated = 0
     n_empty = 0
+    n_symbol_grep = 0
     outcomes: dict[str, int] = {"WIN": 0, "NEUTRAL": 0, "NET_NEGATIVE": 0, "UNKNOWN": 0}
 
     for ev in events:
+        if ev.get("symbol_grep"):
+            n_symbol_grep += 1
         if not ev.get("is_tk"):
             continue
         if ev.get("fallback"):
@@ -212,6 +272,7 @@ def _rollup_session(session: dict) -> None:
     session["n_retry"] = n_retry
     session["n_escalated"] = n_escalated
     session["n_empty"] = n_empty
+    session["n_symbol_grep"] = n_symbol_grep
     session["outcomes"] = outcomes
 
 
@@ -227,5 +288,6 @@ def annotate(model: dict) -> dict:
         _detect_retry(events)
         _detect_escalated(events)
         _detect_empty(events)
+        _detect_symbol_grep(events)
         _rollup_session(session)
     return model

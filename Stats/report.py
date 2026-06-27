@@ -22,7 +22,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from ingest import _parse_cli_dt  # type: ignore[import]
 from join import run_join  # type: ignore[import]
-from detect import annotate  # type: ignore[import]
+from detect import annotate, _SEARCH_NAV_COMMANDS  # type: ignore[import]
 from pricing import get_unknown_models  # type: ignore[import]
 
 
@@ -43,12 +43,18 @@ def _build_report(model: dict) -> dict:
         "n": 0, "matched": 0, "win": 0, "neutral": 0, "net_negative": 0,
         "empty_n": 0, "fallback_n": 0, "result_used_n": 0, "retry_n": 0,
         "sum_shown": 0, "sum_raw": 0, "n_shown": 0, "n_raw": 0,
+        "symbol_grep_n": 0,
     })
     # -- by_agent_type -------------------------------------------------------
     agent_stats: dict[str, dict] = defaultdict(lambda: {
         "n_sessions": 0, "n_tk": 0, "fallback_n": 0, "result_used_n": 0, "empty_n": 0,
     })
     seen_sessions: dict[str, set] = defaultdict(set)
+
+    # symbol_grep tracking: per session and per native-tool "command" label
+    sg_by_session: dict[str, int] = defaultdict(int)   # session_id -> count
+    sg_by_cmd: dict[str, int] = defaultdict(int)        # tool+pattern key -> count
+    sg_total = 0
 
     for session in sessions:
         at = session.get("agent_type", "unknown")
@@ -58,6 +64,17 @@ def _build_report(model: dict) -> dict:
             agent_stats[at]["n_sessions"] += 1
 
         for ev in session.get("events", []):
+            # symbol_grep is on ALL events (tk and native)
+            if ev.get("symbol_grep"):
+                sg_total += 1
+                sg_by_session[sid] += 1
+                # Label by tool + first token of summary (the grep binary or pattern)
+                summary = ev.get("tool_input_summary", "")
+                tool = ev.get("tool", "")
+                first = summary.split()[0] if summary.split() else ""
+                label = f"{tool}:{first}" if first else tool
+                sg_by_cmd[label] += 1
+
             if not ev.get("is_tk"):
                 continue
 
@@ -112,20 +129,27 @@ def _build_report(model: dict) -> dict:
 
     by_command = []
     for cmd, cs in cmd_stats.items():
-        by_command.append({
+        # Determine the base command (strip sub-command for eligibility check)
+        base_cmd = cmd.split()[0] if cmd else cmd
+        is_search_nav = base_cmd in _SEARCH_NAV_COMMANDS
+        row: dict = {
             "command": cmd,
             "n": cs["n"],
-            "matched": cs["matched"],
-            "win": cs["win"],
-            "neutral": cs["neutral"],
-            "net_negative": cs["net_negative"],
-            "empty_n": cs["empty_n"],
-            "fallback_n": cs["fallback_n"],
-            "result_used_n": cs["result_used_n"],
             "retry_n": cs["retry_n"],
             "avg_shown_chars": round(cs["sum_shown"] / cs["n_shown"]) if cs["n_shown"] else None,
             "avg_raw_chars": round(cs["sum_raw"] / cs["n_raw"]) if cs["n_raw"] else None,
-        })
+        }
+        if is_search_nav:
+            row["matched"] = cs["matched"]
+            row["win"] = cs["win"]
+            row["neutral"] = cs["neutral"]
+            row["net_negative"] = cs["net_negative"]
+            row["empty_n"] = cs["empty_n"]
+            row["fallback_n"] = cs["fallback_n"]
+            row["result_used_n"] = cs["result_used_n"]
+        else:
+            row["applicable"] = False
+        by_command.append(row)
     by_command.sort(key=lambda x: x["n"], reverse=True)
 
     by_agent_type = []
@@ -139,9 +163,9 @@ def _build_report(model: dict) -> dict:
     # -- findings ------------------------------------------------------------
     findings: list[dict] = []
 
-    # Top NET_NEGATIVE commands
+    # Top NET_NEGATIVE commands (only for search/nav eligible rows)
     neg_cmds = sorted(
-        [(c["command"], c["net_negative"]) for c in by_command if c["net_negative"] > 0],
+        [(c["command"], c["net_negative"]) for c in by_command if c.get("net_negative", 0) > 0],
         key=lambda x: x[1], reverse=True,
     )
     for cmd, n in neg_cmds[:2]:
@@ -156,7 +180,7 @@ def _build_report(model: dict) -> dict:
 
     # Top fallback-heavy commands
     fb_cmds = sorted(
-        [(c["command"], c["fallback_n"]) for c in by_command if c["fallback_n"] > 0],
+        [(c["command"], c["fallback_n"]) for c in by_command if c.get("fallback_n", 0) > 0],
         key=lambda x: x[1], reverse=True,
     )
     for cmd, n in fb_cmds[:2]:
@@ -171,7 +195,7 @@ def _build_report(model: dict) -> dict:
 
     # Top empty-heavy commands
     em_cmds = sorted(
-        [(c["command"], c["empty_n"]) for c in by_command if c["empty_n"] > 0],
+        [(c["command"], c["empty_n"]) for c in by_command if c.get("empty_n", 0) > 0],
         key=lambda x: x[1], reverse=True,
     )
     if em_cmds:
@@ -188,6 +212,23 @@ def _build_report(model: dict) -> dict:
     findings = findings[:5]
 
     net_saved = agg["win"]["saved_chars"] - agg["net_negative"]["extra_chars"]
+
+    # -- retry total ----------------------------------------------------------
+    retry_total = sum(
+        ev.get("retry", False)
+        for session in sessions
+        for ev in session.get("events", [])
+        if ev.get("is_tk")
+    )
+
+    # -- symbol_grep summary --------------------------------------------------
+    top_sg_sessions = sorted(sg_by_session.items(), key=lambda x: x[1], reverse=True)[:5]
+    top_sg_cmds = sorted(sg_by_cmd.items(), key=lambda x: x[1], reverse=True)[:5]
+    symbol_grep_block = {
+        "total": sg_total,
+        "top_sessions": [{"session_id": sid, "n": n} for sid, n in top_sg_sessions],
+        "top_commands": [{"label": label, "n": n} for label, n in top_sg_cmds],
+    }
 
     # -- cost summary --------------------------------------------------------
     total_usd = sum((s.get("cost") or {}).get("usd", 0.0) for s in sessions)
@@ -209,6 +250,8 @@ def _build_report(model: dict) -> dict:
             "total_usd": g["total_usd"],
             "delegation_delta_usd": g["delegation_delta_usd"],
             "inline_estimate_usd": g["inline_estimate_usd"],
+            "delegation_delta_lower_usd": g["delegation_delta_lower_usd"],
+            "inline_estimate_lower_usd": g["inline_estimate_lower_usd"],
         }
         for g in groups[:5]
     ]
@@ -272,6 +315,8 @@ def _build_report(model: dict) -> dict:
             "tk_events": ms["total_tk_events"],
             "matched": ms["matched"],
             "match_rate": ms["match_rate"],
+            "retry_total": retry_total,
+            "symbol_grep_total": sg_total,
         },
         "outcomes": oc,
         "savings": {
@@ -279,6 +324,7 @@ def _build_report(model: dict) -> dict:
             "net_negative_extra_chars": agg["net_negative"]["extra_chars"],
             "net_chars": net_saved,
         },
+        "symbol_grep": symbol_grep_block,
         "cost": cost_summary,
         "by_command": by_command,
         "by_agent_type": by_agent_type,
@@ -343,19 +389,28 @@ def _print_summary(report: dict) -> None:
     print("Top commands:")
     for c in report["by_command"][:5]:
         parts = [f"n={c['n']}"]
-        if c["win"]:
+        if c.get("win"):
             parts.append(f"win={c['win']}")
-        if c["net_negative"]:
+        if c.get("net_negative"):
             parts.append(f"neg={c['net_negative']}")
-        if c["fallback_n"]:
+        if c.get("fallback_n"):
             parts.append(f"fb={c['fallback_n']}")
         if c.get("result_used_n"):
             parts.append(f"ru={c['result_used_n']}")
-        if c["empty_n"]:
+        if c.get("empty_n"):
             parts.append(f"empty={c['empty_n']}")
-        if c["retry_n"]:
+        if c.get("retry_n"):
             parts.append(f"retry={c['retry_n']}")
+        if not c.get("applicable", True):
+            parts.append("applicable=false")
         print(f"  {c['command']:20s} {', '.join(parts)}")
+    print()
+
+    sg = report.get("symbol_grep") or {}
+    if sg.get("total"):
+        print(f"Symbol greps:  {sg['total']} total (nav gap baseline)")
+        for item in (sg.get("top_sessions") or [])[:3]:
+            print(f"  session {item['session_id'][:8]}  n={item['n']}")
     print()
 
     if report["findings"]:
@@ -389,11 +444,16 @@ def _print_summary(report: dict) -> None:
             print("  Top groups by cost:")
             for g in top:
                 delta = g.get("delegation_delta_usd")
+                delta_lower = g.get("delegation_delta_lower_usd")
                 inline = g.get("inline_estimate_usd")
                 gid_short = (g["group_id"] or "")[:8]
                 n_subs = g["n_subs"]
                 delta_str = ""
-                if delta is not None:
+                if delta_lower is not None and delta is not None:
+                    lo_sign = "+" if delta_lower >= 0 else ""
+                    hi_sign = "+" if delta >= 0 else ""
+                    delta_str = f"  delta=[{lo_sign}{delta_lower:.4f} .. {hi_sign}{delta:.4f}] (lower..upper)"
+                elif delta is not None:
                     sign = "+" if delta >= 0 else ""
                     delta_str = f"  delta={sign}{delta:.4f} ({'saved' if delta >= 0 else 'overhead'}, upper-bound est)"
                 inline_str = f"  inline≈${inline:.4f}" if inline is not None else ""
