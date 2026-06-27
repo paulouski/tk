@@ -48,6 +48,16 @@ def get_unknown_models() -> list[str]:
     return sorted(_unknown_models)
 
 
+def is_known_model(model: str) -> bool:
+    """True if the model id (or its date-stripped base) is in the price table.
+
+    Empty/missing model ids are NOT known: they price at $0, which would
+    silently understate cost. Callers use this to avoid trusting cost-derived
+    metrics (e.g. delegation delta) for sessions on un-priced models.
+    """
+    return bool(model) and _normalize_model(model) in _PRICES
+
+
 def cost_for_usage(usage: dict, model: str) -> float:
     """
     Calculate USD cost for a single usage dict.

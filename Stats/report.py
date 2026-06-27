@@ -252,6 +252,7 @@ def _build_report(model: dict) -> dict:
             "inline_estimate_usd": g["inline_estimate_usd"],
             "delegation_delta_lower_usd": g["delegation_delta_lower_usd"],
             "inline_estimate_lower_usd": g["inline_estimate_lower_usd"],
+            "has_unknown_model": g.get("has_unknown_model", False),
         }
         for g in groups[:5]
     ]
@@ -456,6 +457,8 @@ def _print_summary(report: dict) -> None:
                 elif delta is not None:
                     sign = "+" if delta >= 0 else ""
                     delta_str = f"  delta={sign}{delta:.4f} ({'saved' if delta >= 0 else 'overhead'}, upper-bound est)"
+                if delta is None and g.get("has_unknown_model"):
+                    delta_str = "  delta=n/a (unknown model — cost understated)"
                 inline_str = f"  inline≈${inline:.4f}" if inline is not None else ""
                 print(
                     f"    {gid_short}  subs={n_subs}"

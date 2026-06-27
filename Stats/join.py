@@ -26,7 +26,7 @@ from pathlib import Path
 # Allow running from the repo root without installing
 sys.path.insert(0, str(Path(__file__).parent))
 from ingest import load_sessions, _parse_ts, _parse_cli_dt  # type: ignore[import]
-from pricing import cost_tokens_by_type, get_unknown_models  # type: ignore[import]
+from pricing import cost_tokens_by_type, get_unknown_models, is_known_model  # type: ignore[import]
 
 
 # ---------------------------------------------------------------------------
@@ -282,12 +282,19 @@ def _build_groups(session_models: list[dict]) -> list[dict]:
             for s in subs
         )
 
+        # A group with any un-priced (unknown/empty) model has an understated
+        # cost, which would silently inflate the delegation delta in the optimistic
+        # direction. Flag it and skip the delta so it can't anchor the headline.
+        has_unknown_model = any(
+            not is_known_model((_cost(m).get("model") or "")) for m in members
+        )
+
         # Counterfactual inline estimate (upper-bound heuristic)
         inline_estimate_usd: float | None = None
         delegation_delta_usd: float | None = None
         inline_estimate_lower_usd: float | None = None
         delegation_delta_lower_usd: float | None = None
-        if main_sm and subs:
+        if main_sm and subs and not has_unknown_model:
             main_model = (_cost(main_sm).get("model") or "").strip()
             if main_model:
                 # Sub output tokens, priced at main's output rate
@@ -328,6 +335,7 @@ def _build_groups(session_models: list[dict]) -> list[dict]:
             "delegation_delta_usd": delegation_delta_usd,
             "inline_estimate_lower_usd": inline_estimate_lower_usd,
             "delegation_delta_lower_usd": delegation_delta_lower_usd,
+            "has_unknown_model": has_unknown_model,
             "assumptions": (
                 "Range estimate over the subs' unique token footprint (input + cache_write; "
                 "cache_read is excluded as a re-read artifact of turn count). Lower bound: "
