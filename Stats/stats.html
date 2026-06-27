@@ -359,14 +359,28 @@ function render(m) {
         + '<td class="num" style="color:' + (saved > 0 ? 'var(--ok)' : 'var(--muted)') + '">' + fmt(saved) + '</td>'
         + '</tr>';
     }
-    out += '</tbody></table></div>';
+    out += '</tbody></table>';
+    out += '<div class="gp-note" style="margin-top:4px;">Versions inferred from release tag dates where own-log did not carry tkVersion.</div>';
+    out += '</div>';
   }
 
-  // ── Date filter
+  // Build sorted unique version list for the picker (from by_version, already sorted)
+  var bvVersions = [];
+  for (var vi = 0; vi < (m.by_version || []).length; vi++) {
+    bvVersions.push(m.by_version[vi].version);
+  }
+
+  // ── Date + version filter
   out += '<div class="sec">Sessions</div>';
+  var verOptions = '<option value="">all versions</option>';
+  for (var vi = 0; vi < bvVersions.length; vi++) {
+    var vv = bvVersions[vi];
+    verOptions += '<option value="' + h(vv) + '">' + h(vv) + '</option>';
+  }
   out += '<div class="date-filter">'
     + '<label>From</label><input type="date" id="df-from">'
     + '<label>To</label><input type="date" id="df-to">'
+    + '<label>Version</label><select id="vf-select" style="background:var(--s1);border:1px solid var(--bd);color:var(--txt);font-family:var(--mono);font-size:12px;padding:4px 8px;border-radius:2px;">' + verOptions + '</select>'
     + '<button id="df-apply">Filter</button>'
     + '<button id="df-clear">Clear</button>'
     + '<span class="filter-info" id="df-info"></span>'
@@ -431,13 +445,11 @@ function render(m) {
   out += '<table class="sess-table" id="sess-table">';
   out += '<thead><tr>'
     + '<th data-sort="ts_start">Time</th>'
-    + '<th data-sort="agent_type">Agent</th>'
+    + '<th data-sort="agent_type">Session</th>'
     + '<th class="num" data-sort="n_events">Events</th>'
-    + '<th class="num" data-sort="n_tk_events">tk</th>'
     + '<th>Cost</th>'
-    + '<th>Outcome</th>'
-    + '<th>Branch</th>'
-    + '<th>Flags</th>'
+    + '<th data-sort="n_tk_events">tk</th>'
+    + '<th>Location</th>'
     + '</tr></thead>';
   out += '<tbody id="sess-body">';
   for (var ri = 0; ri < rendered.length; ri++) {
@@ -483,6 +495,22 @@ function render(m) {
   wireSortHeaders();
 }
 
+function shortId(s) {
+  if (s.is_subagent && s.session_file) {
+    var m = s.session_file.match(/agent-([0-9a-f]+)\.jsonl$/i);
+    if (m) return m[1].slice(0, 8);
+  }
+  return (s.session_id || '').slice(0, 8);
+}
+
+function fullId(s) {
+  if (s.is_subagent && s.session_file) {
+    var m = s.session_file.match(/agent-([0-9a-f]+)\.jsonl$/i);
+    if (m) return m[1];
+  }
+  return s.session_id || '';
+}
+
 function sessRow(s, idx, rowType, groupId, groupMap) {
   var subBadge = s.is_subagent ? '<span class="badge b-sub">sub</span>' : '';
   var agentLabel = h(s.agent_type || '');
@@ -523,73 +551,90 @@ function sessRow(s, idx, rowType, groupId, groupMap) {
   var costCell = fmtUsd(usd);
   if (usd && modelShort) costCell += ' <span style="color:var(--dim);font-size:10px;">' + h(modelShort) + '</span>';
 
+  var cwd = s.cwd || '';
+  var proj = cwd ? cwd.split('/').filter(Boolean).pop() : '';
+
   var rowClass = 'sess-row';
   var indentStyle = (rowType === 'sub' || rowType === 'orphan') ? ' style="background:var(--s0);"' : '';
 
-  return '<tr class="' + rowClass + '" data-idx="' + idx + '" data-ts="' + h(s.ts_start || '') + '"' + indentStyle + '>'
+  var sessionCell = agentCell + ' <span style="color:var(--dim);font-family:monospace;font-size:10px;" title="' + h(fullId(s)) + '">' + h(shortId(s)) + '</span>';
+  var tkCount = s.n_tk_events || 0;
+  var tkCell = (tkCount > 0 ? tkCount : '') + (outcomeStr ? (tkCount > 0 ? ' ' : '') + outcomeStr : '') + (flagStr ? ' ' + flagStr : '');
+  var branch = s.git_branch || '';
+  var locationCell = h(proj) + (branch && branch !== 'HEAD' ? ' <span style="color:var(--dim);">&middot; ' + h(branch) + '</span>' : '');
+
+  return '<tr class="' + rowClass + '" data-idx="' + idx + '" data-ts="' + h(s.ts_start || '') + '" data-ver="' + h(s.tk_version || '') + '"' + indentStyle + '>'
     + '<td>' + (rowType === 'sub' || rowType === 'orphan' ? '<span style="color:var(--dim);">' + fmtTime(s.ts_start) + '</span>' : fmtDt(s.ts_start)) + '</td>'
-    + '<td>' + agentCell + '</td>'
+    + '<td>' + sessionCell + '</td>'
     + '<td class="num">' + (s.n_events || 0) + '</td>'
-    + '<td class="num">' + (s.n_tk_events || 0) + '</td>'
     + '<td>' + costCell + '</td>'
-    + '<td>' + outcomeStr + '</td>'
-    + '<td class="muted-val">' + h(s.git_branch || '') + '</td>'
-    + '<td>' + flagStr + '</td>'
+    + '<td>' + tkCell + '</td>'
+    + '<td class="muted-val" title="' + h(cwd) + '">' + locationCell + '</td>'
     + '</tr>';
 }
 
 function groupPanel(grp, afterIdx) {
-  var delta = grp.delegation_delta_usd;
-  var inline = grp.inline_estimate_usd;
-  var deltaHtml = '';
-  if (delta != null) {
-    var cls = delta >= 0 ? 'gp-save' : 'gp-overhead';
-    var amt = Math.abs(delta).toFixed(3);
-    var tip = grp.assumptions ? ' title="' + h(grp.assumptions) + '"' : '';
-    var label, valStr;
-    if (delta >= 0) {
-      label = 'delegation saved up to';
-      valStr = '≤ +$' + amt;
-    } else {
-      label = 'delegation overhead up to';
-      valStr = '≤ −$' + amt;
-    }
-    deltaHtml = '<span' + tip + '>' + label + ': <span class="' + cls + '">' + valStr
-      + '</span> <span style="color:var(--dim)">(upper-bound est.)</span></span>';
-    if (inline != null) {
-      deltaHtml += ' <span style="color:var(--dim)">(vs inline≈$' + inline.toFixed(3) + ')</span>';
-    }
+  var deltaUpper = grp.delegation_delta_usd;
+  var deltaLower = grp.delegation_delta_lower_usd;
+  var inlineUpper = grp.inline_estimate_usd;
+  var inlineLower = grp.inline_estimate_lower_usd;
+
+  // Summary line: compact one-liner with delegation range
+  var summaryParts = [];
+  summaryParts.push('group total <span class="gp-val">$' + (grp.total_usd||0).toFixed(3) + '</span>');
+  summaryParts.push('main <span class="gp-val">$' + (grp.main_usd||0).toFixed(3) + '</span>');
+  summaryParts.push('subs&times;' + grp.n_subs + ' <span class="gp-val">$' + (grp.subs_usd||0).toFixed(3) + '</span>');
+  if (deltaLower != null && deltaUpper != null) {
+    var loAmt = Math.abs(deltaLower).toFixed(3);
+    var hiAmt = Math.abs(deltaUpper).toFixed(3);
+    var loCls = deltaLower >= 0 ? 'gp-save' : 'gp-overhead';
+    var hiCls = deltaUpper >= 0 ? 'gp-save' : 'gp-overhead';
+    var loStr = deltaLower >= 0 ? '+$' + loAmt : '−$' + loAmt;
+    var hiStr = deltaUpper >= 0 ? '+$' + hiAmt : '−$' + hiAmt;
+    summaryParts.push('delegation [<span class="' + loCls + '">' + loStr + '</span> … <span class="' + hiCls + '">' + hiStr + '</span>]');
+  } else if (deltaUpper != null) {
+    var cls = deltaUpper >= 0 ? 'gp-save' : 'gp-overhead';
+    var amt = Math.abs(deltaUpper).toFixed(3);
+    var valStr = deltaUpper >= 0 ? '≤ +$' + amt : '≤ −$' + amt;
+    summaryParts.push('delegation <span class="' + cls + '">' + valStr + '</span>');
   }
 
-  var splitHtml = '';
+  // Details body: split costs + inline estimates + note
+  var bodyHtml = '';
   if (grp.main_session_id) {
-    splitHtml = '<span>main: write $' + (grp.main_output_usd||0).toFixed(3)
-      + ' / read $' + (grp.main_read_usd||0).toFixed(3) + '</span>'
-      + '<span>subs: write $' + (grp.subs_output_usd||0).toFixed(3)
-      + ' / read $' + (grp.subs_read_usd||0).toFixed(3) + '</span>';
+    bodyHtml += '<div class="gp-row">'
+      + '<span>main: write $' + (grp.main_output_usd||0).toFixed(3) + ' / read $' + (grp.main_read_usd||0).toFixed(3) + '</span>'
+      + '<span>subs: write $' + (grp.subs_output_usd||0).toFixed(3) + ' / read $' + (grp.subs_read_usd||0).toFixed(3) + '</span>'
+      + '</div>';
   }
-
-  var html = '<tr class="trace-row" data-trace-idx="grp-' + afterIdx + '"><td colspan="8">'
-    + '<div class="group-panel">'
-    + '<div class="gp-row">'
-    + '<span>group total: <span class="gp-val">$' + (grp.total_usd||0).toFixed(3) + '</span></span>'
-    + '<span>main: <span class="gp-val">$' + (grp.main_usd||0).toFixed(3) + '</span></span>'
-    + '<span>subs×' + grp.n_subs + ': <span class="gp-val">$' + (grp.subs_usd||0).toFixed(3) + '</span></span>'
-    + (deltaHtml ? deltaHtml : '')
-    + '</div>';
-  if (splitHtml) {
-    html += '<div class="gp-row">' + splitHtml + '</div>';
+  if (inlineLower != null || inlineUpper != null) {
+    var inlineParts = 'vs inline≈';
+    if (inlineLower != null && inlineUpper != null) {
+      inlineParts += ' lower $' + inlineLower.toFixed(3) + ' … upper $' + inlineUpper.toFixed(3);
+    } else if (inlineUpper != null) {
+      inlineParts += ' $' + inlineUpper.toFixed(3) + ' (upper)';
+    }
+    bodyHtml += '<div class="gp-row"><span>' + inlineParts + '</span></div>';
   }
   if (grp.assumptions) {
-    html += '<div class="gp-note" title="' + h(grp.assumptions) + '">⚠ upper-bound estimate: prices sub re-reads at main\'s full input rate; actual saving is lower — hover for details</div>';
+    bodyHtml += '<div class="gp-note" title="' + h(grp.assumptions) + '">⚠ range estimate: lower = main writes solution inline (context already in window); upper = main re-reads all sub context at full input rate. Hover for details.</div>';
   }
-  html += '</div></td></tr>';
+
+  var html = '<tr class="trace-row" data-trace-idx="grp-' + afterIdx + '"><td colspan="6">'
+    + '<div class="group-panel">'
+    + '<details><summary class="gp-row" style="list-style:none;cursor:pointer;">'
+    + summaryParts.join(' &middot; ')
+    + ' <span style="color:var(--dim);font-size:10px;margin-left:4px;">details</span>'
+    + '</summary>'
+    + bodyHtml
+    + '</details>'
+    + '</div></td></tr>';
   return html;
 }
 
 function traceRow(s, idx, rowType) {
   var events = s.events || [];
-  var out = '<tr class="trace-row hidden" data-trace-idx="' + idx + '"><td colspan="8"><div class="trace-wrap">';
+  var out = '<tr class="trace-row hidden" data-trace-idx="' + idx + '"><td colspan="6"><div class="trace-wrap">';
 
   if (events.length === 0) {
     out += '<span style="color:var(--muted);font-size:12px;">No events</span>';
@@ -670,18 +715,22 @@ function wireDateFilter() {
   var btnClear = document.getElementById('df-clear');
   var inFrom = document.getElementById('df-from');
   var inTo = document.getElementById('df-to');
+  var selVer = document.getElementById('vf-select');
   var info = document.getElementById('df-info');
 
   btnApply.addEventListener('click', function() { applyDateFilter(); });
   btnClear.addEventListener('click', function() {
     inFrom.value = '';
     inTo.value = '';
+    if (selVer) selVer.value = '';
     applyDateFilter();
   });
+  if (selVer) selVer.addEventListener('change', function() { applyDateFilter(); });
 
   function applyDateFilter() {
     var from = inFrom.value ? new Date(inFrom.value + 'T00:00:00') : null;
     var to = inTo.value ? new Date(inTo.value + 'T23:59:59') : null;
+    var verFilter = selVer ? selVer.value : '';
     var sessRows = document.querySelectorAll('.sess-row');
     var shown = 0;
     var total = sessRows.length;
@@ -692,6 +741,11 @@ function wireDateFilter() {
       var hide = false;
       if (d && from && d < from) hide = true;
       if (d && to && d > to) hide = true;
+      if (verFilter) {
+        var rowVer = sessRows[i].getAttribute('data-ver') || '';
+        if (!rowVer) rowVer = 'unknown';
+        if (rowVer !== verFilter) hide = true;
+      }
 
       var idx = sessRows[i].getAttribute('data-idx');
       var trace = document.querySelector('[data-trace-idx="' + idx + '"]');
@@ -707,7 +761,7 @@ function wireDateFilter() {
       }
     }
 
-    if (from || to) {
+    if (from || to || verFilter) {
       info.textContent = '(filtered: ' + shown + ' of ' + total + ' sessions shown)';
     } else {
       info.textContent = '';

@@ -6,6 +6,10 @@ TPL="$SELF/stats.html"
 MODEL="$SELF/result/model.json"
 OUT=$(mktemp /tmp/tk-stats-XXXXXX).html
 
+# Rebuild model.json from fresh transcripts (ingest -> join -> report).
+echo "Building model from latest chats..."
+python3 "$SELF/report.py" "$@"
+
 if [ ! -f "$MODEL" ]; then
   echo "Error: $MODEL not found. Run the Python pipeline first to generate it." >&2
   exit 1

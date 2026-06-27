@@ -18,6 +18,7 @@ import argparse
 import hashlib
 import json
 import os
+import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -26,6 +27,84 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from ingest import load_sessions, _parse_ts, _parse_cli_dt  # type: ignore[import]
 from pricing import cost_tokens_by_type, get_unknown_models  # type: ignore[import]
+
+
+# ---------------------------------------------------------------------------
+# Release version inference from git tags
+# ---------------------------------------------------------------------------
+
+_REPO_ROOT = Path(__file__).parent.parent
+
+# Module-level cache; None means "not yet loaded", [] means "loaded but empty"
+_RELEASE_DATES: list[tuple[str, datetime]] | None = None
+
+
+def _load_release_dates() -> list[tuple[str, datetime]]:
+    """
+    Return a sorted list of (version_str, dt) from git tags matching 'v*'.
+    Result is cached after first call. Any error → empty list.
+    """
+    global _RELEASE_DATES
+    if _RELEASE_DATES is not None:
+        return _RELEASE_DATES
+
+    result: list[tuple[str, datetime]] = []
+    try:
+        tags_out = subprocess.check_output(
+            ["git", "-C", str(_REPO_ROOT), "tag", "--list", "v*"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        for tag in tags_out.splitlines():
+            tag = tag.strip()
+            if not tag:
+                continue
+            try:
+                date_out = subprocess.check_output(
+                    ["git", "-C", str(_REPO_ROOT), "log", "-1", "--format=%cI", tag],
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                ).strip()
+                dt = _parse_ts(date_out)
+                if dt is None:
+                    continue
+                version = tag.lstrip("v")
+                result.append((version, dt))
+            except subprocess.SubprocessError:
+                continue
+    except Exception:
+        pass
+
+    result.sort(key=lambda x: x[1])
+    _RELEASE_DATES = result
+    return result
+
+
+def _infer_version(ts_str: str | None) -> str | None:
+    """
+    Infer the tk version active at the time of ts_str by comparing against
+    release tag dates. Returns None if the timestamp predates all known tags
+    or if release data is unavailable.
+    """
+    if not ts_str:
+        return None
+    dt = _parse_ts(ts_str)
+    if dt is None:
+        return None
+    dates = _load_release_dates()
+    if not dates:
+        return None
+    # Event predates first known release → don't fabricate a version
+    if dt < dates[0][1]:
+        return None
+    # Walk backwards to find the last release whose date <= dt
+    best: str | None = None
+    for version, rel_dt in dates:
+        if rel_dt <= dt:
+            best = version
+        else:
+            break
+    return best
 
 
 # ---------------------------------------------------------------------------
@@ -206,19 +285,33 @@ def _build_groups(session_models: list[dict]) -> list[dict]:
         # Counterfactual inline estimate (upper-bound heuristic)
         inline_estimate_usd: float | None = None
         delegation_delta_usd: float | None = None
+        inline_estimate_lower_usd: float | None = None
+        delegation_delta_lower_usd: float | None = None
         if main_sm and subs:
             main_model = (_cost(main_sm).get("model") or "").strip()
             if main_model:
                 # Sub output tokens, priced at main's output rate
                 sub_out_tok = sum(_tok(s).get("output", 0) for s in subs)
                 sub_in_tok  = sum(_tok(s).get("input", 0) for s in subs)
-                sub_cr_tok  = sum(_tok(s).get("cache_read", 0) for s in subs)
-                inline_sub_cost = (
-                    cost_tokens_by_type(sub_out_tok, "output", main_model)
-                    + cost_tokens_by_type(sub_in_tok + sub_cr_tok, "input", main_model)
+                # Unique informational footprint of the subs: tokens written to
+                # cache the first time they were seen. cache_read is the same
+                # context re-read every turn — an artifact of turn count, not
+                # new information — so it is excluded.
+                sub_cw_tok  = sum(
+                    _tok(s).get("cache_write_5m", 0) + _tok(s).get("cache_write_1h", 0)
+                    for s in subs
                 )
+                sub_unique_tok = sub_in_tok + sub_cw_tok
+                out_cost = cost_tokens_by_type(sub_out_tok, "output", main_model)
+                # Upper bound: main re-reads every unique token at its full input rate
+                inline_sub_cost = out_cost + cost_tokens_by_type(sub_unique_tok, "input", main_model)
                 inline_estimate_usd = round(main_usd + inline_sub_cost, 6)
                 delegation_delta_usd = round(inline_estimate_usd - total_usd, 6)
+                # Lower bound: that same unique material mostly overlaps main's
+                # context and is read at the cheap cache_read rate
+                inline_sub_cost_lower = out_cost + cost_tokens_by_type(sub_unique_tok, "cache_read", main_model)
+                inline_estimate_lower_usd = round(main_usd + inline_sub_cost_lower, 6)
+                delegation_delta_lower_usd = round(inline_estimate_lower_usd - total_usd, 6)
 
         groups.append({
             "group_id": gid,
@@ -233,12 +326,14 @@ def _build_groups(session_models: list[dict]) -> list[dict]:
             "subs_read_usd": round(subs_read_usd, 6),
             "inline_estimate_usd": inline_estimate_usd,
             "delegation_delta_usd": delegation_delta_usd,
+            "inline_estimate_lower_usd": inline_estimate_lower_usd,
+            "delegation_delta_lower_usd": delegation_delta_lower_usd,
             "assumptions": (
-                "inline_estimate is an UPPER-BOUND heuristic: it prices sub OUTPUT at main's "
-                "output rate and sub INPUT/cache_read at main's input rate (assumes main would "
-                "re-read the same context). It does NOT model that some sub context was already "
-                "in main's window, nor the review-read of sub output (which already happened "
-                "and is in main_usd). Treat delegation_delta as indicative, not authoritative."
+                "Range estimate over the subs' unique token footprint (input + cache_write; "
+                "cache_read is excluded as a re-read artifact of turn count). Lower bound: "
+                "main ingests that material at the cheap cache_read rate (mostly overlaps its "
+                "context). Upper bound: main re-reads all of it fresh at its full input rate. "
+                "Both add the subs' output tokens at main's output rate."
             ) if subs else None,
         })
 
@@ -308,7 +403,7 @@ def run_join(
             ev["duration_ms"] = match.get("durationMs")
             ev["exit"] = match.get("exit")
             ev["detail"] = match.get("detail")
-            ev["tk_version"] = match.get("tkVersion")
+            ev["tk_version"] = match.get("tkVersion") or _infer_version(event.get("ts"))
             ev["result_count"] = match.get("resultCount")
         else:
             ev["raw_chars"] = None
@@ -317,7 +412,7 @@ def run_join(
             ev["duration_ms"] = None
             ev["exit"] = None
             ev["detail"] = None
-            ev["tk_version"] = None
+            ev["tk_version"] = _infer_version(event.get("ts"))
             ev["result_count"] = None
 
         outcome = _outcome(ev)
@@ -360,6 +455,13 @@ def run_join(
         sm.setdefault("group_id", sm.get("session_id", ""))
         sm.setdefault("cost", {"model": "", "usd": 0.0, "tokens": {}, "usd_by_type": {}})
         sm["events"] = session["events"]
+        # Session-level version: most frequent non-None tk_version among tk events
+        from collections import Counter
+        tk_vers = [e["tk_version"] for e in session["events"] if e.get("is_tk") and e.get("tk_version")]
+        if tk_vers:
+            sm["tk_version"] = Counter(tk_vers).most_common(1)[0][0]
+        else:
+            sm["tk_version"] = _infer_version(sm.get("ts_start"))
         session_models.append(sm)
 
     # Build group rollup
