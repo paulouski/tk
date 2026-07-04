@@ -97,8 +97,10 @@ public static class SnapshotHarness
 
     /// <summary>Runs the fixture's declared filter in-process and returns its output, the
     /// <see cref="UnitLedger"/> it classified every input unit into, and the true input-unit
-    /// count (physical lines of input.txt) the ledger must conserve against.</summary>
-    private static (string Output, UnitLedger Ledger, int InputUnits) RunFilter(string caseDir, FixtureMeta meta, DetailLevel level)
+    /// count (physical lines of input.txt) the ledger must conserve against. Internal (rather
+    /// than private) so the Invariants test layer (Tk.Tests/Invariants/) can reuse this same
+    /// fixture-execution path instead of re-implementing per-filter dispatch.</summary>
+    internal static (string Output, UnitLedger Ledger, int InputUnits) RunFilter(string caseDir, FixtureMeta meta, DetailLevel level)
     {
         var rawPath = Path.Combine(caseDir, "input.txt");
         var raw = ReadAllTextNormalizedNewlines(rawPath);

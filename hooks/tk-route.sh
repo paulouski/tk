@@ -11,10 +11,10 @@
 
 INPUT=$(cat)
 
-tool=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty')
+tool=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
 [[ "$tool" != "Bash" ]] && exit 0
 
-cmd=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty')
+cmd=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
 [[ -z "$cmd" ]] && exit 0
 
 # Capture cwd to tag log entries. Log to a single global file (~/.claude/) rather

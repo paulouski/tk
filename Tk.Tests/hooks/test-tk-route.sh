@@ -1,0 +1,228 @@
+#!/usr/bin/env bash
+# test-tk-route.sh — case-matrix test for hooks/tk-route.sh, the production PreToolUse router
+# that has had zero test coverage. Runs each case against the REAL hook script in a fully
+# isolated environment: a temp HOME (so the decision log never touches the real
+# ~/.claude/tk-hook.log) and a controlled PATH containing a FAKE `rtk` stub (recognizes a fixed
+# command list, prints "rtk <cmd>" and exits 0; anything else exits 1) plus the real `jq` and
+# the handful of core utils the hook script itself needs.
+#
+# TAP-ish output: "ok - <description>" / "not ok - <description>" with a reason on failure.
+# Exit code is 0 iff every case passed. Wired into `dotnet test` via
+# Tk.Tests/hooks/HookRouteScriptTests.cs, which just shells out to this script.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HOOK="$SCRIPT_DIR/../../hooks/tk-route.sh"
+[[ -f "$HOOK" ]] || { echo "test-tk-route: cannot find hook script at $HOOK" >&2; exit 1; }
+
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+REAL_JQ="$(command -v jq || true)"
+[[ -n "$REAL_JQ" ]] || { echo "test-tk-route: jq not found on PATH, cannot run" >&2; exit 1; }
+
+# --- Fake PATH: real jq + core utils the hook needs, plus a fake rtk stub. Deliberately does
+# NOT inherit the developer's real PATH, so a real `tk`/`rtk` on this machine can't leak in and
+# mask what we're actually testing. ---
+FAKE_BIN="$WORK/bin"
+mkdir -p "$FAKE_BIN"
+ln -s "$REAL_JQ" "$FAKE_BIN/jq"
+for tool in cat date tr bash sh mkdir rm; do
+  p="$(command -v "$tool" || true)"
+  [[ -n "$p" ]] && ln -sf "$p" "$FAKE_BIN/$tool"
+done
+
+cat > "$FAKE_BIN/rtk" <<'STUB'
+#!/usr/bin/env bash
+# Fake rtk: recognizes a fixed command list for "rtk rewrite <cmd>"; prints "rtk <cmd>" and
+# exits 0 when recognized, exits 1 (no output) otherwise.
+if [[ "$1" != "rewrite" ]]; then
+  exit 1
+fi
+cmd="$2"
+case "$cmd" in
+  "docker ps"|"docker ps -a"|"git commit"|"git commit -m test")
+    printf 'rtk %s' "$cmd"
+    exit 0
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+STUB
+chmod +x "$FAKE_BIN/rtk"
+
+# --- PATH variant with no rtk at all (for the "rtk missing from PATH" case). ---
+FAKE_BIN_NO_RTK="$WORK/bin-no-rtk"
+mkdir -p "$FAKE_BIN_NO_RTK"
+for f in "$FAKE_BIN"/*; do
+  base="$(basename "$f")"
+  [[ "$base" == "rtk" ]] && continue
+  ln -sf "$f" "$FAKE_BIN_NO_RTK/$base"
+done
+
+# --- PATH variant with no jq at all (for the "jq absent" case). ---
+FAKE_BIN_NO_JQ="$WORK/bin-no-jq"
+mkdir -p "$FAKE_BIN_NO_JQ"
+for f in "$FAKE_BIN"/*; do
+  base="$(basename "$f")"
+  [[ "$base" == "jq" ]] && continue
+  ln -sf "$f" "$FAKE_BIN_NO_JQ/$base"
+done
+
+PASS=0
+FAIL=0
+
+ok() {
+  PASS=$((PASS + 1))
+  echo "ok - $1"
+}
+
+fail() {
+  FAIL=$((FAIL + 1))
+  echo "not ok - $1"
+  shift
+  for line in "$@"; do
+    echo "    $line"
+  done
+}
+
+assert_eq() {
+  local desc="$1" expected="$2" actual="$3"
+  if [[ "$expected" == "$actual" ]]; then
+    ok "$desc"
+  else
+    fail "$desc" "expected: [$expected]" "actual:   [$actual]"
+  fi
+}
+
+assert_true() {
+  local desc="$1" cond="$2"
+  if [[ "$cond" == "1" ]]; then
+    ok "$desc"
+  else
+    fail "$desc"
+  fi
+}
+
+# Fresh FAKE_HOME per invocation so each case's decision-log check starts from a clean slate.
+FAKE_HOME="$WORK/home"
+
+# hook_run <path> <command> [cwd]
+# Runs the hook with tool_name=Bash, tool_input.command=<command>, cwd=<cwd or /repo>, against
+# the given PATH. Sets globals OUT, ERR, RC, LOG_CONTENT.
+hook_run() {
+  local path="$1" cmd="$2" cwd="${3:-/repo}"
+  rm -rf "$FAKE_HOME"
+  # Real Claude Code always has ~/.claude/ in place before a hook ever runs (it's where the
+  # hook config itself lives) — pre-create it so the isolated HOME matches that reality rather
+  # than exercising the unrelated "no ~/.claude at all" edge case.
+  mkdir -p "$FAKE_HOME/.claude"
+
+  local input
+  input=$(jq -n --arg c "$cmd" --arg cwd "$cwd" \
+    '{tool_name:"Bash", tool_input:{command:$c}, cwd:$cwd}')
+
+  OUT="$(PATH="$path" HOME="$FAKE_HOME" bash "$HOOK" <<<"$input" 2>"$WORK/stderr")"
+  RC=$?
+  ERR="$(cat "$WORK/stderr")"
+  if [[ -f "$FAKE_HOME/.claude/tk-hook.log" ]]; then
+    LOG_CONTENT="$(cat "$FAKE_HOME/.claude/tk-hook.log")"
+  else
+    LOG_CONTENT=""
+  fi
+}
+
+# expect_rewrite <desc> <command> <expected_new_command> <expected_decision> [cwd]
+expect_rewrite() {
+  local desc="$1" cmd="$2" expected_new="$3" decision="$4" cwd="${5:-/repo}"
+  hook_run "$FAKE_BIN" "$cmd" "$cwd"
+
+  assert_eq "$desc: exit 0" "0" "$RC"
+  local got_new
+  got_new="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.updatedInput.command // empty')"
+  assert_eq "$desc: updatedInput.command" "$expected_new" "$got_new"
+  local got_decision
+  got_decision="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecision // empty')"
+  assert_eq "$desc: permissionDecision" "allow" "$got_decision"
+  assert_true "$desc: decision-log line present" "$([[ "$LOG_CONTENT" == *$'\t'"$decision"$'\t'* ]] && echo 1 || echo 0)"
+  assert_true "$desc: decision-log carries original cmd" "$([[ "$LOG_CONTENT" == *"$cmd"* ]] && echo 1 || echo 0)"
+}
+
+# expect_passthrough <desc> <command> [cwd] [path]
+expect_passthrough() {
+  local desc="$1" cmd="$2" cwd="${3:-/repo}" path="${4:-$FAKE_BIN}"
+  hook_run "$path" "$cmd" "$cwd"
+
+  assert_eq "$desc: exit 0" "0" "$RC"
+  assert_eq "$desc: no stdout (pass-through, command unchanged)" "" "$OUT"
+  assert_eq "$desc: no decision-log entry" "" "$LOG_CONTENT"
+}
+
+echo "# hooks/tk-route.sh case matrix"
+
+# ── tk-routed commands ──────────────────────────────────────────────────────
+expect_rewrite "dotnet build -> tk" "dotnet build" "tk dotnet build" "route-tk"
+expect_rewrite "dotnet test -> tk" "dotnet test" "tk dotnet test" "route-tk"
+expect_rewrite "dotnet restore -> tk" "dotnet restore" "tk dotnet restore" "route-tk"
+expect_rewrite "git status -> tk" "git status" "tk git status" "route-tk"
+expect_rewrite "git log -> tk" "git log" "tk git log" "route-tk"
+
+# ── rtk-routed commands (fake rtk recognizes these) ─────────────────────────
+expect_rewrite "git commit -> rtk" "git commit -m test" "rtk git commit -m test" "route-rtk"
+expect_rewrite "docker ps -> rtk" "docker ps" "rtk docker ps" "route-rtk"
+
+# ── git diff/show: deliberately excluded from both tk and rtk routing ───────
+expect_passthrough "git diff -> pass, no log" "git diff"
+expect_passthrough "git show HEAD -> pass, no log" "git show HEAD"
+
+# ── already wrapped: never double-wrap ───────────────────────────────────────
+expect_passthrough "already tk -> pass, no log" "tk git status"
+expect_passthrough "already rtk -> pass, no log" "rtk rewrite git status"
+
+# ── compound commands: unsafe, left untouched ───────────────────────────────
+expect_passthrough "pipe -> pass (unsafe)" "dotnet build | cat"
+expect_passthrough "&& chain -> pass (unsafe)" "git status && echo done"
+expect_passthrough "; separator -> pass (unsafe)" "git status; echo done"
+expect_passthrough 'subshell $(...) -> pass (unsafe)' 'echo $(git status)'
+expect_passthrough "backtick substitution -> pass (unsafe)" 'echo `git status`'
+expect_passthrough "trailing background & -> pass (unsafe)" "git status &"
+hook_run "$FAKE_BIN" "$(printf 'git status\necho done')"
+assert_eq "embedded newline -> pass (unsafe): exit 0" "0" "$RC"
+assert_eq "embedded newline -> pass (unsafe): no stdout" "" "$OUT"
+assert_eq "embedded newline -> pass (unsafe): no decision-log entry" "" "$LOG_CONTENT"
+
+# ── quoted metacharacters: the hook's unsafe-detection is a literal substring match on the
+# raw command string, not shell-aware — it does NOT know "&&" is inside a quoted string here.
+# This documents (and pins) that actual behavior rather than the "ideal" one. ──────────────
+expect_passthrough 'quoted "&&" still flagged unsafe (documented gap)' 'echo "a && b"'
+
+# ── redirects: NOT unsafe; a single redirected command still gets the tk prefix ────────────
+expect_rewrite "redirect -> still routed to tk" "git status > /tmp/tk-route-test-out.txt" \
+  "tk git status > /tmp/tk-route-test-out.txt" "route-tk"
+
+# ── git -C / git -c: the routing regex anchors on '^git status'/'^git log', so these do NOT
+# match — documents the current (gap) behavior rather than asserting an "ideal" one. ────────
+expect_passthrough "git -C <dir> status -> pass (regex doesn't match, documented gap)" \
+  "git -C /some/other/repo status"
+expect_passthrough "git -c k=v status -> pass (regex doesn't match, documented gap)" \
+  "git -c core.pager=cat status"
+
+# ── rtk unavailable ──────────────────────────────────────────────────────────
+expect_passthrough "rtk missing from PATH -> pass" "docker ps" "/repo" "$FAKE_BIN_NO_RTK"
+
+# ── rtk present but doesn't recognize the command (fake exits 1) ────────────
+expect_passthrough "rtk rewrite exit 1 -> pass" "kubectl get pods"
+
+# ── jq absent: silent no-op, exit 0, no stdout, no stderr noise ─────────────
+rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"
+input=$(jq -n --arg c "git status" --arg cwd "/repo" '{tool_name:"Bash", tool_input:{command:$c}, cwd:$cwd}')
+OUT="$(PATH="$FAKE_BIN_NO_JQ" HOME="$FAKE_HOME" bash "$HOOK" <<<"$input" 2>"$WORK/stderr")"
+RC=$?
+ERR="$(cat "$WORK/stderr")"
+assert_eq "jq absent: exit 0" "0" "$RC"
+assert_eq "jq absent: no stdout" "" "$OUT"
+assert_eq "jq absent: no stderr noise" "" "$ERR"
+
+echo "# --- $PASS passed, $FAIL failed ---"
+[[ "$FAIL" -eq 0 ]]

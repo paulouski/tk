@@ -30,6 +30,7 @@ public sealed class FilesCommand : ICommand
         var extension = ParseExtension(flags);
         var top = ParseTop(flags) ?? (raw ? 50 : detail == DetailLevel.More ? 20 : 8);
         List<string> files;
+        var deniedPaths = new List<string>();
 
         if (changedOnly)
         {
@@ -37,7 +38,14 @@ public sealed class FilesCommand : ICommand
         }
         else
         {
-            files = EnumerateFiles(path, includeIgnored: raw, codeFocused, unityMode).ToList();
+            try
+            {
+                files = EnumerateFiles(path, includeIgnored: raw, codeFocused, unityMode, deniedPaths, isRoot: true).ToList();
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+            {
+                return ($"tk files: {path}: permission denied\n", 1);
+            }
         }
 
         if (!string.IsNullOrEmpty(extension))
@@ -62,6 +70,8 @@ public sealed class FilesCommand : ICommand
 
         var sb = new StringBuilder();
         sb.Append(codeFocused ? $"files code n={relative.Count}" : $"files n={relative.Count}");
+        if (deniedPaths.Count > 0)
+            sb.Append($" err={deniedPaths.Count}");
         if (!string.IsNullOrEmpty(extension))
             sb.Append($" ext={extension.TrimStart('.')}");
         if (changedOnly)
@@ -85,9 +95,38 @@ public sealed class FilesCommand : ICommand
         return (sb.ToString(), 0);
     }
 
-    private static IEnumerable<string> EnumerateFiles(string path, bool includeIgnored, bool codeFocused, bool unityMode = false)
+    /// <summary>
+    /// Enumerates files under <paramref name="path"/>. A permission-denied (or otherwise
+    /// unreadable) subdirectory is recorded in <paramref name="deniedPaths"/> and skipped —
+    /// kept as a visible diagnostic (the caller surfaces it as an "err=" count) rather than
+    /// silently dropped or crashing the whole command. The root call (<paramref name="isRoot"/>)
+    /// is the one exception: an unreadable ROOT is a hard error for the whole command, so its
+    /// exception is left to propagate to the caller.
+    /// </summary>
+    private static IEnumerable<string> EnumerateFiles(string path, bool includeIgnored, bool codeFocused, bool unityMode, List<string> deniedPaths, bool isRoot = false)
     {
-        foreach (var file in Directory.GetFiles(path))
+        string[] files;
+        string[] directories;
+        var denied = false;
+        try
+        {
+            files = Directory.GetFiles(path);
+            directories = Directory.GetDirectories(path);
+        }
+        catch (Exception ex) when (!isRoot && ex is UnauthorizedAccessException or IOException)
+        {
+            files = [];
+            directories = [];
+            denied = true;
+        }
+
+        if (denied)
+        {
+            deniedPaths.Add(path);
+            yield break;
+        }
+
+        foreach (var file in files)
         {
             if (!RepoScope.ShouldIncludeFile(file, codeFocused, unityMode))
                 continue;
@@ -95,12 +134,12 @@ public sealed class FilesCommand : ICommand
             yield return file;
         }
 
-        foreach (var directory in Directory.GetDirectories(path))
+        foreach (var directory in directories)
         {
             if (!RepoScope.ShouldIncludeDirectory(directory, includeIgnored, codeFocused, unityMode))
                 continue;
 
-            foreach (var file in EnumerateFiles(directory, includeIgnored, codeFocused, unityMode))
+            foreach (var file in EnumerateFiles(directory, includeIgnored, codeFocused, unityMode, deniedPaths))
                 yield return file;
         }
     }

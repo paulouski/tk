@@ -28,7 +28,16 @@ public sealed class TreeCommand : ICommand
         var includeIgnored = raw || flags.Contains("--all");
         var maxDepth = ParseDepth(flags) ?? (raw ? 5 : detail == DetailLevel.More ? 3 : 2);
         var topFiles = raw ? 12 : detail == DetailLevel.More ? 8 : 5;
-        var root = BuildNode(path, includeIgnored, codeFocused, currentDepth: 0, maxDepth, unityMode);
+
+        DirectoryNode root;
+        try
+        {
+            root = BuildNode(path, includeIgnored, codeFocused, currentDepth: 0, maxDepth, unityMode, isRoot: true);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            return ($"tk tree: {path}: permission denied\n", 1);
+        }
         var directoryCount = CountDirectories(root) - 1;
         var fileCount = CountFiles(root);
 
@@ -47,21 +56,47 @@ public sealed class TreeCommand : ICommand
         return (sb.ToString(), 0);
     }
 
-    private static DirectoryNode BuildNode(string path, bool includeIgnored, bool codeFocused, int currentDepth, int maxDepth, bool unityMode = false)
+    /// <summary>
+    /// Builds the node for <paramref name="path"/>. A permission-denied (or otherwise
+    /// unreadable) subdirectory is kept as a visible diagnostic leaf (<see cref="DirectoryNode.Denied"/>)
+    /// rather than silently dropped or crashing the whole command — see docs fs-edge policy.
+    /// The root call (<paramref name="isRoot"/>) is the one exception: an unreadable ROOT is a
+    /// hard error for the whole command, so its exception is left to propagate to the caller.
+    /// </summary>
+    private static DirectoryNode BuildNode(string path, bool includeIgnored, bool codeFocused, int currentDepth, int maxDepth, bool unityMode = false, bool isRoot = false)
     {
         var node = new DirectoryNode(path);
 
-        var directories = Directory.GetDirectories(path)
-            .Where(d => RepoScope.ShouldIncludeDirectory(d, includeIgnored, codeFocused, unityMode))
-            .OrderBy(d => d, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        foreach (var file in Directory.GetFiles(path)
-            .Where(f => RepoScope.ShouldIncludeFile(f, codeFocused, unityMode))
-            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
+        List<string> directories;
+        List<string> files;
+        var denied = false;
+        try
         {
-            node.Files.Add(file);
+            directories = Directory.GetDirectories(path)
+                .Where(d => RepoScope.ShouldIncludeDirectory(d, includeIgnored, codeFocused, unityMode))
+                .OrderBy(d => d, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            files = Directory.GetFiles(path)
+                .Where(f => RepoScope.ShouldIncludeFile(f, codeFocused, unityMode))
+                .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
+        catch (Exception ex) when (!isRoot && ex is UnauthorizedAccessException or IOException)
+        {
+            directories = [];
+            files = [];
+            denied = true;
+        }
+
+        if (denied)
+        {
+            node.Denied = true;
+            return node;
+        }
+
+        foreach (var file in files)
+            node.Files.Add(file);
 
         if (currentDepth >= maxDepth)
         {
@@ -73,7 +108,7 @@ public sealed class TreeCommand : ICommand
         foreach (var directory in directories)
         {
             var child = BuildNode(directory, includeIgnored, codeFocused, currentDepth + 1, maxDepth, unityMode);
-            if (!codeFocused || child.Files.Count > 0 || child.Directories.Count > 0)
+            if (!codeFocused || child.Denied || child.Files.Count > 0 || child.Directories.Count > 0)
                 node.Directories.Add(child);
         }
 
@@ -83,6 +118,12 @@ public sealed class TreeCommand : ICommand
     private static void AppendTreeNode(StringBuilder sb, DirectoryNode node, int depth)
     {
         var indent = new string(' ', depth * 2);
+        if (node.Denied)
+        {
+            sb.AppendLine($"{indent}{Path.GetFileName(node.Path)}/ (permission denied)");
+            return;
+        }
+
         var dirCount = node.TrueChildDirCount is int trueCount
             ? $"{trueCount}+"
             : (CountDirectories(node) - 1).ToString();
@@ -119,5 +160,9 @@ public sealed class TreeCommand : ICommand
         /// (set instead of leaving it indistinguishable from a genuine leaf at d=0).
         /// </summary>
         public int? TrueChildDirCount { get; set; }
+
+        /// <summary>True when this directory could not be read (permission denied / IO error) —
+        /// kept as a visible diagnostic leaf rather than dropped or crashing the command.</summary>
+        public bool Denied { get; set; }
     }
 }
