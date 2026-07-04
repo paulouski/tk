@@ -1,0 +1,37 @@
+Commands/ChangesCommand.cs:7:public sealed class ChangesCommand : ICommand
+Commands/BuiltinRegistry.cs:7:public sealed class BuiltinRegistry
+Commands/CallersCommand.cs:5:public sealed class CallersCommand : ICommand
+Commands/BranchCommand.cs:7:public sealed class BranchCommand : ICommand
+Commands/DefCommand.cs:5:public sealed class DefCommand : ICommand
+Commands/FilesCommand.cs:7:public sealed class FilesCommand : ICommand
+Commands/CommandContext.cs:8:public sealed class CommandContext
+Commands/FocusCommand.cs:6:public sealed class FocusCommand : ICommand
+Commands/InitCommand.cs:5:public sealed class InitCommand : ICommand
+Commands/GitCommand.cs:6:public sealed class GitCommand : ICommand
+Commands/LsCommand.cs:3:public sealed class LsCommand : ICommand
+Commands/LogCommand.cs:5:public sealed class LogCommand : ICommand
+Commands/ModuleCommand.cs:5:public sealed class ModuleCommand : ICommand
+Commands/MvCommand.cs:8:public sealed class MvCommand : ICommand
+Commands/RefsCommand.cs:5:public sealed class RefsCommand : ICommand
+Commands/RenameCommand.cs:5:public sealed class RenameCommand : ICommand
+Commands/LspStatusCommand.cs:9:public sealed class LspStatusCommand : ICommand
+Commands/ViewCommand.cs:7:public sealed partial class ViewCommand : ICommand
+Commands/UnityCommand.cs:6:public sealed class UnityCommand : ICommand
+Commands/LspDaemonCommand.cs:10:public sealed class LspDaemonCommand : ICommand
+Filters/DotnetTestFilter.cs:7:public sealed partial class DotnetTestFilter(DetailLevel detailLevel = DetailLevel.Default) : IOutputFilter
+Commands/QualityCommand.cs:8:public sealed class QualityCommand : ICommand
+Filters/GitDiffFilter.cs:9:public sealed partial class GitDiffFilter : IOutputFilter
+Commands/ProcessRunner.cs:5:public sealed class ProcessRunner : IProcessRunner
+Filters/GitLogFilter.cs:8:public sealed partial class GitLogFilter : IOutputFilter
+Filters/GrepFilter.cs:11:public sealed partial class GrepFilter : IOutputFilter
+Commands/TreeCommand.cs:6:public sealed class TreeCommand : ICommand
+Filters/IOutputFilter.cs:9:public sealed class PassthroughFilter : IOutputFilter
+Commands/SwitchCommand.cs:3:public sealed class SwitchCommand : ICommand
+Filters/DotnetRestoreFilter.cs:8:public sealed partial class DotnetRestoreFilter : IOutputFilter
+Common/CountingTextWriter.cs:9:public sealed class CountingTextWriter : TextWriter
+Filters/DotnetBuildFilter.cs:7:public sealed partial class DotnetBuildFilter : IOutputFilter
+Filters/GitCompactFilter.cs:7:public sealed class GitCompactFilter : IOutputFilter
+Common/GitPorcelain.cs:3:public sealed record GitPorcelainEntry(char X, char Y, string Path);
+Filters/FindFilter.cs:7:public sealed class FindFilter : IOutputFilter
+Filters/GitStatusFilter.cs:8:public sealed partial class GitStatusFilter : IOutputFilter
+Common/Diagnostic.cs:3:public sealed record Diagnostic(

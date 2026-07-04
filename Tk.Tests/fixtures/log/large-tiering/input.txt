@@ -1,0 +1,2704 @@
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://localhost:5000
+info: Microsoft.Hosting.Lifetime[0]
+      Application started. Press Ctrl+C to shut down.
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 6513270e-269e-0d37-f2a7-4de452e6b438 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record d23f0824-128b-2f33-0c5c-7fd0a6a3a450 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 9531985d-5d9d-c9f8-1818-e811892f902b from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 36f675cc-81e7-4ef5-e8e2-5d940ed90475 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 6b0d549b-6f03-675a-1600-a35a099950d8 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 8d116ece-1738-f7d9-3d9c-172411e20b8f from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 90c192cf-d3ac-94af-0f21-ddb66cad4a26 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record a170b338-3926-3059-f28c-105d1fb17c23 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 0fd630f1-f29d-0da9-953f-48f1a09f76b5 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 0cb1e29c-658c-da14-95e6-0af593bd04cf from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 8e81973e-0bec-d7b0-3898-d190f9ebdacc from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 6b4cb242-4a23-d596-2217-beaddbc496cb from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 92276658-1e27-a1c0-8a6a-63ec24ede6a4 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record ae97ba94-d0ed-a82f-8f6d-05584ef8aa38 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 923a7369-94e3-bf91-1a61-dbe22e44158b from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 18f135d2-5f55-7203-3018-50c5a38fd547 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 907a70c3-1012-f037-b64c-e4228c38fb29 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 7f150524-34b9-b5df-9e77-69b10f4205b4 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record c6f87718-6d76-b07e-881e-d162ae2eb154 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record ec66a787-95e7-61d1-7731-af10506bf2ef from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 3f98e277-4cbd-87ad-5c90-a9587403e430 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record c7a2ea20-b2f1-4c94-2e05-319acb5c7427 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 4cdd2055-930d-6eaf-14f4-733f3e7d1bfb from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 57ee05cd-e009-02c7-7ebf-f20686734721 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 9be4bcfc-49b6-4a08-72e6-cc3ababced20 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 830e07bc-1e39-8f10-12bd-4acefaecbd38 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 5790f82e-c1d3-fcff-2a3a-f4d46b0a18e8 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 6bf46c69-7d2c-af82-eeea-cbe226e87555 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 13deef86-ab10-31d0-f646-e1f40a097c97 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record ca02135e-92b1-d3f2-8ede-0d7ac3baea9e from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 57124242-5051-c1cc-d17f-9acae01f5057 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 7f26144b-9828-9fcd-59a5-4a7bb1fee08f from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 119a72d1-74c9-df6a-cc01-1cdd9474031b from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 451abd81-f1d6-9ed6-17f5-e837d70820fe from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 10a3d6b2-aa05-e11a-b271-5945795e8229 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 4f426dcb-b394-fb36-bb2d-420f0f88080b from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record ae658f33-fe3b-890b-93f4-48b3a5aa3c81 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record b774eb52-48db-40af-7215-8370d269a9a5 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 58d5563d-ab2c-d31e-e315-128862c33a4f from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 5affb229-7631-a992-f0ce-583505c6af07 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 7e62aa0a-1df9-fd78-9c65-39382b0537e6 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 49952399-c4aa-eac1-37dc-76fb0f17a300 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 65dc9f50-3f63-af83-bd05-61e6211c70cf from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 7f1b103c-df15-82b0-eab4-77d26415479c from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 66d22876-72fd-f202-2a96-fb1a14a0f9e7 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 230d977e-e225-7159-4720-771f8ca81811 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 8cdb305f-dd2e-1609-6e36-aab0d1bc52d9 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record fc891b4a-6a50-df4d-b4d6-6a3a47469a4d from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 616499c9-e25a-7605-aec6-f0245bd86d40 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 153e7c2a-26a2-c0bd-3b12-87fff52ddf5d from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record a8948c89-3b61-8676-26bb-7dbd2d1c9af0 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record d4c28c2e-7c26-847f-0316-909e3bbbe9ea from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 482c9cbc-4343-5cc5-2eae-05cf96d0cc5f from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 88daf401-6b40-13ef-254b-0c4e010c4759 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 519088f5-90fb-bd11-9c1c-aaf75e8766ed from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record dbf4a8b2-b0c4-312d-2020-3626f3fe39c0 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record a7abe1c2-9e1a-8ef4-f341-e07a83f73f16 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 74e69a5d-0dd2-7a65-bd62-8881ad1b72db from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record f3aed0b6-c7ac-1491-def8-8334e647cb8f from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 8f2c6ec8-cc41-69a3-ae3a-2b7fdfe01893 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 64e50cad-6623-7a04-65e7-e4236472f1a3 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 66836886-a260-cd0b-7b45-145c1a81682c from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record fc132d0d-113d-b17d-30cb-c97d0fef7928 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 1c2442f9-298c-b3a5-70cc-ec313571810a from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 1a358ca0-0d75-985d-99c9-4309570dc195 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 895fd7b3-26b9-4c7f-9118-bb16000f49c8 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 9d1de2a0-5d15-8a2f-f2ee-4e4519f9919c from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 353c631c-dfd4-3f37-1200-339d068739fa from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record a268aa87-2607-679d-6050-914a9d33a01c from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 9a2ef80f-58ee-8571-f499-8d7c4093f6de from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 1d87cec3-1f72-96ab-7961-fd925d39d0a8 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record fa529ba3-fe3b-fada-7cf2-0724d953ee26 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 4fd58dbe-7bdc-968b-7afb-2c68774b15d7 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record bfeaa155-1a28-f7b3-24e4-e25a15fc899e from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 7a86f7a2-43c7-1b9a-bd87-a86557b6fb7e from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 842e7fc2-2954-0a6e-b12a-a1f6d42fddbb from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record f3b7a50d-f373-ca53-3488-f87605e999f3 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record b0a844e5-2587-be6b-5c9b-cf35873be078 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record c215a82a-06ec-41ad-ea05-75438b0d590b from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record a49636a2-fa7f-0eab-4c4f-9b0687322e25 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record d86f40f6-b239-f3c7-174c-77a2dd02de92 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record e883a1d4-5de0-0997-84b5-a81842d87208 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 3908f227-c59d-b916-5b0e-e76f2ac34446 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 80b0c08b-c770-2420-8aa4-248c8857f9a4 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 9cfc8652-3919-4242-a2ed-dbbd5464ecc2 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record c2216b02-fc24-1d0b-c9d4-88b1cfbf3360 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 3d4882a5-ce5b-2a92-31f5-1707da45e18a from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record cda6c6fd-bd68-5167-6693-4036d17e4497 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 7e26f36a-8483-f8b8-332d-d3313a0b9965 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record fd56a926-076b-3e36-bb23-13f55b06258e from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 78e4b98d-4787-f93b-ca44-eb860726e25c from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 9aea6429-b149-1e24-3192-b70442594052 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record cefe2a1f-727d-8349-5822-cb77f4de2c08 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 597a1ecf-fcf0-0fec-b91e-e9e5efe09f07 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 149e259b-5d58-c705-f979-d04af47aebdd from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 78572976-3a12-917c-1a26-f88938703800 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 7b8f2ab5-3451-d013-5675-f6ad325b55dd from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record 9c3a23cd-e67a-9b75-fc39-47249fc2d0a1 from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record e8c14743-7abe-c539-007d-1034d726c86b from feed-1
+info: Contoso.Ingest.FeedWorker1[201]
+      Ingested record a4a45eff-ccb5-73d9-5810-d60ea72991b9 from feed-1
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 1eb20109-a91c-2439-d5ab-8b4d15b40aeb from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record b6246771-c845-0070-6377-1407e8e72789 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record e39639be-7a60-5a91-3306-98a1c0093492 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record a2c68e45-ca04-c79f-6f15-b6ad2db3997f from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record f237e45a-cd02-c5e1-1635-3d03551fd8f9 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 7691b06f-6555-abfe-b8c9-817af8be8831 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 15bd448f-f261-49ed-be4c-5ce666c1494e from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record fe3c9c8f-2b85-5c1f-28aa-ca51b98c67c2 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 973f7986-26b1-cffc-070d-710920859634 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record a7e6529b-ce76-e9f4-7721-6e9ee7a46309 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 988af3fb-d396-30d6-9c90-11ef256badf9 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record effddeea-a842-bc19-796f-74adfaf55496 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 8c5c715f-8c74-fc1e-27e9-e06f59b44e92 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record cca2a92b-03a5-6cc1-057a-40b22188287e from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 1a4f44f9-a651-1445-b9f3-635cf88c422b from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 23a5ef88-ef02-090b-bfde-fc1586ce03f9 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 31dec4f4-df2a-8b79-fc8e-80b36f0e2289 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 072a98d2-3606-defc-dfb8-5c0dd37ee915 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 804c25d6-4aff-dcd1-3678-bc8d40783f0a from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 53740902-9620-bf0d-c380-84a03d93fd4c from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record d58dcdb4-6b44-6806-8b5a-b3ee4265bb31 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record bd6b881a-e8f6-e0bd-0f97-7044218e0b7b from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record a997f351-754a-09cd-e5cf-edfa5a9196f0 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 844a7034-e77f-fe48-d0a6-ec179556585e from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record e0cfab4c-eaef-c4d2-d3bf-6d016bae4b5b from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 26debfdb-8825-ae56-2179-b37d806c10b5 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record df703017-04c9-d78d-82b3-359986048719 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 9bca3cb7-2ee0-289d-c6c9-1b9270ac06ac from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 265974a7-cc96-6f46-c6aa-7d550101b811 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 9e7d6b37-7936-d536-243d-35702c1eea1f from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 0fcf31ca-8e75-2fdf-1ece-615db9a6442e from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 87ddaeb7-84b2-8054-aead-44b0537390e5 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record c6c80e2b-c8c6-14b2-7b84-44d18e317041 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 0e8bec94-8f6f-915f-e21b-37ca1b29fc99 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 0acd8be1-46e4-0990-30f9-70583f9d52f9 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 73c1cd2c-81f9-8b52-1905-d591c5b2e75a from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record e4ddf9b9-c28e-e907-0722-35c28fcd7f40 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 535b6a43-7178-ba0a-1038-f0b5e998d0ee from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 9b2bd6c0-816b-ee06-f92e-23399ccea098 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 46f5a1b4-b156-d1ad-330c-16a3831d03bf from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record ceaf4915-8885-64e8-8216-858f73ccef03 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 3f665ede-f106-37ce-81fc-069e7a609683 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record e040015c-e064-a114-85f1-115bb2fff17b from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record ec3b9605-4274-a3eb-ed84-e91ef132bf2d from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 33dcd77f-f179-f2d2-e48b-96628f3c4be3 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 6aa8b9e0-231b-3e14-7291-35bdd70a39d1 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 50e40d54-712e-a6b3-6471-fde41f229dd0 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 6da79a87-3d9a-8079-abd0-d7fb12926185 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 4d82feac-ab62-86cd-3672-d6ae12b80aed from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record c6e50df2-e5a3-863e-1f52-5265c8b007ee from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record a4b9a9c4-b753-a1ee-f083-60852789d059 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 40cbacd0-249a-4584-5dbe-3023a906922f from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 77bd891f-f7b1-03df-2323-1e1ee2015522 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 18189af4-f3d7-4f82-bf26-8ea03836e865 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 29acf1a5-7cbd-1f5a-e28a-f60465f42986 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 3945336b-d51b-1815-aaf7-19f3fd68373b from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record fe7b8ae4-6e78-36a4-b4d1-9ec12955d6f0 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 6bd8c676-56d0-50cd-6760-136783feb17b from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 179a071e-518a-e452-5b4b-1b75321c5296 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 5685d624-04fc-d555-5daf-106db8dee081 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record b401ba85-70c1-dca1-756b-72898dd63cb9 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 84768b8c-54dd-0ba5-6264-67ba04a10547 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record f5f554ed-8323-9ef5-4ba2-e1619fb9af50 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record eb25f8a1-fc2e-6a59-1ce3-bc0c10755c97 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record e05b3e13-f8c1-10fb-3a82-8159c9d22950 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 459c945c-43fc-0527-1585-0a031ad2d5f1 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 2e7a26e9-c76c-603f-e7e8-f9f60a227385 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record d1dcec53-212a-8d9b-c17a-9262453bf491 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record ad0c9bb6-e952-6a69-d97e-967b6c18d982 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 67ec326a-4234-3354-f22d-2882d1a89b37 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 83c8cb28-eb4e-d2e3-895e-8b6b263cfa5e from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 53b97377-b34e-8ece-7e9e-e51d9212824c from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record ccb1c51d-0eba-0ea8-4770-a08716e6fec3 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record e5316960-6ce1-93c2-2eef-a279b02e3d8d from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 044f1574-f037-afc6-44d8-2a531289bafa from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 42b38755-cd37-880e-16ac-4191a26aa0ae from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 38efbaeb-db31-ccd2-9bb1-83e11570266b from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 1f2642aa-dcde-d204-43b3-0f66110e2cb6 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record fe8ad4a1-56d2-a68c-02f4-b342742a8063 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record ea59679a-ed3a-32a8-6af2-57488d959c31 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 0b0f873b-2114-e068-9f27-f52c449274d2 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record f0290531-3d0a-270b-b5a4-32cf86e3e726 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 430b91ed-2954-ba5c-f81e-54dd1c0502c6 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record eea7bb64-33a7-1568-2e5f-950c0ce5af69 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 87f53ddd-4e14-d571-a0f0-96da4fdebbec from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 721888ff-4a3a-df99-34b3-ff60c26e7a42 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 4540f426-2d8a-d8c0-ac12-7e938005ce74 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record fe977c56-04a6-5651-cdbd-e74758d50f1b from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 04b8157d-03ed-b920-0975-8340401d68fb from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record fa619774-8d11-8e37-8172-8a07bbab27f6 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 3ee4da5a-7989-e9d0-83a4-e62930803889 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record a887ae22-1b35-411b-7272-3b9cef44c0d5 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record a81100a1-6ea3-30a1-a66d-58b5d1a4c01e from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record e3838b9e-d5a9-422a-8bc0-83117eb86c57 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 4ecadea2-81b6-2bb5-f866-64ae64a149f5 from feed-2
+info: Contoso.Ingest.FeedWorker2[202]
+      Ingested record 3ac4da9a-fb81-3921-3716-1c16b00fd7bb from feed-2
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record e1c60aa3-d510-bb04-32d9-0dcd57bb7d97 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 23c49cae-a2cf-62ba-ba95-8810b4ebf4b6 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record fb5c9d56-58f9-2dea-fd4b-d030679a44dd from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 03a63966-213b-ca7f-d644-de2f0dec6823 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record e13e213e-bdaa-ea00-a01d-616f121ae3e6 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 0e2ec40a-29ca-862d-6e45-05f5416e99b0 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 618177ff-d75d-6769-aa4c-5c6015a0cce6 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record f88ede10-aba8-b9b3-8185-797cdedb9109 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record b153d69c-3e01-aaa6-9949-8ac4482cc78e from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 2f733b05-759e-b559-0b94-af3a4b05e1ae from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 00ed6b02-7221-8fdc-44df-96ff28541424 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 54348156-f637-a468-5d38-5e064363e5d9 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 52d31e1b-8c0d-0033-fc23-25a9f8fdd208 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record e1e437b7-f735-efe6-08d1-80113e940bb4 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 2ed65411-5b49-1561-37c6-0e984f3e885e from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 1579da0a-61b2-480c-55d8-5e8d00460d69 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record a7f0c99e-80b5-244a-4767-e1fa79823eb2 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record c6b789ef-8136-5acc-3f88-af5933736dcc from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record d129d067-43a0-8f06-1742-0e940144702b from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 963892a7-6646-5d28-24d4-589c16fa1421 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 4cb59aa7-05c2-2d3f-64db-c8d30aaaaf81 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 15a0a8ae-3b99-6870-a132-0b9d4de2f8ad from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record da6e6d8e-8778-f742-f527-b5c295e8c93e from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record e48e9e02-a854-c834-27be-9ab1c0236e49 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 98b81c66-e10c-167d-c8b6-eaffb74b589b from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record b87e4e2b-537d-9128-c3a9-e88963b759f5 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 48bfcbcf-2643-3798-7e83-4904fc173498 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 250e7b34-a4aa-07b4-9e63-97d4b96245d3 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record b70af5f2-d5d5-891f-d329-d65c0b35b1de from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 6de2fb1f-a098-d691-8352-bc85e456559c from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 816b2332-cfed-943b-b378-3a7cbbddbb9b from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record c0bbe6ed-8614-f504-e8ee-65a123a9a9da from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record d01a914c-d5be-785a-9187-df42811e7616 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record afbc9ca9-d38f-8c45-041d-cd94cdff5a1c from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record b6104b84-e490-7d49-cc47-93d795850e21 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record a4946d15-b17d-d255-f4c1-8226aed23b0f from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 0ab77988-07fa-22f7-15c8-91ff3add6527 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record f5a2d879-5c57-532b-a31a-49dd22126540 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 738e0b77-d5f8-60c3-606a-0deb1adbce5d from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 04d2be09-a0b5-5864-0cff-f0548efba442 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 3e9b768f-ae40-01e3-880c-b401a0506098 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 74fa9412-00d9-3534-4387-ee7b7d42646f from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record eeb89ff1-bf8e-51aa-11f2-d44dcc35e834 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 1789819f-8902-dafc-e5d9-fe8180c2b5f1 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record bee80626-10e8-ad01-86a7-4a63a8c7d9e0 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record cf28f65e-408f-c146-794e-c926bc9e28ea from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 3c1ae917-43fb-9fbc-d89c-36b2130f27b2 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 3b1185d9-3489-22d7-c1a6-24dcbab5b373 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 75d8d8a4-f9c9-c679-a661-f62cbd65680c from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 13a5397f-61ef-7bd1-d874-bc797e736d5f from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 498dbfa8-af06-bcf7-e914-57db7aa068f1 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record a1feb624-9df2-025f-0bf7-a4bdc458272f from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 998648e0-13d5-316f-32c3-2444a48c1d5c from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record a6caf4a3-4102-3aed-54ef-125a25bda659 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 9f03bc5a-4dee-4812-b161-07f1be437c7b from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 7b7fec4b-0331-2ead-2229-30ae9158d4a8 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record f8f659ac-44ce-4ab3-7c5d-42dc0f877ae3 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 37bac233-b133-0c3f-197a-14e2ac084ba5 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record b578909c-4a75-91f2-7d57-5d17acfb2d5e from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 774510ca-76f4-251e-4919-61a1843baee9 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record fe48ef63-1e56-3408-c465-3cde776200b5 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 4fc9e918-3302-0ccd-8c90-473ee4c717fd from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 7912ef4a-efae-5d4e-15fa-8b65fa6672cd from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 13932904-757f-1cba-4a22-7f39047b2c10 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record fe9eb4ad-f7d5-f124-81b1-c025d1e4d0a3 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 63087e52-44c6-b895-fe74-9e67730f37f1 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record ee379c65-f212-01e4-eaa3-556c35b7e448 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 171e1a8c-94db-5f8f-1319-d42435f10300 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 4305e986-8629-2bb5-bf5b-411b24491df6 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 9a762d54-21f2-67e2-5c0b-b40ff3e6ca73 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 4791c2e9-823d-11ed-a1b5-01d6d1f9bdfe from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 5d7cfed1-b40d-e56d-1cd8-6fc1e3096619 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record e04b0dce-e5d0-0a4d-7f75-95b53b3bf4bf from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 28b88073-065b-8c35-64e2-76027c73b6c9 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record ae7c8f09-7ddf-cbc9-f330-8ce500eb4e11 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record ba28a679-4d4c-a9c7-67c9-8fb9736506ec from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 60487e15-580d-c5ab-6a8a-d9cb24056360 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 54d1ac6b-d719-6189-1ef3-ea4450ea7da7 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 569908f6-c030-1b21-5315-8ce400721f84 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record f09c0afb-1ebb-0794-65f4-56aad6cff718 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 03003005-b688-b661-321c-1744ed2879c1 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 40d28406-4a32-7e2d-bd6a-996de6cd10f1 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 63e19869-6495-0dc2-10a2-5b195f49f0fc from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 138efef9-96d4-480f-deb6-7ae7ffb0dd9e from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record c172b298-6d94-dd6d-ece8-07995c57722e from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 47d7df79-0c5b-4c59-dab0-792946709312 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record a97766fb-d5ad-5360-0d36-ce2c1a09a840 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 261f40df-ef82-d1a3-a28c-f7b1491e99f5 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 6fad7936-4406-c053-f895-fc553fd3be98 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record c5ef5cfb-3099-f271-50cb-407a82ce786f from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record 6d80de7c-f4c7-3f2b-c8ff-1c385f93d180 from feed-3
+info: Contoso.Ingest.FeedWorker3[203]
+      Ingested record c2fbd8a3-cfdc-c257-076d-490ae25f4b1c from feed-3
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record e02f9a72-e9d6-25c9-6669-2158a1826327 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 34145e87-8c9a-3751-8ddc-f83cf0d1ab56 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record eef795cd-0caa-7612-14a0-b00bb835e8a5 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 9d6b023f-736b-96a0-692f-d360bb7b738e from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record de962a6d-a4fd-57c5-2379-7d45c0aed9c5 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record e9729f3f-0c89-c001-7c4e-a6034944f2ce from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 2bb71c68-2097-798c-8cd3-e418ed4142ba from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 48208231-57fa-49e5-6a34-b37178e10e70 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record bd1e6912-bd31-3bee-4178-5bc64c3ac6fc from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 67fd5499-429a-7079-a71f-11b2f9ee8bc8 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 7bb1d124-4d03-9b72-3d19-26aca7ef4f5d from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 1ea77228-64f5-4969-ab3b-74fe8eaca288 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 133e6153-2962-59c8-a4a9-15d02ad64ce9 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record cfd3dd72-e7ec-fd0c-8027-a2a235372235 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 73f6e53d-3853-933d-8ce6-21ef7f405bc8 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record c25e114f-ff18-fe33-5534-a034e8009d90 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 8c3ba859-23bc-9152-6d6b-987a73309b95 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 2cb8d14c-1739-10e3-3e7c-656731419775 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 51bcd77a-1751-f579-8e4d-c3a3578a60d8 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record cf321d63-4223-b8aa-5e49-422a3d376642 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 0524137f-e322-e96d-33bf-915791d277f2 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 6201a9d3-69ac-0f03-dee0-a843bfe98f8c from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 35c2e229-862f-e231-beef-67fb69f44612 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record c08a58d7-5694-7a7a-452e-704d607a4732 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 9304106e-470b-4fad-7f86-7d5f0fe321ec from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record afcf0e77-2039-43f6-5c32-7a6df7ba38b6 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record ca51e152-a12f-3a94-877b-55cb80de8b3e from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 17b4834c-3749-5c5e-d93f-f716dce47b21 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 627292f8-3f9a-a884-e594-09c145619fc0 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 6e8cd94e-7223-c68a-a552-9b0566567bc4 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record d07884b7-d943-5541-4fe0-4802f435a573 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 209342ca-0595-5fb9-f7d1-7ebddf75c883 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record c3813ce6-b5a2-9061-6cd9-e62a08411c07 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record f7e147fd-7928-1c19-cde3-47abe54c5de6 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 12b92a01-000b-b5f9-7d65-2135965132d6 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record ed9bf0b6-ed44-8d4e-ee24-1c43643ab9e2 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 77d8c569-daff-9a0b-8721-ecf8d359d07a from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record c879b663-3f9b-6bb2-72ee-6a2ef8e4cb5c from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 26edf1bd-2785-5798-394a-fbe91bea705e from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 1be03df0-ae9c-78bd-f8cd-9ec385b9c09a from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record b374fab6-b8c3-a4d2-d34d-1c0df1058667 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record e5174ebd-c3c9-f7e3-d8b4-c831a5b89b2f from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record c6e0673a-8d2f-29e7-15c2-c81a75134107 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 202ab6fa-c844-b8fd-0059-865a0a1fb43b from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 099f9c9f-eb7f-e26b-91c3-098c3b8a27ba from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record f662222e-4dc4-ac8c-b70b-a858a53fddc9 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 873b9903-4075-916e-a060-846c20c26f71 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record c38b48a2-b2d6-43a2-6ffb-726aa2e3f93a from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 4ce3b0cc-1202-952f-1975-36b11cb4ba55 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 31135de9-9538-57d7-f18b-de0e86417b60 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record ca5d5e7d-393c-bcdd-42c9-27b9635956be from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 89980c50-02ad-9d2b-004b-7fd099df209b from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 47529194-75ef-d233-ff12-5eb44d307fe4 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record d6e3a71e-a502-e8a8-50fc-c626f57d1709 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 86ba22dd-79ad-8999-3e0b-25cde23f03cc from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 077ef32a-3f3f-37ea-8c08-56a43c19c315 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record a64f7613-b464-2ea4-696c-63d6f5ead065 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 31b1891a-0593-dba2-0e28-b64f4eb19fca from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record a5acd341-aca9-9fd0-e285-6ec67f914286 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 3a53c176-41db-898e-14c2-732a6b86290b from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 5ec69be3-ecd7-570b-6ca0-6496aad7c7c0 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record b2217139-08ba-9bd9-7e31-8ad63a0ea6e1 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 5cc0ff06-6ba9-9d01-b7e4-9f36568a8c29 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 01ba985a-32b5-58fd-6577-bb54aebcb0aa from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record d85bbb6b-bd37-929d-4ac7-ccc3cc0c6682 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 7ee5e857-3489-3498-1143-40ff813fb5cd from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record c40f3609-4fcc-9a5c-334e-51aff848a956 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 7711b757-3b16-4943-31a5-9c4ad1ebd086 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record e3ab6283-c2ae-35d2-43d8-7a9738b079e1 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 9fa40dd6-f3b1-7af0-1be7-f3cf4b80b828 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record e57f7691-2ff3-c23c-9c2f-67237eea6fe1 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record e90fb651-6ac2-6ae0-7c2c-6a87392bc552 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 9844f476-f2e2-054d-0e71-597aaa50b96f from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 0dea6e4e-64b9-cb1c-ec03-2e6b25795c18 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 989bc9dc-f95f-e8a0-060c-88043683d4bc from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record b5b94af3-0d45-6be0-6a56-aac3245448c8 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 731bbc41-64b0-bb14-2f21-7e720f650638 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 506f68ac-e232-8994-b647-e8a8e5ee4c91 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 145103c7-ff5e-1d1f-1cfb-0a06bb93c8eb from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 30d0a2b8-5449-40e1-2a66-f913ee7d0ae2 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 86592243-ef95-eee8-a708-28a72f7dba08 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 4fd3e758-082a-2f4d-77b5-abcbbf0e11e0 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record d6d106fb-60ed-33a0-b9b2-53e3aa181345 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 71436e1d-54ea-2061-fc27-d6835fb6d625 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 1407ab33-00bc-22cb-1be4-a5db2b54af77 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 6b911f97-59f9-bb79-14ac-e1cb47a164e4 from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 8fa624f7-1fab-5884-e29a-aceaf49c9eba from feed-4
+info: Contoso.Ingest.FeedWorker4[204]
+      Ingested record 61502dee-3518-5376-c241-0ad1f6da7a63 from feed-4
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 4f06e95a-d252-a617-c4cb-a0385b4c0d73 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 167774ef-6eb4-fff8-cdce-c408d26f1d76 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 321a6ec1-7934-f0b8-b48b-b0750c9c20ef from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 7243d47c-eb64-c5c4-8aa1-a59c5f6a35d9 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record bcc0fd98-5d3f-69ce-52c4-641b316a2a12 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record a1b49bf7-07c0-909c-797b-1538e5a15b79 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record a01ac23a-cfd3-bb74-3f7d-c86b692a4f0e from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 602533dc-0a68-013d-679f-2d9ec4445aae from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record cda79077-1005-3d2c-76cc-057308ec379a from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 31e7aed1-41cb-cc3a-0fdf-7cc6eb8a25fc from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 9b09ab55-e607-7d79-1017-0d2bbf4e302c from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 55c0a74d-45b6-69f7-5ceb-e21356cd42d2 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 0b286c70-9df2-4d5e-f429-c622f52b2549 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record b0882411-b775-70a4-bf16-8da7431dbc3f from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 4c22cab7-468f-b596-ec9a-360c5105122a from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 98772790-c172-6f06-b8b8-f27000f72d3c from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record f24d04fd-a24c-8407-ce3f-a028ea9d18b2 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record d375eff1-0635-afef-10b9-9ac9f178d77f from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record b72fac4a-79a5-fd62-1b75-7b203bdea8c3 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record c6bf4fa2-f433-7bd1-773a-fe02f4ef6142 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record e9de0479-4044-9aa0-ca30-421862f2a21b from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 21f91a99-7e54-4d56-d096-bfd66e106c0e from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 023a80a2-2ed5-1b12-7f1d-490eed97ec76 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 4da60990-bd0d-8cfe-ee59-b397cd751e08 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 26bc9858-c5d6-d5e9-b12e-1de2d2a0169d from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record dc7a615d-53ea-b031-3c73-d5f49b750362 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record c8a94814-5ca2-c132-75f5-c1a051cdf2f9 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 830ae19e-143a-5180-9880-e88bc841721e from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 28f1a81b-c0bd-1d84-6445-7ea432830689 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record a648a58c-1092-57f7-6862-bf793f4f8b9d from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 8b6bfeae-8d76-d7a1-7b50-079e08ab4ae4 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 6d32a901-faf2-0ac0-2923-22d35364e64d from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 1279688c-fce2-05cd-1aef-ca62e22b64a6 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 3555d6ae-1586-6ffb-9fe5-e39943cfeadf from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record fd09e37c-7f9c-1321-6bca-9b3f18af266c from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 2c564d56-726c-2c95-f8dc-a309b5b39023 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 75ff199d-6ab6-114f-2207-c6c03bf449fd from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 3c2496eb-ac92-61f1-e429-c87c9ecc7b5f from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record c61c96db-d8d4-250d-89df-5e79bf7b6c6c from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record c79dbc12-1f04-a6ff-c272-f5a7aa17c57c from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 47868e4a-4b35-4e93-4b3e-90b7d7435571 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 4109d8d6-5f7b-07b8-4485-c04f911f52dc from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 707c5f3d-32fe-1f36-42a5-5162bcf1fcb5 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 3c49fdbd-3ece-9f2c-2f8c-6c083f5783ea from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record e8566431-e258-d268-4806-d26f27401fa0 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 10970046-538a-e1c1-3031-2932940a3537 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 3ef68756-fe11-1ebc-406c-61326564d134 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record a64ed996-3b3b-c813-86bc-2b9981e004fb from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 76c32dcd-a740-68b2-19bd-2640cef61d03 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 012664f6-1a32-7537-097a-5942fdaf4513 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 3b2a421a-d1b0-b70b-e200-d218798a0d59 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 5fb65b55-ea14-843a-72c3-9a28d72eb3a1 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 3b9edacb-4b2e-7245-e07b-59d80a5527a2 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 99b9ede7-3087-de35-0ce6-6f731e84fb36 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 31b4932c-954c-2fc1-d3f2-e52df9143ef5 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 833e469f-5f4a-ebeb-133a-d73dee1fdde0 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 9a60f919-72f9-2026-2d81-9d38ddba8547 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record aa2d6c38-c71c-588c-c666-4843428bf773 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record a33066bd-1b14-66f6-019f-7781f2198825 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 5985ea3f-9eb4-e92e-b5af-4c8a989d181c from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 570b534d-5e63-af16-0996-9e7c37b79c48 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record fff7ba0d-3437-ccaa-0b4e-7f7c2430ca6d from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record bb7352c1-9973-cf5c-09c9-d592414205c6 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record d0930b64-3414-c2dc-e9f8-f71fa6d21040 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 68b3e3aa-53c6-9b0a-d19f-0be902e9c9fb from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 9efac292-2f65-ab4e-5f2e-e40dada65cc4 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 080e31b0-3412-8822-13f3-88704fec0f40 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 7bc71df3-8c4c-aa83-7ee1-4b90cb978be3 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record cbbc6c94-19f4-8c75-687d-d5121032888d from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 2790bb01-8cd5-d187-a9fd-a2ef65322a48 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record a72ed508-1755-c6de-88b4-09c8a3a16d92 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 456b312c-b206-1ecc-65d4-64fd29e78b06 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record aaf5a86e-4886-6d48-fcfd-36d168e7ed23 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 0d25f954-f404-2f1e-6af7-ea314ebe9880 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record e239d3d7-9107-756f-bece-71454ff6f2c5 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 04a99e63-6a9c-2a33-6a01-260f5b7042df from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record cd5e4aa0-ff22-82e6-c444-0054dd3f4006 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 6406f458-327b-cda3-a4fc-86215d20c6a6 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record f1261642-3423-880b-67ac-56f8ba60491e from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 2814c437-e6d1-4318-6f25-630d018120f8 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 172a390a-d203-acfe-1d10-e9316c7b31e2 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 5d5ec1ad-e201-aafd-93ea-6a9467fde1c3 from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 21460c5a-299c-858d-c5e6-e62f75fdf37c from feed-5
+info: Contoso.Ingest.FeedWorker5[205]
+      Ingested record 247aabb5-8d32-3d9e-0d3b-e8ee03cc2f9b from feed-5
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 658f62d1-e8e8-4b0d-ce74-b3c4a402bb72 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record ed5ec904-9f48-250d-92a7-3f9d16cabe32 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 2bf39775-8124-7dd4-bcbc-58a35eef9b8b from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 296cb08c-4886-058b-5912-eb602558d6c0 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 112d4095-eced-8ded-2bfa-1f10856aab1d from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record c0e908a8-7d92-0a56-623c-70ce1bd9d912 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record ce017551-f785-30bf-caca-003cce0843c2 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record d658c99a-206c-2856-4d36-a8ed3284fc6f from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record e9ad2bc7-f9bd-6bbb-0b22-a431f16d68f3 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 9b8e9a82-0da9-f44a-5084-c63f7b949e54 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 1617643b-634d-1952-a2e8-fec0ed19557a from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record b02ef5f7-9ece-cbff-b659-f768e77b0475 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record a3ec4d32-2907-db86-e421-9307d31615e5 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 9efd55d2-38d9-e9ab-db49-5244c92bdd5a from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 3234752b-d8aa-7be3-9d5e-e2f9678c4cb9 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 90bfd792-2ed6-d460-7913-97a3d445a53e from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record f044c032-6655-b9f0-0aad-acf037d7d190 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 5bf508a0-6232-0fa3-280f-005d84949aab from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record f87f4a4d-3f3f-4072-2643-7a8e1f80a4e8 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 314df386-e5b5-206e-d0ce-6bc4b991e961 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record d7ad18a7-8ff5-ba77-e244-d05f0a857746 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record aafb4294-09c2-cd73-ac18-cd4ec1e8fb16 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 63cc537b-1e23-9eb4-52fe-f478d6948ded from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record d958b1e6-8cd0-3260-74aa-f340997a20be from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record a626b097-4e64-0cd4-c730-a7cba085da1f from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 3fcf6d85-9526-e3d0-4ee6-f4ff6b89d463 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 5e113423-a8a9-ea62-63a3-66aa6cfd4940 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 2dc378f2-7037-e034-80ea-83977260ca26 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record fc7383bf-9e6f-b2b7-00e5-e81305fbec3a from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 7262b8a9-3c39-679d-771c-23e17d4ffa0f from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record d1a80888-c7ac-6f37-9e5a-f2a4c379023e from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record cf7eda11-2df8-3c66-d627-d2b875526e31 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 112ed1df-1b69-567e-667c-d60b7924dede from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 5d866b34-6e3b-bc97-5bcb-937020e27c17 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 811c8fa7-7124-c205-cd62-5a7f177a8334 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 0a68253a-0a6f-b154-a837-6dcd8299ed6e from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record ec1072ee-150d-bf6a-2159-702ba2ed8962 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record b86bb4d6-c713-2891-5050-5652bbc55c33 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record c086ee53-0de4-4e65-1478-c7b982f0779d from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record a71a56c6-60bb-9aee-e516-093181012ad6 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 069e87dc-22dd-113c-c8c4-2276f36c1575 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 9d373731-ff01-fe80-10fe-52d4db68f275 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 1c0df645-d0a3-2611-b14a-ed54bb69e1f0 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record e2bce763-fb52-882f-21b1-aed23196cd44 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record cf9d5d05-f4e6-4fe6-49b2-9bbe7deb30ad from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record afa6798a-2a44-bf93-cb83-89fbea81ad63 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 389bc3dc-ee3a-b808-b898-a70cc9d35f16 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 9c461992-59d4-697f-d541-da5610c5ab83 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 52e71cf8-28a4-fbd7-4091-8a58c194ff53 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record e7b227e9-4665-ea19-9d10-6a37e58376fb from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 4110b8bc-24c1-276c-74d6-d11fd0cce893 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 7ae85484-eb7f-1414-f6de-2fbe80915aaf from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 9da968f2-434b-4b94-9785-f4f83554ada8 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 5f4ce302-51af-1074-3cc6-31418189ac45 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 67498314-2e9d-de73-32ed-df6f096de421 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 4737fed1-efb8-2825-a2f6-5e3629465388 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 6078a406-e539-cb16-53ec-4b93adff8165 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 43abd7ad-c8ed-3213-cac8-a61c2b32ada9 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 0c6f2fcc-87dd-58d9-c4ad-10061d75cc23 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record f755edba-5c1a-7c01-dbb8-d36ba2e5c7d7 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 857de96d-8e20-48dc-73fa-5648df79c9ee from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record e566e133-e1ed-cf3e-b050-864e947dbe2d from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 8923b7f6-fe32-45fe-4085-24771ac7a46c from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record bce88796-64ed-fce5-db4a-18fca1390385 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 60307b75-43c6-ed1e-5f18-6904cc342416 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 256d1082-93cd-e609-5e73-252bfd914b0e from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 14d5aea4-c3bf-64e9-54b1-33015c396f5e from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 9d892098-2d3f-e297-3ae4-615571395e71 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 4bdfc851-0c5c-d43b-f53e-2c38be5c3931 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 4f60e846-40ef-5ec2-841f-92cad1e0014e from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record decbc10b-fbeb-0a98-f748-f931a3a51759 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record e54e19e5-a9e8-2581-edaf-80f395fb98f9 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record bf433e03-0075-5f64-bba8-6df75009c0a9 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 4a7d1dbc-263c-c4dc-38bd-3c6908a6ab0f from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 6aed8872-6ea6-d05e-a028-80569db59658 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 0c3b1266-e542-453d-5d35-9777833edd4b from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 9cce12d5-3a2d-b00a-7d07-6c0b21cc4751 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 0decb3b5-05b4-c425-0bab-5f9fa7321d31 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 4dc1d327-5ade-d3ca-912e-da4100ab68b8 from feed-6
+info: Contoso.Ingest.FeedWorker6[206]
+      Ingested record 88bba317-5b6e-48b0-85e9-251c1b3a953c from feed-6
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 4d187e3e-9566-36e6-69c9-fef039690919 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 5dc18bce-3445-6d5b-223b-e9e796ceb525 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 289b8ba9-7993-2a50-d416-b8a99fb9d8f6 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record cd2f4934-efc4-6c08-039c-d862227ee409 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 736b1be2-2639-61d1-b51c-ecef3e5bcce6 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 250a82a2-a361-bca2-104c-968a1886a7ba from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 450f002a-c83b-6269-aa5c-6817df0c92b9 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record f7962f83-43a5-38c4-cfc3-160166e6626d from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record d2253c87-a51b-453f-0e5e-928c02f1679e from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 983fd973-59af-6769-e486-737d8ff4ef93 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 9a14e75a-7199-e0b3-9416-c610a5464f6d from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 7e2b86d1-bbc8-1f54-8480-4942efe98772 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 001a2fd3-e74c-00f4-2a43-f0473f9d8024 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 0675295f-8812-2e14-0fc0-55310b43b6dd from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 28c26bb2-3cd7-dcef-2f87-466e67eee099 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 1adbe533-c764-2bde-e967-ebdb0ef1f012 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record a82409f1-8d09-4979-9cd5-f2bb0329602a from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 69c60d1b-246b-9480-327f-82f8f0e02c42 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record a48792c5-9bab-5340-84ac-8fe63313a101 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 6a4d76e6-a43d-ede7-a5c8-e5c581c75bab from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 823209b5-2cb5-2c32-9cf9-9a99d039b963 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record a03f2a2b-4cde-3e5a-1053-0be24f33b0ee from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record b96c1f73-e3ac-99b2-fe7a-cde20c69e424 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 89d4ff98-b724-5d1c-7a59-4f67c870fef2 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 6fc820d2-d82c-ba01-600a-673201a01d42 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 149a3e17-771b-a4ba-e989-da51bec49ab4 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 2ce678fe-73d6-3426-a7d0-e597bde3a6e4 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 42ecdcf9-1af3-bda5-ff21-dd5a39d7c140 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 1f8e6521-09ef-f2b4-a4de-7a8d3b77cbb4 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record ecd87a48-bfe9-5413-e42a-872f55e4615b from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 43678856-d867-c466-f15e-a89db1f2ad8b from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record a2c81c32-4417-c530-0d72-cb97b630f005 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record af8c3e74-6fa1-26a8-ade2-56558dc508c6 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record f8cde59b-85f3-5c2e-ead2-8c16c9d7dc2a from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record edb6ce85-a45a-5209-4bad-8e0e43ea7471 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 15de2868-378d-04ea-e4e8-d8d2f71377dc from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 2b7604fe-03e5-f684-81e6-d6c8e14aa460 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record d77b26d3-3c71-a896-e79a-95aa42a78500 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 28c06f25-f1d7-b8aa-33e9-2723be6ed515 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 3122c815-53ad-d817-ea3a-b6d2bf03c644 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 99ea4514-541c-18d5-6382-5046e1527ae4 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record da17f2fb-e856-66f3-6123-90ba3d3a1902 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record fb4e1d36-b15e-27e6-ebf3-153ca1754ba6 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 894e9f37-faa0-9f65-d76d-e60baa4cebf2 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 87d69991-d6f7-5151-78de-33617830b083 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 06c9cd95-db86-9c8a-01a2-3b4eb2971b77 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 3bdc2efd-b980-ea1e-f4a8-87536fed41d7 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record ca092b18-4ec8-c223-e27f-8be89201d55a from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 95d85675-9f64-28ef-643d-79f136436924 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 2bea714d-e929-8400-90b1-3f3013eadac3 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 1ca505c1-06e3-15e3-086d-06d825042c3d from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 296c764d-edcf-975c-9f39-5ef11b4f463f from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record b363af43-244f-bafc-fa37-6a6e5848fc64 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 236e536d-0aa9-89b4-07e7-166b075b058b from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 0aeade9b-a245-d658-a4bf-58e7b14fe2d6 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 0bf3d0a7-bc9d-f599-115d-27cfb26f1928 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record c3034515-9729-39b0-db43-738610d5fe14 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record f45eaf1c-d14b-b7f5-3306-1fbc5d082eea from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record aa069dd3-e42a-f0ad-88ad-4972d1cee715 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record c17a4f81-de27-a24e-e134-f9f810e1fec9 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 62438362-f1bf-55ed-b614-3f78ea16b18f from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 340252a6-34aa-4a20-3f1f-b2411b6bf273 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record f30224c5-08d0-323c-08ab-17151caa0c48 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record c0f621ad-cfe0-7a63-e93e-9707d903ff4d from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record c05d7b62-d337-264b-1664-6a40a2592559 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 7a243b32-4990-c224-a1db-bd89a1ac6036 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record cabe5e52-190d-78d3-21f5-986819918b8a from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 4b61b0fd-347a-7325-a575-3d8bc1e299a3 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 42db5b4b-6c7b-e37e-5625-e67151b315ec from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record ee1addc8-41b7-3d54-59d4-a28c055ae98e from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record c285a8c6-b73c-30c8-0c64-78014858079e from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record c4ecbfa2-5221-cbda-e90b-a8875e36d760 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 79e08f86-80f4-edd8-9a1d-3876f6c8a64a from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record bee33d4a-9e47-5394-49a3-5964d9f3dd45 from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 07ffe38e-69b5-2fc2-c9ff-909007ee64fe from feed-7
+info: Contoso.Ingest.FeedWorker7[207]
+      Ingested record 192a2829-c5e5-0641-84c4-6f726fbb28f3 from feed-7
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 0c5166f0-b464-9035-780c-8fb058c6aeea from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record b6e24482-3771-690c-90eb-c2c389b28a18 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 93151cf9-1744-8971-d3ec-a751dcbbb757 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 6fa176ac-2b9d-7364-4980-0525d1df24d0 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 49d04ce5-33b8-93a5-8607-bfbf00552293 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 0dd09e51-fa55-6835-c021-fa1bc31e4b97 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 187f132d-7da6-9370-5909-a958011dd8b3 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record d34979b3-cbf9-3e3f-b1f9-25cb7dd1e6c7 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 97b1ac9d-7e9c-e77a-f797-8c5f2f3ca661 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 83e03b8d-d4f3-318e-f50b-7e1d58e1290d from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 28ad5dc9-f1a1-7500-93f8-4ade42b50c7c from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record f033b915-36f7-84cc-d0b3-a17548a28354 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 2a7147ea-7f91-9c89-3b45-63c7b31110c8 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record c44da161-a2f3-bd5d-f04f-62941c23edee from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record fdb9ba32-c9b4-bc96-7d83-c1df14b4b8d8 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 1ac44e92-c974-732b-8fae-625eb278f801 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 185ba663-5b09-b845-539e-f49ca0c02a35 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record e44fbd3e-6504-7845-edb2-7a0f66b9aaf9 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 6c10b601-160f-6d6e-bec6-b7ece3f1bdf6 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 5f381d79-0671-ce23-a557-41cbe371613e from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 6d956563-4360-c66a-4d9a-a69634c411c3 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 2bcd85d2-804d-ffe8-8b80-fd3ae6b6122f from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record a17870d5-e24c-6c60-fb7f-36ee611a245e from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 207b3de0-75fe-1142-f1a4-bf3b3bcb9bce from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record b071b0da-c125-516b-9816-2c6788134e5e from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 08aca106-a573-e8ca-9af8-255ec0c3ea0c from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 85903d97-53a0-00dc-94e2-7f7759365783 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 73474aa9-d7d5-ccbe-de35-21af27c37e56 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 52c602e2-bdf2-e077-8dc1-a43ea97f65bd from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record b0665350-7055-114e-7691-77522b67a9fd from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 3b246b47-9444-7857-41d8-b452c5ffd933 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record a4880c45-7646-cf57-5584-8bff20454643 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 81f8d9df-3ce9-a9af-b252-01e9e2979619 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record c1364fe5-4d2f-9bba-4479-c074310afae0 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 9e097fe3-d7fa-41b8-d397-1494b402b288 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record f98a5a34-27ee-ae0a-b92c-8dec27937e85 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 9a575555-5399-9ac8-b921-01a23f617877 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 3c787566-2932-56b6-593f-f3df85ad81d7 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 42396323-3074-38e6-f4ae-dd0253fcba58 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record feb36d43-ba8e-3338-f478-d090f9a3500b from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record a86c1fcf-f65e-e8fc-2a23-534a1a0ffed5 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 26a55215-625d-165b-3207-d5a31a04f280 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 4d56c5ae-cb7d-c45a-25f8-3e61fbdc773b from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 46191aa0-6f57-1d36-4c22-b1f4bbb91047 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record e951acba-a352-b6b5-1bf9-b683323991af from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record e29f9ecb-34d9-82fb-47e2-cc361b5bd042 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 033ae330-08af-bded-76c3-38fa636a5479 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 6fc04d79-ca7f-41e3-dab5-373866263f9f from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record fb1b0902-801f-e30b-38f2-a031b1853dc0 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 05a97aab-7699-7819-4bd4-a21ca1e381f9 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record bcfd527b-9a8c-a891-41d8-bf61244dd37f from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 3e06571b-bdae-9f93-0169-9af8679b4bba from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record b37f58f4-6e16-56d0-da57-15e4e872f15c from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record a5aef8a6-bfc5-056e-9661-9afb92f03975 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record aafb3717-3a83-35f8-d893-08826bd0cd12 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record e0aadaba-e14c-bde5-a709-4548b8e3621b from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 9571623c-b338-58a1-a445-f305c628087d from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 2e771bd6-adfa-09b0-3a85-eed0da39c4ea from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 6eba35e0-7432-f79d-1fcc-9634a43be368 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record b35dcf68-a0d6-c1fe-4282-c8435021b420 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 3e0dac1c-6b69-9f07-e50d-f523190dcc94 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record b66f47ac-b691-0780-666f-0c32c849ed81 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record d974fec5-4003-ff33-280d-a853a12e6df3 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 050842f5-7487-a00c-7b95-15936c6fba96 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 84ac2e30-68ca-cfe6-dbc9-1d049f1f2193 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record df7c758b-ee21-6a55-a93e-0f6facdcdb5f from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 53fb51b9-a78c-a31e-e4fd-960e2edd27f7 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record d4f58692-6382-6536-02b8-c92ac736c452 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 1b3bb890-f980-aae3-e87f-44b17d662a32 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 37c714cf-8b19-a2b6-4050-284509c3e7c0 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record f38a1e14-c823-802f-b759-efcf292cfb34 from feed-8
+info: Contoso.Ingest.FeedWorker8[208]
+      Ingested record 59242043-84eb-99bd-3326-d90ff0ca5b41 from feed-8
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 74efd764-9316-6586-d8df-71f419e0d64a from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 79c9cdb6-b7a0-b785-3479-b1f08a814a78 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record cae5a871-a3a6-a0a9-041f-8d71831ef5c3 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 57c52302-858d-5cd2-5eb2-ad7ed43861ce from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 74f806f2-f2ae-556f-bdfa-ea88690c9bf8 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 2f0db088-af32-3c2d-fd82-db7635c86b78 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record eec4e799-c340-6a1a-8387-e0e4647a6c08 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 9d2f4116-fc06-1e1f-baa6-b8e61f55411e from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 40a111b9-0e7e-8994-a337-b5a65b004753 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 0fbeb716-6651-b3c4-61c0-0cbe463c4650 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record ea59fdda-6b28-38e0-133f-524303682cec from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record acc53466-b2c0-b0bc-a0e9-9efb6ba8f8ee from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 1bf85d11-43e1-5c55-9486-5d855a24dd36 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 6685b4b8-bdd1-04d7-4db1-df9339741156 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record f8b44bc2-86ee-7b4f-f41e-74e6f09f5791 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record f5fa5d74-cd2e-4676-fe85-dfb1380ab1d7 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 2a1edb8c-3646-7838-764d-45296457abc6 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 11a3199d-c6cf-bfe5-edee-65ef2119c05c from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 3173b8d9-a261-621f-cc63-858acf402339 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record b8801b29-8fe2-c3f4-a467-2c0c781ac78f from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 257185b5-f6bf-ce1a-d08c-33c839da457a from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record d4a8b1a7-a388-2a8a-aa81-73cf5a66d71a from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 69cd2483-d0f1-1e05-cb95-f372d198e3b8 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record c28803f8-4b5a-04b0-ff02-f2b177d5759d from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record c7a4084b-200a-e258-a64c-add58c5b45df from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record c89994cc-5ad0-a51c-782a-b465d5704724 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record b44678f9-4475-ee53-3aff-076fd9c57c3c from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record fb9ebfb8-40e8-98f2-affc-d247604b4496 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 7b481ae2-2f96-781f-adc7-0e946d152eaa from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record cc858ee3-b8c7-30cd-ce31-175200b09f63 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record a786effc-3eb6-2c1c-5ba4-688147fd7d46 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 7c23aa42-7ac3-caf8-5200-866c4d4417ea from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 15de2f14-a326-2bd0-9f94-c7556db1bc28 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 271ad4c0-5cc8-512e-e5a2-ae93a8c58dac from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 62969d5a-dabc-f004-4d9c-7671edc10021 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 9088ec8a-d3f1-3f19-15d4-e7c20e9bac31 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record f14f10cb-c8b6-be1f-531f-98d1e7e2e607 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 585bc3ad-d4d1-e969-87d8-891723f15ddf from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record a845063a-03d6-1cbf-951b-cb26a216ed03 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 126e90a3-f3a7-1b00-35b2-242702f04abf from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 9bb308bd-4001-bd9b-4b01-8c9fa7ecc7ee from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record daab2302-248a-1edf-9417-bb4319fcafba from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 73b3a2cf-c6bb-f658-2f87-a4293bcfecf9 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 3562efe9-2715-818d-c8ee-3c6e58b08f1f from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 88d66a76-caab-2b8d-6709-3677e772436e from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record b0227a15-e421-7251-9c09-119a2afc54b0 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 1724d5b3-c802-0ffd-fa28-16489bbdf2ea from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 8c6a8fcf-e4d7-738a-e6d2-0df9ab200eff from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 4c0b0f70-d6bb-cb67-a2f7-e7f9c9bf34ca from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 368dc5bf-b15a-dcf2-7e95-08cb3286dfae from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record d6db0106-bded-f0d4-1420-1d4d87e23671 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 1df2712d-e1f7-7a88-abd5-a1ae70472ec8 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 6b46159a-43b5-e670-1e50-f1348e18a929 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 79265fef-23ab-ac2e-d3b9-cd983bf2f108 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 7bffb6a4-0ef6-df4f-8ea4-dc667e3a46a3 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record b34ed4fa-24f8-c385-e7cc-721577937b86 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 2a244cae-7f88-70a9-3f1e-fd5b7dca9202 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record bc0e0865-dce5-8d7d-997f-7df08a1f7883 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 521858f4-d73c-8a36-290d-2ec301b0fb6a from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 7f6323a3-9004-8542-b225-8e5777cc40da from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 773c2b1a-d72f-537c-4bfc-3a30aa5122f7 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record fffcbff7-6b37-9413-6d02-27c25ffd3d40 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 2e367dcb-134d-2c81-ad0a-d387f5eac4c1 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record a5826fb2-a2d9-2973-5c41-8d05a3151d0c from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 0bbe27a8-9c13-aef3-0543-67ba074db5fe from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record ffbd8d4a-ee76-53c9-bc8d-f872aebe1773 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record 180ecb0d-fb51-8504-cf00-61ca5498c004 from feed-9
+info: Contoso.Ingest.FeedWorker9[209]
+      Ingested record c1d6023d-7c13-b267-7bf2-a7f582b85bb8 from feed-9
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 369ee145-08ad-794c-24fd-4172e5c69b8e from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 207c9f6c-a012-35b8-6a64-3531b7daea11 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record a8b5c45d-dc97-b77e-182e-e0e556aeeb42 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record c74d5921-797b-0779-5760-2f215dbc8d63 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record e98e99de-c544-5ce8-8ddb-2bc18689a21e from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 578a628f-6f68-94cc-48be-1fa635f217b0 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 0d7f139b-8dd4-c0f7-4067-05076c21a8d6 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 5aecfabb-4afa-5e69-4a05-9e92d3a43d90 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 556ecb72-675a-d461-7e65-1ba5d3e66159 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record df7a9c99-458d-ff2d-fbfa-379780f5b4a3 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 341aa3ee-f999-4f18-5845-7b3a81a5008a from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 1e308b51-cabd-4f53-7e00-5bd9a7913051 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record b69307f8-512d-126e-313b-259a54b59e2d from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record f9061ffb-9621-a9d3-20a8-79324c99a6af from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record ff1a5c0c-c8c2-59a2-166b-6525a2839f31 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 8de63750-b901-5459-661c-e41c0a40c9e8 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 92f48d21-8b9f-684a-67f1-86a2e2b6c50c from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 1bc6b08b-4ce7-6f14-6602-ec120cb91cbe from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record d26c0cf8-309f-f5b2-0be0-a71d019705ee from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record c417857d-9bd2-d202-799d-149eebe2eb3b from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 80373ba8-c9fd-ac3d-0f65-e8f4a873af26 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 60446ef6-9c9a-ffde-8b2c-a282e8ea1b43 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record ac77a055-a076-e64b-25a5-2d399ddffec8 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record e056a8d5-98a7-a86f-b06a-7c91b247801d from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 0a1afaea-3666-7dc9-153f-b2cdae54a836 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record a0123246-7537-9466-a233-0a67aac0a780 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record a9e2fa40-19f2-d5ff-2c84-fe81c33ea73e from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 6bec1ab7-0977-5df3-de84-465a2e698e5f from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record ee36196b-ea01-5583-19c1-4c26c647ebd1 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record df3648fb-5e6e-383a-036f-eab9a7dd192b from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 4f314b00-c95a-b050-2381-91e9d2969d35 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record dcc98e43-420c-7738-b5cb-42f68fe5e1ab from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 08c401a1-6bfa-1535-2f4d-80514d5284b5 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 90fb2d7d-6e40-b885-0538-69eb5187b6ec from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record e9f0ef41-ef11-5a1b-940a-1624a44ab3ad from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 85abe2ed-9148-29fa-7f6d-88390dfb6f3a from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record c6164261-1e6c-c084-d323-39ae0a14c579 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record b21a30cc-9348-4239-6bcb-5706cf71e7f5 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 11354113-724b-f80b-6797-0ab1eb2b50b5 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 9807633c-631b-cb09-ae12-0a3c039e0d8b from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record a8ce4082-f00e-60f8-fe3d-856b978b6641 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record c5174a9f-79b6-fcb9-27c1-7a26fb14b195 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 153a8e30-1a1f-80d1-8c7e-80c169942abd from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record e551550e-3657-c7bb-78e1-9be6a4fe5561 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 6d4fdbf8-03f9-c73e-a07c-30a826da053e from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record ab5b95f4-af0a-f748-0263-48f701397a29 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record dbc47e5e-f762-9cb0-fc94-fa421f25d23d from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 1f10a0b3-de9a-c5ee-37de-eaed16904beb from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 46839f5b-048d-09c8-78ea-bc3a21041428 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 736619a2-3e05-6e80-91a9-4facb82763ba from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record ec3cd40d-2ffa-1f86-be84-5f95bbca6b41 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record bf4b3d45-c626-6064-5da9-e5c90cd5e3e3 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 2511957e-db01-b9f2-b1e1-3663b6ab58ca from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 4b0b708d-1594-011e-c264-ab93bacf0bd8 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 7f834533-b590-6f57-8eb7-980da0ed7277 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record e3d77f01-eeae-4612-ab67-0e4d75e88d7e from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 0d7b2ea8-f6dd-6015-e9dc-85614109752a from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 0f8044a8-02eb-2c86-082f-1a43b79b14f3 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record afc79745-a694-1c22-e222-0a7f03c55116 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 63922438-1465-f233-9e43-e933d13d6b96 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 99a16b9e-babc-b4aa-4fff-a8e14fa1cc6f from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record d5bd0132-dc68-5e91-f52b-c6552a7ec806 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record 50f7b168-0f4d-ad88-9be4-078c7c8005c5 from feed-10
+info: Contoso.Ingest.FeedWorker10[210]
+      Ingested record ba4ee77a-9330-ca45-f2e1-eecd5e18c712 from feed-10
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 2a9dcb87-ad47-f8fa-7844-f24070503308 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 1de067d0-cc1f-d5c7-f763-0f7025189807 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 29fd96b2-a517-6da0-f432-4d925cfef954 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 7a1a3293-6aff-bc9a-cd45-f31aa13475fe from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 73e7c95d-c947-2c59-c731-1fda62bfb10e from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record c13897b4-c8dd-21cd-45a0-87c2f1e66795 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 47a7fde0-4ad9-f598-5579-85e0911ae38d from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record a6a476a3-f954-dd9e-9f31-63050f85f59b from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 99933bf7-d3d1-0e24-cd4b-9ff5b4093893 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record b9c81818-9b17-37bc-de9b-5dec5500932f from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 26afd434-d4cf-50a7-03f7-d891fa3a0776 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 95acd14a-4f00-42f5-d526-e8f999e42264 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 3f0121f3-e35c-18a0-f9f4-886c6db63aed from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 604ea2ff-af50-7de3-6329-cfd3606de4eb from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 3bfe938f-e567-dabb-c57d-72fe9a0e63e2 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record b04516b7-4886-f572-7386-6561ceb71a8f from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 449d27f9-4356-e358-524f-853f006e6da2 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record ebac31fb-962e-3c84-2843-87ee6c28f618 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record c8789ae0-e32e-f1ea-c369-3486d0e47843 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 2402eeb0-d54e-a035-49dc-8a9f0ad3f2d6 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record fe2a7b12-de01-282a-e3ff-2dd0cfcf0196 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record f9b1de86-461a-f27f-25a1-ba53926893ed from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 8c3fc5e6-ce99-b522-cc19-393dd9e71957 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 7ffe6c7d-e9eb-7933-c6ec-6e3eaf447cf2 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 8a3c3502-15c6-b9a6-88d8-c0a558cb5fde from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 61b99161-cc21-a87a-7c19-64bb8dbd9a53 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record b8e17bae-c00c-116d-c9a6-1015334f6a84 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 4f397397-3be9-8937-fb76-78d3ee85616e from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 653f387f-ad7b-4176-0ebc-4be59b5dae4e from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record ed0e4528-34e2-d3b9-b555-b9fa771f672a from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 02660c0a-c04a-4a4c-961d-8bc0413649b2 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 8a6243fd-75b0-0b15-628d-a935caaa8e50 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 5ae82b36-ce7b-b22b-8941-411316739251 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 65ef8db0-3b9d-226a-1008-99d1c5acb068 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 42715046-e59d-2552-8562-da19946009c1 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 522c9583-8598-853a-d554-fc05e2958512 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 33adba6f-96de-3dda-8194-455d7a018e0c from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 1799a7da-313b-7e29-3673-174d306c3a5a from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 4a30189b-b378-f0cb-ce4d-2a2a2e41ea06 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 5be04057-907e-897c-93ef-07045ce22657 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record db611f75-8468-5b61-c796-64706709ab4c from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record ec30b3c2-0b6a-8ad2-3f0d-d5832625748a from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record ddca8b0c-5fc1-1cc0-7e46-da13ff44abde from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 76a399f8-a1fb-68f1-5f25-a7fe1b2a9134 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 50d7941d-27f9-c55d-14ec-e04cc98f9bf5 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 47d1ffb9-584c-c92f-07c5-97f798e2e954 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 1815f07d-0544-152f-9b6d-4eb584fb1f3f from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record deead1d3-fd8b-289c-3463-88d10898a37e from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 9632b091-7c7f-2cba-90c2-ed6dddb79513 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record eced4301-42f8-03f4-36ad-61dd9132f7ad from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 18dc0ddb-6d0b-0efe-47a2-93f3c7790c37 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 97d6b91b-c46a-6d88-7265-8833f24dcbf1 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 2182e980-f6a5-da24-9bd5-41ebd19ee43f from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 56be6d2a-09b1-e1fb-d7ff-c8cd4105d9f9 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 60d1d905-2e44-accb-fe9f-0bb4337405bf from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record 08e9500c-0d0e-2c33-070b-80f4156a8110 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record b4a041f3-dee4-06e8-5ea0-49a48eb078c8 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record d8799bfe-f27c-07f5-7ca1-3fc47551e638 from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record dceb9e13-106e-7b8c-e511-b411e8f07f9f from feed-11
+info: Contoso.Ingest.FeedWorker11[211]
+      Ingested record ec125488-65bb-c9f7-a3cc-b0a4991aff0a from feed-11
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 17076e31-f594-7675-b4d5-14c01eb2d125 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 3bb3830a-9081-82d0-5197-044a41d77253 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record ebbf2dac-f4d7-f153-16fc-08e0a40085d3 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 2ec37ac9-64a3-6674-81aa-0cf0ab72de07 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 5ef4078e-28e3-f65a-d985-92ee72c6a297 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record b8808c83-fde1-1576-3c31-6362f73c9a82 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record f11425e4-09e3-c3c3-2c10-514f38c2c39e from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 0f2cc346-5a1d-6349-f0f0-58c541802f2f from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 071cfbc9-e792-0c6d-8d86-9707e71aeba5 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 4205f27a-0c0a-f636-eb4a-cb49d653e980 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record bd5480a6-b5a8-e33b-8369-e01ac94fc1ab from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 7bc1bdc0-fc44-e14b-c2fb-7bc3a58d41a4 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 5153a4e3-2511-7412-19de-db490e46ccb3 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 32ee7f64-f07b-3e87-017a-a281c14473ca from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 96fc31a0-4c7d-ae57-bf8b-90faad489bce from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record a70b407e-c205-9717-70f7-bc6f976a45a2 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 5f26f21f-52ec-5127-7881-75481afccd07 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 5ffee55e-1fc7-df73-63da-317741cb712f from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 70fe98a0-2b27-df87-6130-7c057b375698 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record ea0f7718-24a5-6edd-cebb-dcb73d0b8c43 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 77c82d55-033a-acd6-e465-3d35ad79fddc from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record cc816356-31f2-51c2-e99f-4a92b79c2b63 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record d534c087-ed7c-5da0-282e-478c09381efa from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 9e6014ef-ef19-19e4-13e9-d0bc38761dc7 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record bfc43ff7-e382-5693-5f83-2eb6dde374d1 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record f53c77bf-727e-a8e2-c73f-a90823c77e7a from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 62948bfe-edc4-6fb9-ed0a-656a18d42af1 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 133d4b63-a0dc-e604-0590-7fd1d79da6a3 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 5293a807-56fb-c2f1-f8e9-643173cc2690 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 1d98a474-7a3f-f311-3bdf-ae68d2b41d4f from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 54fc94a4-248c-6fa6-5db4-4741a0d09c62 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 2e242fc8-0e85-9f16-bc6e-9d5f38be1ce3 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record e3aa471c-8da9-ec93-738d-7cccb6b6a4d2 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 263e8db3-dee7-b644-7060-67ab250bc6e7 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 3f2b7713-696a-8617-6b13-490744329463 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 922c6c73-4567-46fe-0681-edaf27db1173 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record cddc68d6-55a2-5f59-4bea-c505d6ed9fdf from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 1bf702d8-7db2-a17e-42bb-68de2af4cce5 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 7b80f213-e736-0861-74c8-847b516cd45d from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 8371f5f2-fa86-f4df-2743-314b1d3a2005 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record c9a07431-e521-2f05-a189-43f60e8de9c3 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 8f58640b-360e-7c81-ecdb-c47bab14660f from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 1e832d72-4946-9368-d5d5-0f767a3a8394 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record f87fcf8e-339d-7cf8-c13d-e7cf41febb34 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 42f32846-fdb3-8c62-6e9b-73435d417373 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 3cf74354-ecd2-073d-3d19-ce0eff828a31 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 6a671ecc-4a17-fe93-63e0-8fb218fa029e from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record d51321ff-0eb7-2a15-2985-8691e56d5404 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 24f432ad-4b24-6aa0-fa81-1b6db9fa20fb from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 712e17f6-041a-7212-a3ca-8d60fa8792bf from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 82c2c4ba-5745-9cec-81fe-af2bce99106f from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record ca20ed96-007e-0712-7168-fcfb23e0709e from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 495125cc-86ce-625e-f192-ccb5d50dfdea from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 0a6158eb-6f6c-80fa-5c2f-76262f91f0c5 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record 46df761b-37e0-35bc-68b0-53ede9779c99 from feed-12
+info: Contoso.Ingest.FeedWorker12[212]
+      Ingested record d7e730ed-2358-d99f-2e41-77ed92435409 from feed-12
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 3afcd2ae-c53b-eebd-858b-089a2e1cfdd8 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 99c453ef-325b-af8e-2cf5-ec78b62c9dcb from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record e3aad2d2-1661-392b-d437-6fb5144ad2a4 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record c2e33943-7ed7-cc99-bb18-f1be9bca4f90 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 23151b8d-34be-81ec-2ce1-a325461d8db6 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record a0e1bfbd-b52f-9a2a-ab7e-892d9cc86e0c from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 4edbfef8-953b-1a8b-3132-b388cfc3f35a from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record b136d5fb-10d1-6824-0291-be0233c95532 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record d75037b1-687a-bf5b-8502-03abbb933a15 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 84b9bda5-0e2c-d8ad-ea8f-3be0b8be7212 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 482146d2-55d0-f051-58ff-0624cf869269 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record f2159ff5-dd50-38a4-a3a1-5d24d7874650 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 68d61743-03f4-3676-171f-ddd27e365e8a from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 221ec3e3-7a03-65db-c352-b37ee903e9cd from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 3f933587-4429-95fa-aa5d-0b4bdf3c49ba from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record fc57b67c-d4e5-3bb1-9029-21652fa11d65 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record b3c721a8-29da-5ad2-0963-423a5dfa535e from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record dbaaae92-984b-0aa9-932d-f0745f04b0c2 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record ee9f585d-8513-1e93-5b2d-18e201300da2 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 1243749c-8400-0732-f7ff-0426721dcfa1 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 3ea65dd8-b6ef-5dfc-5b51-e2c01eeae938 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record e99c7e50-dd8f-90d5-d47d-d7c2d10878d0 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record de3b3ddd-b610-5065-c774-b19e522baa45 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record e5e61cd7-c056-3eed-9389-2b3961a2b7ab from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 1b917a1d-df70-0a5f-4aa2-79760fab53e5 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 7249d149-7eab-71d1-bb1f-453df43cc03a from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record cdf3da53-87cf-894b-0690-76ac83688d07 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 3e587e62-054b-cbcb-2266-2de7898e8dda from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 9e7bf788-3944-5629-16ad-95c8f7a93fdb from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 4fd98632-1a48-ef9f-2afa-36452eb15ca2 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record f4921539-d130-fbbe-8e2c-1685401e0548 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record ed22c330-18b2-594d-04fa-c06e07b2e68a from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 42ec600e-31f1-160f-bd1e-a0e8b2ef84f4 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record a307c31e-9972-2a0e-d65b-617104872863 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 3d05a4cb-85dd-8358-76c4-c74f93945bed from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 59c775be-1a55-5522-71b7-e67cb3e090aa from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 2dd11155-b793-be67-180a-3de7de9943a6 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 77001ae3-1f80-2666-45e4-2f4d0b904d54 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record c2f268b9-8031-83c3-95fd-adc97e5c0a1d from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 1f1d7202-1f3d-d788-1c2b-94eb47955cd6 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 8aa62560-230f-757d-e26a-86b867d8b64c from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 3a1ed8f1-dc70-6911-3a39-0eea9780ff20 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 764937d8-92a5-bc52-ab34-e0fd25b03ea7 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record f2bcde3d-2a11-131c-6588-6209bf1fc521 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record a28ecd3f-f005-4e42-04bc-fe34d375a49f from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 98d7a0c1-6ba4-d827-b1a1-6a1b6384c698 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 0944e14c-868e-bb8e-9a50-75c3d6f81129 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 0d4da084-f0f8-8227-f872-266665483c3c from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 6694b89e-56ab-1e51-5cfe-42a6c6e362db from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record b72ce129-55c7-f81d-d6ac-6c773d895a43 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 907e2098-fb31-4b37-d7d0-912a6f824b44 from feed-13
+info: Contoso.Ingest.FeedWorker13[213]
+      Ingested record 5214c96a-e9ab-5979-fc5f-26b9cdebbef6 from feed-13
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 8fa2fc70-d8fe-52f8-668d-3355d0a6abc0 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 25897dfa-8472-a7bb-532b-51fc0db5a939 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 5a79b902-ef30-7307-ae1f-39d7f53660b9 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record a9c22075-6c11-1d32-ded8-ddd23fd11af5 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 1be917e5-5d4b-69e0-02f5-3c3ba1f7f5d6 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 53089e3f-11bb-4cbe-2fff-b94b87e26636 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record ab4cc89d-8138-e966-3366-a3116edbbe94 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 6bb4d3fd-23b0-2845-39b8-f4a70554fad0 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record ff5c859d-c6cd-eb4d-65a5-2d10f83e0220 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 0bf895d7-a21a-2672-7427-bc76efdaf3ff from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record f929bdb1-e266-4428-faed-bed1cf2c39e4 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record dd986619-08cc-b63c-0a4e-ecb2e277e9db from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record eafd6a99-4409-a232-9ef5-0006a43e3769 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record a0d4f2e3-45ff-b65d-9f9b-c6d3adae2c57 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 0928ca2c-eca4-68e9-ce6b-a18b8ad12fc9 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 1f27b474-4026-15f6-19ba-a4a49f0ac017 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 3c953f5d-6f06-6429-037f-b23b8532b56c from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 1cf070c7-499b-18e5-0a17-5b0ef36bf211 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 2abf1627-a5c3-e09d-58f9-45ca4e2f76c2 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record f5866403-9823-5599-0f72-65191ed14e6a from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record e6c38898-8387-0307-ebca-6ca9f4c1f93e from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 971a80e9-7767-1f6c-15a0-178344b69e2f from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 70a25794-25fe-05ea-ee92-b44588a92e3c from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record e29bd78f-21a1-6b16-82fa-58471fb9396f from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 93cce111-6813-4503-ea63-fc954b29558f from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record bc65f6c0-3e4f-81fc-462c-347649ce7f4f from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 4983cdd8-8bdb-460a-bd8b-16d7167d27de from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record b1e0ae35-9c25-da84-7442-9bc9d6f9ac8b from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 62fb96f0-a67d-d1a7-38bb-d46291f7442c from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 5de7818b-b5da-2468-8c6f-5a9c33814f57 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 4dbf5d84-8c4b-ad76-e44d-9ef075fc74c4 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record d19e2a95-780e-2104-7a54-c2e39ce070a2 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 556b29dd-3e04-6328-07ed-25f34f7d39da from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 8bc11ff7-832f-e3f2-3055-76f338b98187 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 657e08bc-95ef-5783-f838-15f5621789c9 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 298c21ba-5a47-75f8-ec97-d7e1030a7221 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 52ee8d44-3d11-0dbb-f3bb-6654dca332df from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 4519feb0-7dcc-df5b-5352-82cb8e80d2fd from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 375504a5-fccd-7d53-e0dd-06f248e9f659 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 0593c11a-c5aa-385e-0e91-7e0b4ba62ac2 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 9b1dda1b-1119-ba30-8d16-c2742897d372 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record a8603999-70a2-ee42-5916-31cddf0bbe3e from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record d596a703-634c-9328-8459-d2f40fe0564c from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record c349dc1a-bc44-06c6-5aa7-2b97709d198a from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record fd43345c-39a4-8c48-855b-9df91bf76e53 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record ef175e5d-bd17-5335-ad7b-13d5f594ff78 from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record ab11f5e0-5646-aa7a-6ab0-3eaa278eba6d from feed-14
+info: Contoso.Ingest.FeedWorker14[214]
+      Ingested record 33d68d17-ace3-57b4-23ec-7c0c5a3a701c from feed-14
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 46d8ec2e-d999-1d0c-9c5a-8a4f9dc59da0 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 18554f8c-848c-7bcc-d6c6-7dc3d239bf0b from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record ec0aa471-be47-874d-db34-0bb0bd1fcf12 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 44c862cf-79a9-398b-fedf-9a7dc27b5104 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record a1d38cb8-b563-aa56-a173-70f4c8f1f9c1 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 69bc9550-2094-f08f-b418-b27aea2a15ed from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 69112487-011b-5d7d-1a75-92a5deee7382 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 1e110eb0-95f9-40ff-8cc9-48e7c4036eab from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record fe304b6f-f676-49bc-65c2-20e77f7545c0 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record d99619cd-6afc-289a-264e-5ace926be728 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 9f140adb-df6d-487a-4780-c42fc89fa771 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record da080c92-612a-ff07-1c6c-347d9b7a3939 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 49be7f80-7539-1799-b151-140073c8d589 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 5a5b2c16-4afc-bac6-5a45-3866b91a8326 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 986d7a4c-8e2b-86b8-86af-e7df6403e571 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 01bb277e-526e-2f0b-a5f0-8356626ea6b3 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record fd5ec696-d97d-2d6d-beeb-48ddc97df06b from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 4cce4a50-71ac-0278-6173-db2a7fe27f01 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record cd8e4dc5-4dd5-169a-8970-978f2f287d98 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 608302a7-934f-906c-6f86-7ce3251e1ae1 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record d256ddf8-1682-9005-3b60-3d9294e29546 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record f80d1a65-52e8-f127-5480-3006eb8fb862 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 3e1e7f97-d691-305e-9bab-7a3ed7e86685 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record f8dce53f-344d-a10e-5368-de8bf57181a7 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record f4b6c7c1-e91b-5531-e429-370c6d2ba5e2 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 41ad2c8b-0c25-2a09-068c-193502bcbaa1 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 4cc0eedb-7f51-800b-e559-29b1909f8ff1 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 4ffaaa98-c602-e3de-8954-7528eb998e41 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 6fe9b385-ff92-655e-9eb7-ce5b89db1c3f from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record ba243b69-846b-853b-d35f-847e84777780 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 76d8fc8f-63b7-6c86-6e18-2b31af6b1827 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record ad1d2cb9-983f-9a9a-0a6c-18dc5b93046e from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 02a83c34-f2a9-91f8-73fc-117459e2221f from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 3ab18dae-8676-ab61-117a-13aead2d9c5f from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 803b8f4d-5fd9-b34a-68d6-3e751955da89 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record edac6e6c-8fb3-e428-a606-7a2766a0f7da from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 302ece3f-e13c-df92-277a-fd0b92f54112 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 66d1eec9-7c99-3a3a-6bd5-6c0df6e79284 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record e62ee61c-9fe6-0efb-c46f-9c9a70ae8c01 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record b10b43a1-57e1-2d4d-9660-060aff0200ae from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 179d3907-d0dd-e8e0-bf18-7fee87b72d51 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 5ddd479a-516d-8b3b-5cdb-039e2bb4754a from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record 4f857281-d376-a833-1338-eb2bfa7a2cf0 from feed-15
+info: Contoso.Ingest.FeedWorker15[215]
+      Ingested record a7eac1c8-1c4a-7f30-2cf3-3142833955bc from feed-15
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 57e61ea6-b09c-724a-4b7f-e9b1e4fead80 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 8245fb9c-fd80-eda2-ef75-d22fd20fde9d from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record a18fda26-6bbf-4273-f8a7-d8c3e35d60a4 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record d0f00a15-4a38-9d63-8628-9b362809cebf from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record e4a4e6b8-8140-4caf-3532-000c82f89eb7 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 0f674b81-2eb2-6aa7-6989-d89e3027db71 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 1b4b76d5-9a66-92d4-90a0-aad5a14e1d71 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record a19e1497-fe66-52b9-91e2-cd455a6a4821 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record b115d13b-0ad5-11b1-b90d-aa6ba2f279aa from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 00b62052-c9a2-7dd4-02bf-72176952aa64 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 8d8cf9a8-b0d1-937a-b5ec-5c294e868ac3 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 65c6e445-4df0-de9b-eac2-9dbf01007271 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 03f3f20d-9611-3b67-1937-1cb1d797a9ee from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 2cd986e8-3257-ae42-078f-6a4cab090579 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 9128a82e-8da1-c6a4-c4da-f9407f73d6f2 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record e543ba92-a595-6e2b-df02-eac34419ca8e from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 24caabd0-ff42-9589-83ab-84e3880fa3ce from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 9a0bc130-693d-e148-32d3-fd0393105115 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 84b76cbd-2822-2210-2535-ea0c1f1ab658 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 076ec848-1b4d-294b-826d-cfa8c26e5270 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record f2a565ea-2ba8-3bac-137d-42bc19a06408 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 77af3bd4-d2b9-5b81-7d8c-9a1885c23dcf from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record cce053f6-ce7d-5793-6e3d-32789cedd8ab from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record af3fa022-0332-a06a-a66c-f88b0fe6c899 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 24d868cb-52a4-7582-942f-0c8ac544cb7d from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 4683beba-5a95-92b1-3cfe-cc85b7283ccb from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record a0f25e4b-4440-8e61-086b-81522b5ec1ce from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record f29c7dd6-e763-0c32-dbfc-e1c01975ee17 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 31102878-5951-16e1-1022-3eca950ee291 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 05011ece-62ba-641a-9fbe-a64073289c32 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 655fcf16-e3fa-79a9-3855-0f640dff6f5d from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 0b3e93e1-f5a9-2f83-c399-2a9095295835 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 3d00bdf7-9ec3-fd06-0df9-3e22708c5162 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 28ce935c-0b42-312f-390f-f0f43fd40dd8 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 2c6c8a0c-dace-a33c-9645-73f5ee4a6e55 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record ddf2d709-e61c-32c0-0193-ebab50964e95 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 6b1ab7b4-4dbd-bf12-7497-ef39d0debe09 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record e3078161-f5c4-75b0-4080-f4aa9a40e1eb from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record 11496151-f320-4836-fac3-3aa57edc7ca5 from feed-16
+info: Contoso.Ingest.FeedWorker16[216]
+      Ingested record acc6e787-63c9-a0e3-ad62-558b3e30851d from feed-16
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record 69dace38-38ad-8f8f-95b6-c70fb7ed5f3e from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record b636d53e-e014-2b98-660a-83b74f24f882 from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record de432e5e-caf2-1612-05bd-be377c00f4ae from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record 2b8028c4-2c68-5f56-1664-26023e4edec5 from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record 01f42572-2fc1-ec5d-6106-c0645bbfd7f6 from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record 65620481-4a6b-5b62-e1de-878cf8b7555c from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record 55c38305-1d69-311d-5ce9-65118fc0b1b6 from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record 55fc410d-62b6-8280-df19-a22888a3df20 from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record f61313f3-10c1-212e-a6ba-676b6737db90 from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record e9b9ff16-d369-48f6-6c1a-58d11f8fe12c from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record 632a42b9-3eb4-20db-8dc8-864959eb5c10 from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record 582fc771-4899-2613-778e-384b30f2300d from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record 47754001-08f0-3e7b-6f81-f00a3cb77b2e from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record ce0c0701-5767-5f82-0679-0646aa0de399 from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record 213ed6d2-b4b3-f864-3de6-95ed27e8a103 from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record 8b7c5a45-4508-f0a2-3240-78b217b6af7d from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record 8e12e447-20b7-2298-c997-16efd5c31443 from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record cb811a3c-d618-c0a3-7790-c627717cad81 from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record 5e2fd186-28c2-c5f3-3d7c-b9cbce10861d from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record 67b80c22-b8f3-8d1b-376a-fb435a58e0c1 from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record 94ab8cba-f559-ea6b-a11c-abde607c1966 from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record 79d81d15-f370-bdbc-4c18-d04f354359fe from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record dbbf7142-3a2e-9019-3456-8a23813c855c from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record f12ca00d-2185-9a18-ace0-9f7573e3a21b from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record 98906251-42c1-278c-ff77-a417b4db6cf0 from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record fd6edc91-966a-93e1-70ba-90f0e64d52a0 from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record 67766a7f-3f0a-483a-88df-8c675e34f81d from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record 2021dc2c-3669-265a-829c-11729bb33b8c from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record ad87e50d-1f6f-17a0-c02c-bb7cdf54fa50 from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record da135667-8ae7-5d3f-176a-8b518355ce73 from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record c3cac55e-c591-0954-bc66-74134539884c from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record b7ddc1a8-a853-53b1-0759-fc0e628368bb from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record 03d71035-4f8f-dd84-2523-4bb091538a62 from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record b1d57573-1606-84b7-b5f0-bd5f63d2c4cb from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record 3b47d325-d9db-4cf9-c6b0-f8b32d52f71f from feed-17
+info: Contoso.Ingest.FeedWorker17[217]
+      Ingested record e42d981a-a9a9-e7cc-3035-5fd2522f7dd3 from feed-17
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record e9f21682-8fde-9ebe-116d-be5b1be4e39e from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record c22a0282-8017-f4e4-ce20-4c965c8a19d2 from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record b7fdf4c5-10df-8af2-315c-efd14c057b32 from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record 49df9b07-39f6-fa2d-1683-3e934faf8eb0 from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record 66231401-b779-220f-d11b-d314204a3970 from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record d82830a6-6743-ca59-5b1c-2724484902df from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record a0c6e70e-c666-30c7-76e7-241be8af2d6b from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record dcf3e9b8-dc7c-e010-a0ed-4ac2e1fc4c5c from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record 2d281ed0-46ca-151e-efce-332321d5c0a7 from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record cca4e513-adfb-e15c-5dd8-4e9007922a93 from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record e59e1f0c-59f7-412d-b0e2-5386a9e2612e from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record b42b57de-a8b8-63bb-0677-acf5699e3b2a from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record fffc0920-3f98-84b9-766b-c130b301f4f0 from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record e7f29ab1-5a24-1c92-6688-e8aad8c244d2 from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record 4a9e33f3-2e81-1113-1902-bac1a0fad25a from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record 9be1f820-e9a5-cb18-4558-ee161d7fd35e from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record ad6b4d7f-b66c-1b49-381c-f55cbbeaec5a from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record 9bc89994-0a3d-5804-6797-f4970a5b0d89 from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record c1c81c2d-32b5-dff1-6e42-8d632979b0ac from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record bd02c4da-6178-4ea4-27fc-03424d9664cb from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record a1240051-4f98-40d3-8d66-70150a0b3b1c from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record 908656cc-2dfe-f53b-f109-e573a3689b02 from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record 7f75d5c2-91f6-59b6-3a47-9870d6e733f8 from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record ecfa3553-4134-9d66-8551-cc0eb77555e7 from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record 93453d6f-af30-18d7-ab8d-e2106f57b993 from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record 1ca3a6a8-003f-af7b-ef88-6112595aa0bc from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record a7c98f61-c6c6-f4d0-c382-1561d59304bd from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record e0075c62-0aff-6975-e6ac-933f494d4226 from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record b22d5728-9b7d-b9c3-95ca-a8addaa96ad5 from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record ae5a8a83-3e94-bd1b-f960-7af30c1eeb4f from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record 518c959f-ca9b-a76d-0981-67711c76c5bb from feed-18
+info: Contoso.Ingest.FeedWorker18[218]
+      Ingested record 587d62b0-ea1b-73d8-c6f1-5fe135cbae1f from feed-18
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record 6acfffb7-160d-107f-e9e4-b255bfe0ddc7 from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record ff841bf5-64c5-4b68-be72-64aab1d65b1a from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record 38866458-d428-7253-9d86-6a0fbf603b83 from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record 595a75ee-1705-e32d-86fe-bef847fa7998 from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record 714b6caa-6c89-ac3d-f319-c55af244bf16 from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record 80c981cf-b10e-0b0c-571d-de8cee2227bb from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record d6c15464-d47a-2ebb-b03b-ed0cbd159778 from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record 82376e64-73e9-6b00-a03e-2c7ca0cb3cc3 from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record 34ba6224-b2c0-da1a-ad34-df240de6a4fd from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record d8b86cdc-830a-a30d-ac51-a8fc6da85f04 from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record 7d50881b-20ad-51a0-c73b-72f3ed99eb7a from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record f3c9df16-0b2f-59b5-3075-b546c30d575f from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record 8f22ef57-ce44-8d66-d33e-b4e6b3e6c1bf from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record 29e7fe61-8be1-1959-2cae-0c4542ddd793 from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record 3c6ab6b9-a334-4d41-c7e6-7012f82b89f3 from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record f6aeedff-3feb-b019-42a1-80ff8b3f19e5 from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record 58e40045-5b9a-78bc-2b05-64e30f33bb33 from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record a2f20462-338f-aa86-17b0-a8a269611b94 from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record aface5fd-22f5-26fc-231e-e9584f806351 from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record 7b9757ad-ab9b-08c2-7c87-8b90b4fc2ba0 from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record 01815723-3de0-cf87-b4a3-95943ce53892 from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record 2212fb12-71ed-8d83-b107-c9ef83f00b76 from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record b2b365fd-59f9-59ab-a412-a64cef9370a7 from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record b52cd4e5-e27a-bca0-2226-70d04ca3a936 from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record 3da32b0f-9032-5da2-9669-ebae2452c6a7 from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record 1e335d03-d0bd-9362-a120-77c65564f44a from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record f0f396b2-c2b1-3eac-6cb4-e4f88c5ac762 from feed-19
+info: Contoso.Ingest.FeedWorker19[219]
+      Ingested record 27a063e7-aaa1-de16-ad51-83962b516d73 from feed-19
+info: Contoso.Ingest.FeedWorker20[220]
+      Ingested record d6e88d16-760f-d085-fab4-008699434ea9 from feed-20
+info: Contoso.Ingest.FeedWorker20[220]
+      Ingested record 34d1bd92-d4c7-9ec8-67f6-17e5c422ff91 from feed-20
+info: Contoso.Ingest.FeedWorker20[220]
+      Ingested record 032ac419-4a12-321d-b0ac-658d1d4e724a from feed-20
+info: Contoso.Ingest.FeedWorker20[220]
+      Ingested record 0b1c0cc9-34d8-c73a-7c92-62d55c48784e from feed-20
+info: Contoso.Ingest.FeedWorker20[220]
+      Ingested record 4dcca0e6-47e7-f3cb-e553-ef860f71e85e from feed-20
+info: Contoso.Ingest.FeedWorker20[220]
+      Ingested record 4f152945-b39d-9ec4-1c4f-f9ef32760110 from feed-20
+info: Contoso.Ingest.FeedWorker20[220]
+      Ingested record 294c3d89-1cec-cddd-f67f-a00172b150d1 from feed-20
+info: Contoso.Ingest.FeedWorker20[220]
+      Ingested record 91b626d3-77fa-10a3-71f0-456f531082d0 from feed-20
+info: Contoso.Ingest.FeedWorker20[220]
+      Ingested record 8eba6514-2b08-4bd9-4a1d-0c725cebfc57 from feed-20
+info: Contoso.Ingest.FeedWorker20[220]
+      Ingested record 77f06139-02c4-b76f-0bab-24821262afca from feed-20
+info: Contoso.Ingest.FeedWorker20[220]
+      Ingested record 7c4b5b86-c01d-342b-fad5-cbf0fdfc191e from feed-20
+info: Contoso.Ingest.FeedWorker20[220]
+      Ingested record 54ebef65-b796-92bb-bf4e-72cb157f2cc4 from feed-20
+info: Contoso.Ingest.FeedWorker20[220]
+      Ingested record 43b1bddb-904b-96d0-bd2e-f894faef7b98 from feed-20
+info: Contoso.Ingest.FeedWorker20[220]
+      Ingested record f4ec72b1-7d26-ff92-a525-c8151bda7ad1 from feed-20
+info: Contoso.Ingest.FeedWorker20[220]
+      Ingested record c8ac1ba7-3097-4c01-7d04-11cb6f2a6038 from feed-20
+info: Contoso.Ingest.FeedWorker20[220]
+      Ingested record 5bfaca0e-0220-16af-5262-56de8b06c17b from feed-20
+info: Contoso.Ingest.FeedWorker20[220]
+      Ingested record 49358889-a4fe-64d5-1749-a883eb681073 from feed-20
+info: Contoso.Ingest.FeedWorker20[220]
+      Ingested record bb0b58e4-ef6c-77bc-9d04-e3c4a0b3d934 from feed-20
+info: Contoso.Ingest.FeedWorker20[220]
+      Ingested record a72fc9b3-405c-8a4a-b309-7038a7110b0e from feed-20
+info: Contoso.Ingest.FeedWorker20[220]
+      Ingested record bf58c53a-237e-ba59-1401-4c5a3ef919e0 from feed-20
+info: Contoso.Ingest.FeedWorker20[220]
+      Ingested record 65309ecc-c641-9adb-0679-9ac3071548a8 from feed-20
+info: Contoso.Ingest.FeedWorker20[220]
+      Ingested record 5e2de4d1-4bdb-52c7-2527-b6fad6eea078 from feed-20
+info: Contoso.Ingest.FeedWorker20[220]
+      Ingested record 8682ff67-a35a-947d-f647-1bab2f8c4faf from feed-20
+info: Contoso.Ingest.FeedWorker20[220]
+      Ingested record ae9cd1df-ed3c-7fc1-e546-37cfd88163ff from feed-20
+info: Contoso.Ingest.FeedWorker21[221]
+      Ingested record b806c5c2-c8dc-a895-1a28-46ff2b2023b5 from feed-21
+info: Contoso.Ingest.FeedWorker21[221]
+      Ingested record 9de64869-be08-e40d-4f73-09ccd494b1cd from feed-21
+info: Contoso.Ingest.FeedWorker21[221]
+      Ingested record a5b5c856-2f3e-3319-611e-c19f53a0df34 from feed-21
+info: Contoso.Ingest.FeedWorker21[221]
+      Ingested record 3af01593-51f5-b7f9-5b32-fd97d3489d54 from feed-21
+info: Contoso.Ingest.FeedWorker21[221]
+      Ingested record eb7249b2-8d17-219c-22e7-5c2c5e57b3dc from feed-21
+info: Contoso.Ingest.FeedWorker21[221]
+      Ingested record 40e8a62d-d4d6-2887-d67b-6abc5e88df9b from feed-21
+info: Contoso.Ingest.FeedWorker21[221]
+      Ingested record 1b73d296-0a8f-8e5b-0ec6-dfcf3d47fd07 from feed-21
+info: Contoso.Ingest.FeedWorker21[221]
+      Ingested record ebcbbc51-a0d2-71d7-cd83-4b0a911e5b6e from feed-21
+info: Contoso.Ingest.FeedWorker21[221]
+      Ingested record 6739941d-b4a0-7ee1-fff8-9bead1da1b4f from feed-21
+info: Contoso.Ingest.FeedWorker21[221]
+      Ingested record 3768bcfe-f1e7-2aa7-0cf0-a5c1e7bae92c from feed-21
+info: Contoso.Ingest.FeedWorker21[221]
+      Ingested record bb131b3d-7fe1-347e-6c48-6af27e8fad53 from feed-21
+info: Contoso.Ingest.FeedWorker21[221]
+      Ingested record 9a45a3c6-4cb0-c399-fee1-d63a2850c557 from feed-21
+info: Contoso.Ingest.FeedWorker21[221]
+      Ingested record 2452c038-148a-223a-a061-ebc794c4064f from feed-21
+info: Contoso.Ingest.FeedWorker21[221]
+      Ingested record 2367a4b1-29e4-2f63-3a3d-6466b01fb83c from feed-21
+info: Contoso.Ingest.FeedWorker21[221]
+      Ingested record 66c13550-f845-a62b-a302-6e4a7174cb1c from feed-21
+info: Contoso.Ingest.FeedWorker21[221]
+      Ingested record d9c578dd-0a39-b5c8-faa2-41a616f40890 from feed-21
+info: Contoso.Ingest.FeedWorker21[221]
+      Ingested record 37e0e321-30d9-33b3-7aba-0cf370833e8a from feed-21
+info: Contoso.Ingest.FeedWorker21[221]
+      Ingested record 08328ba9-00b7-a724-5f5b-7776b9134559 from feed-21
+info: Contoso.Ingest.FeedWorker21[221]
+      Ingested record d562bf11-daf6-c342-9c59-7af8d7402ecc from feed-21
+info: Contoso.Ingest.FeedWorker21[221]
+      Ingested record 24a64615-6ce9-eb66-82e3-e9aec9738a76 from feed-21
+info: Contoso.Ingest.FeedWorker22[222]
+      Ingested record 0e2806fc-a960-42fb-126e-3664488383be from feed-22
+info: Contoso.Ingest.FeedWorker22[222]
+      Ingested record e3ffedb6-6bd4-4acd-b5f5-842d83be4390 from feed-22
+info: Contoso.Ingest.FeedWorker22[222]
+      Ingested record 02409484-704e-3636-100e-44d756b2fc0f from feed-22
+info: Contoso.Ingest.FeedWorker22[222]
+      Ingested record 2d20cff7-d379-7379-f4bc-f11baa85cd61 from feed-22
+info: Contoso.Ingest.FeedWorker22[222]
+      Ingested record 60fa86a0-2a1a-5cd0-b989-5415e76c808b from feed-22
+info: Contoso.Ingest.FeedWorker22[222]
+      Ingested record cddda66c-7172-a558-0112-d3e14bb5a346 from feed-22
+info: Contoso.Ingest.FeedWorker22[222]
+      Ingested record 9148ac6e-591d-3eb1-acdd-efa490393d58 from feed-22
+info: Contoso.Ingest.FeedWorker22[222]
+      Ingested record 8aefce45-15c5-4d37-7805-c0e03206c63b from feed-22
+info: Contoso.Ingest.FeedWorker22[222]
+      Ingested record 6da9fc8f-75e1-b04d-844b-b0be52dda740 from feed-22
+info: Contoso.Ingest.FeedWorker22[222]
+      Ingested record a02f6772-e8a0-fe71-88e1-cae0f8a6d7cf from feed-22
+info: Contoso.Ingest.FeedWorker22[222]
+      Ingested record 66bffc83-f970-4198-2784-70e2dd8c0f96 from feed-22
+info: Contoso.Ingest.FeedWorker22[222]
+      Ingested record 14d92a0e-9eaf-c05f-9bec-5c98f639b335 from feed-22
+info: Contoso.Ingest.FeedWorker22[222]
+      Ingested record b90759c5-0f5c-b6a8-cf48-2c12cfa76725 from feed-22
+info: Contoso.Ingest.FeedWorker22[222]
+      Ingested record a88f44fa-9bf1-2a80-54df-ec11ad2b92ed from feed-22
+info: Contoso.Ingest.FeedWorker22[222]
+      Ingested record 6bcffbab-9235-466a-90a5-5d664c0aba50 from feed-22
+info: Contoso.Ingest.FeedWorker22[222]
+      Ingested record a8103833-7b11-4485-5e5f-1a0ff3eb5ef5 from feed-22
+info: Contoso.Ingest.FeedWorker23[223]
+      Ingested record dd81d987-4c9f-b3c7-2308-be55a5b93d2e from feed-23
+info: Contoso.Ingest.FeedWorker23[223]
+      Ingested record a23d3955-e296-2ee0-87c8-8f4e57e9a372 from feed-23
+info: Contoso.Ingest.FeedWorker23[223]
+      Ingested record 38f4aa22-3058-1eb8-d91d-bfb30720a1d1 from feed-23
+info: Contoso.Ingest.FeedWorker23[223]
+      Ingested record b0fcebae-7285-3369-bd5e-0bdeadbe36b5 from feed-23
+info: Contoso.Ingest.FeedWorker23[223]
+      Ingested record 943e079a-a915-5bbc-259c-6be515d01935 from feed-23
+info: Contoso.Ingest.FeedWorker23[223]
+      Ingested record f1741ae5-94ad-393d-8e0c-6f2d5f3c0a07 from feed-23
+info: Contoso.Ingest.FeedWorker23[223]
+      Ingested record 3d8042cc-87ac-ab54-5c29-0a376a97ad18 from feed-23
+info: Contoso.Ingest.FeedWorker23[223]
+      Ingested record 42d63809-6576-be39-70fd-7c459097b75e from feed-23
+info: Contoso.Ingest.FeedWorker23[223]
+      Ingested record f7f19a78-2e35-5b29-3a2c-b3931d3fb93c from feed-23
+info: Contoso.Ingest.FeedWorker23[223]
+      Ingested record bff5ee6f-8c51-309f-33ec-092fe3d69b01 from feed-23
+info: Contoso.Ingest.FeedWorker23[223]
+      Ingested record d65aa975-dcb7-695e-38a4-71801cbdd82e from feed-23
+info: Contoso.Ingest.FeedWorker23[223]
+      Ingested record 3002a032-184f-9ba2-a651-0ba340e4b12e from feed-23
+info: Contoso.Ingest.FeedWorker24[224]
+      Ingested record b587728c-4065-1107-ab94-c66887e0eecb from feed-24
+info: Contoso.Ingest.FeedWorker24[224]
+      Ingested record 7549a476-8dd4-5639-3a1c-07c97d4145ed from feed-24
+info: Contoso.Ingest.FeedWorker24[224]
+      Ingested record b25c7f15-929c-edc6-8a8d-d46039ff77f9 from feed-24
+info: Contoso.Ingest.FeedWorker24[224]
+      Ingested record e8c4d036-8360-0d24-bc4f-68f71ceebc19 from feed-24
+info: Contoso.Ingest.FeedWorker24[224]
+      Ingested record d9fe527d-1489-dcef-911d-db9296a50b7f from feed-24
+info: Contoso.Ingest.FeedWorker24[224]
+      Ingested record cce2b877-12cf-225d-adf3-46ac68746928 from feed-24
+info: Contoso.Ingest.FeedWorker24[224]
+      Ingested record 80cd2a94-dd0c-d316-2260-7f887084ddd8 from feed-24
+info: Contoso.Ingest.FeedWorker24[224]
+      Ingested record d6ab1c89-b6f0-5dd4-81da-248e8cf1af43 from feed-24
+info: Contoso.Ingest.FeedWorker25[225]
+      Ingested record a06882b0-1d57-4de5-f2b5-fefdc1c43b63 from feed-25
+info: Contoso.Ingest.FeedWorker25[225]
+      Ingested record 83e14710-b8ba-bc9c-f5db-6a2dfd9bbbbe from feed-25
+info: Contoso.Ingest.FeedWorker25[225]
+      Ingested record af9b278b-d488-b0a4-75c1-bd361a22c7ca from feed-25
+info: Contoso.Ingest.FeedWorker25[225]
+      Ingested record f7cc4516-2bd7-6124-8b57-3a366457abab from feed-25
+warn: Contoso.Ingest.FeedWorker1[300]
+      Retrying downstream call after transient failure (attempt 1 of 3)
+warn: Contoso.Ingest.FeedWorker2[300]
+      Slow query detected: 260ms
+warn: Contoso.Ingest.FeedWorker3[300]
+      Cache miss for key 'feed-config'
+warn: Contoso.Ingest.FeedWorker4[300]
+      Retrying downstream call after transient failure (attempt 1 of 3)
+warn: Contoso.Ingest.FeedWorker5[300]
+      Slow query detected: 290ms
+warn: Contoso.Ingest.FeedWorker1[300]
+      Cache miss for key 'feed-config'
+warn: Contoso.Ingest.FeedWorker2[300]
+      Retrying downstream call after transient failure (attempt 1 of 3)
+warn: Contoso.Ingest.FeedWorker3[300]
+      Slow query detected: 270ms
+warn: Contoso.Ingest.FeedWorker4[300]
+      Cache miss for key 'feed-config'
+warn: Contoso.Ingest.FeedWorker5[300]
+      Retrying downstream call after transient failure (attempt 1 of 3)
+warn: Contoso.Ingest.FeedWorker1[300]
+      Slow query detected: 250ms
+warn: Contoso.Ingest.FeedWorker2[300]
+      Cache miss for key 'feed-config'
+warn: Contoso.Ingest.FeedWorker3[300]
+      Retrying downstream call after transient failure (attempt 1 of 3)
+warn: Contoso.Ingest.FeedWorker4[300]
+      Slow query detected: 280ms
+warn: Contoso.Ingest.FeedWorker5[300]
+      Cache miss for key 'feed-config'
+warn: Contoso.Ingest.FeedWorker1[300]
+      Retrying downstream call after transient failure (attempt 1 of 3)
+warn: Contoso.Ingest.FeedWorker2[300]
+      Slow query detected: 260ms
+warn: Contoso.Ingest.FeedWorker3[300]
+      Cache miss for key 'feed-config'
+warn: Contoso.Ingest.FeedWorker4[300]
+      Retrying downstream call after transient failure (attempt 1 of 3)
+warn: Contoso.Ingest.FeedWorker5[300]
+      Slow query detected: 290ms
+warn: Contoso.Ingest.FeedWorker1[300]
+      Cache miss for key 'feed-config'
+warn: Contoso.Ingest.FeedWorker2[300]
+      Retrying downstream call after transient failure (attempt 1 of 3)
+warn: Contoso.Ingest.FeedWorker3[300]
+      Slow query detected: 270ms
+warn: Contoso.Ingest.FeedWorker4[300]
+      Cache miss for key 'feed-config'
+warn: Contoso.Ingest.FeedWorker5[300]
+      Retrying downstream call after transient failure (attempt 1 of 3)
+warn: Contoso.Ingest.FeedWorker1[300]
+      Slow query detected: 250ms
+warn: Contoso.Ingest.FeedWorker2[300]
+      Cache miss for key 'feed-config'
+warn: Contoso.Ingest.FeedWorker3[300]
+      Retrying downstream call after transient failure (attempt 1 of 3)
+warn: Contoso.Ingest.FeedWorker4[300]
+      Slow query detected: 280ms
+warn: Contoso.Ingest.FeedWorker5[300]
+      Cache miss for key 'feed-config'
+warn: Contoso.Ingest.FeedWorker1[300]
+      Retrying downstream call after transient failure (attempt 1 of 3)
+warn: Contoso.Ingest.FeedWorker2[300]
+      Slow query detected: 260ms
+warn: Contoso.Ingest.FeedWorker3[300]
+      Cache miss for key 'feed-config'
+warn: Contoso.Ingest.FeedWorker4[300]
+      Retrying downstream call after transient failure (attempt 1 of 3)
+warn: Contoso.Ingest.FeedWorker5[300]
+      Slow query detected: 290ms
+warn: Contoso.Ingest.FeedWorker1[300]
+      Cache miss for key 'feed-config'
+warn: Contoso.Ingest.FeedWorker2[300]
+      Retrying downstream call after transient failure (attempt 1 of 3)
+warn: Contoso.Ingest.FeedWorker3[300]
+      Slow query detected: 270ms
+warn: Contoso.Ingest.FeedWorker4[300]
+      Cache miss for key 'feed-config'
+warn: Contoso.Ingest.FeedWorker5[300]
+      Retrying downstream call after transient failure (attempt 1 of 3)
+fail: Contoso.Ingest.FeedWorker1[500]
+      Unhandled exception processing feed-1
+      System.TimeoutException: The operation has timed out.
+         at Contoso.Ingest.FeedWorker.Process(Int32 feedId) in /src/FeedWorker.cs:line 40
+fail: Contoso.Ingest.FeedWorker2[500]
+      Unhandled exception processing feed-2
+      System.TimeoutException: The operation has timed out.
+         at Contoso.Ingest.FeedWorker.Process(Int32 feedId) in /src/FeedWorker.cs:line 41
+fail: Contoso.Ingest.FeedWorker3[500]
+      Unhandled exception processing feed-3
+      System.TimeoutException: The operation has timed out.
+         at Contoso.Ingest.FeedWorker.Process(Int32 feedId) in /src/FeedWorker.cs:line 42
+fail: Contoso.Ingest.FeedWorker4[500]
+      Unhandled exception processing feed-4
+      System.TimeoutException: The operation has timed out.
+         at Contoso.Ingest.FeedWorker.Process(Int32 feedId) in /src/FeedWorker.cs:line 43
+fail: Contoso.Ingest.FeedWorker5[500]
+      Unhandled exception processing feed-5
+      System.TimeoutException: The operation has timed out.
+         at Contoso.Ingest.FeedWorker.Process(Int32 feedId) in /src/FeedWorker.cs:line 44

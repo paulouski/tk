@@ -1,0 +1,13 @@
+diff f=1 +5 -0
+top=b.cs(+5 -0)[conflict]
+@@ b.cs 4-11
+  {
+      public int Value => 2;
+  }
+++<<<<<<< HEAD
+ +master line
+++=======
++ feature line
+++>>>>>>> feature
+
+hid=1/13 (--more, --raw)

@@ -1,0 +1,48 @@
+log n=35 file=tk-snapshot-large-tiering.log e=5 w=15 i=15/25 (--more)
+---
+[INF] FeedWorker1: Ingested record 6513270e-269e-0d37-f2a7-4de452e6b438 from feed-1 (x100)
+[INF] FeedWorker2: Ingested record 1eb20109-a91c-2439-d5ab-8b4d15b40aeb from feed-2 (x96)
+[INF] FeedWorker3: Ingested record e1c60aa3-d510-bb04-32d9-0dcd57bb7d97 from feed-3 (x92)
+[INF] FeedWorker4: Ingested record e02f9a72-e9d6-25c9-6669-2158a1826327 from feed-4 (x88)
+[INF] FeedWorker5: Ingested record 4f06e95a-d252-a617-c4cb-a0385b4c0d73 from feed-5 (x84)
+[INF] FeedWorker6: Ingested record 658f62d1-e8e8-4b0d-ce74-b3c4a402bb72 from feed-6 (x80)
+[INF] FeedWorker7: Ingested record 4d187e3e-9566-36e6-69c9-fef039690919 from feed-7 (x76)
+[INF] FeedWorker8: Ingested record 0c5166f0-b464-9035-780c-8fb058c6aeea from feed-8 (x72)
+[INF] FeedWorker9: Ingested record 74efd764-9316-6586-d8df-71f419e0d64a from feed-9 (x68)
+[INF] FeedWorker10: Ingested record 369ee145-08ad-794c-24fd-4172e5c69b8e from feed-10 (x64)
+[INF] FeedWorker11: Ingested record 2a9dcb87-ad47-f8fa-7844-f24070503308 from feed-11 (x60)
+[INF] FeedWorker12: Ingested record 17076e31-f594-7675-b4d5-14c01eb2d125 from feed-12 (x56)
+[INF] FeedWorker13: Ingested record 3afcd2ae-c53b-eebd-858b-089a2e1cfdd8 from feed-13 (x52)
+[INF] FeedWorker14: Ingested record 8fa2fc70-d8fe-52f8-668d-3355d0a6abc0 from feed-14 (x48)
+[INF] FeedWorker15: Ingested record 46d8ec2e-d999-1d0c-9c5a-8a4f9dc59da0 from feed-15 (x44)
+[WRN] FeedWorker1: Retrying downstream call after transient failure (attempt 1 of 3) (x3)
+[WRN] FeedWorker2: Slow query detected: 260ms (x3)
+[WRN] FeedWorker3: Cache miss for key 'feed-config' (x3)
+[WRN] FeedWorker4: Retrying downstream call after transient failure (attempt 1 of 3) (x3)
+[WRN] FeedWorker5: Slow query detected: 290ms (x3)
+[WRN] FeedWorker1: Cache miss for key 'feed-config' (x3)
+[WRN] FeedWorker2: Retrying downstream call after transient failure (attempt 1 of 3) (x3)
+[WRN] FeedWorker3: Slow query detected: 270ms (x3)
+[WRN] FeedWorker4: Cache miss for key 'feed-config' (x3)
+[WRN] FeedWorker5: Retrying downstream call after transient failure (attempt 1 of 3) (x3)
+[WRN] FeedWorker1: Slow query detected: 250ms (x2)
+[WRN] FeedWorker2: Cache miss for key 'feed-config' (x2)
+[WRN] FeedWorker3: Retrying downstream call after transient failure (attempt 1 of 3) (x2)
+[WRN] FeedWorker4: Slow query detected: 280ms (x2)
+[WRN] FeedWorker5: Cache miss for key 'feed-config' (x2)
+[ERR] FeedWorker1: Unhandled exception processing feed-1
+        System.TimeoutException: The operation has timed out.
+           at Contoso.Ingest.FeedWorker.Process(Int32 feedId) in /src/FeedWorker.cs:line 40
+[ERR] FeedWorker2: Unhandled exception processing feed-2
+        System.TimeoutException: The operation has timed out.
+           at Contoso.Ingest.FeedWorker.Process(Int32 feedId) in /src/FeedWorker.cs:line 41
+[ERR] FeedWorker3: Unhandled exception processing feed-3
+        System.TimeoutException: The operation has timed out.
+           at Contoso.Ingest.FeedWorker.Process(Int32 feedId) in /src/FeedWorker.cs:line 42
+[ERR] FeedWorker4: Unhandled exception processing feed-4
+        System.TimeoutException: The operation has timed out.
+           at Contoso.Ingest.FeedWorker.Process(Int32 feedId) in /src/FeedWorker.cs:line 43
+[ERR] FeedWorker5: Unhandled exception processing feed-5
+        System.TimeoutException: The operation has timed out.
+           at Contoso.Ingest.FeedWorker.Process(Int32 feedId) in /src/FeedWorker.cs:line 44
+hid=2658/2705 (--more, --raw)

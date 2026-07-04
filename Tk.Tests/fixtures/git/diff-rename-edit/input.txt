@@ -1,0 +1,12 @@
+diff --git a/src/a.cs b/src/a_renamed.cs
+similarity index 76%
+rename from src/a.cs
+rename to src/a_renamed.cs
+index 33b6d52..1042545 100644
+--- a/src/a.cs
++++ b/src/a_renamed.cs
+@@ -6,3 +6,4 @@ public class A
+ }
+ 
+ // note
++// added after rename

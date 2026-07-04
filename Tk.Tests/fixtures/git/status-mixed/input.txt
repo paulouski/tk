@@ -1,0 +1,7 @@
+## master
+D  README.md
+MM src/a.cs
+ M src/b.cs
+A  src/c.cs
+?? notes.txt
+?? tmp/

@@ -1,0 +1,18 @@
+diff f=4 +4 -1
+top=a.cs(+2 -0),README.md(+0 -1)[del],b.cs(+1 -0),c.cs(+1 -0)[*new]
+@@ a.cs 6-10
+ }
+ 
+ // note
++// staged change
++// unstaged change on top
+@@ README.md 0
+-# Scratch repo
+@@ b.cs 4-7
+ {
+     public int Value => 2;
+ }
++// modified unstaged
+@@ c.cs 1
++public class C {}
+hid=16/33 (--more, --raw)

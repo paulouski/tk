@@ -1,0 +1,8 @@
+info: Contoso.Faktury.FakturaService[1]
+      Faktura numer FV/2026/001 zostaƂa wystawiona dla klienta „Zakƚad Produkcyjny Kowalski”
+warn: Contoso.Faktury.FakturaService[2]
+      Nie udaƂo się wysƂać powiadomienia e-mail: przekroczono limit czasu poƂączenia (żąĎƚość #42)
+fail: Contoso.Faktury.FakturaService[3]
+      BƂąd podczas przetwarzania faktury dla firmy „Świętokrzyskie Usƚugi Sp. z o.o.”
+      System.Exception: Nieprawidƚowa suma kontrolna pliku XML (ƣódź, ul. Piƶsudskiego 12)
+         at Contoso.Faktury.FakturaService.Process(String path) in /src/FakturaService.cs:line 88

@@ -1,0 +1,12 @@
+grep m=37 f=37
+top=Commands/BranchCommand.cs(1),Commands/BuiltinRegistry.cs(1),Commands/CallersCommand.cs(1),Commands/ChangesCommand.cs(1),Commands/CommandContext.cs(1),Commands/DefCommand.cs(1)
+samples:
+  Commands/ChangesCommand.cs:7 public sealed class ChangesCommand : ICommand
+  Commands/BuiltinRegistry.cs:7 public sealed class BuiltinRegistry
+  Commands/CallersCommand.cs:5 public sealed class CallersCommand : ICommand
+  Commands/BranchCommand.cs:7 public sealed class BranchCommand : ICommand
+  Commands/DefCommand.cs:5 public sealed class DefCommand : ICommand
+  Commands/FilesCommand.cs:7 public sealed class FilesCommand : ICommand
+more=Commands/FilesCommand.cs(1),Commands/FocusCommand.cs(1),Commands/GitCommand.cs(1),Commands/InitCommand.cs(1),Commands/LogCommand.cs(1),Commands/LsCommand.cs(1)
++31 more files
+hid=26/37 (--raw)

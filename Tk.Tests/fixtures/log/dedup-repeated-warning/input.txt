@@ -1,0 +1,10 @@
+warn: Contoso.Payments.PaymentGateway[10]
+      Retrying payment provider call after transient failure (attempt 1 of 3)
+warn: Contoso.Payments.PaymentGateway[10]
+      Retrying payment provider call after transient failure (attempt 1 of 3)
+warn: Contoso.Payments.PaymentGateway[10]
+      Retrying payment provider call after transient failure (attempt 1 of 3)
+warn: Contoso.Payments.PaymentGateway[10]
+      Retrying payment provider call after transient failure (attempt 1 of 3)
+warn: Contoso.Payments.PaymentGateway[10]
+      Retrying payment provider call after transient failure (attempt 1 of 3)

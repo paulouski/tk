@@ -1,0 +1,14 @@
+  Determining projects to restore...
+  Restored /WORK/LibA/LibA.csproj (in 33 ms).
+  Restored /WORK/LibB/LibB.csproj (in 33 ms).
+/WORK/LibB/Formatter.cs(7,52): error CS0103: The name 'unknownHelper' does not exist in the current context [/WORK/LibB/LibB.csproj]
+/WORK/LibA/Calculator.cs(5,42): error CS1002: ; expected [/WORK/LibA/LibA.csproj]
+
+Build FAILED.
+
+/WORK/LibB/Formatter.cs(7,52): error CS0103: The name 'unknownHelper' does not exist in the current context [/WORK/LibB/LibB.csproj]
+/WORK/LibA/Calculator.cs(5,42): error CS1002: ; expected [/WORK/LibA/LibA.csproj]
+    0 Warning(s)
+    2 Error(s)
+
+Time Elapsed 00:00:00.72

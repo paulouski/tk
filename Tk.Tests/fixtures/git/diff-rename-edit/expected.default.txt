@@ -1,0 +1,8 @@
+diff f=1 +1 -0
+top=a.cs->a_renamed.cs(+1 -0)[ren]
+@@ a.cs 6-9
+ }
+ 
+ // note
++// added after rename
+hid=5/12 (--more, --raw)

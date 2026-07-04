@@ -1,0 +1,16 @@
+find n=13
+top=DotnetBuildFilter.cs(1),DotnetRestoreFilter.cs(1),DotnetTestFilter.cs(1),FilterRegistry.cs(1),FindFilter.cs(1),GitCompactFilter.cs(1)
+paths:
+  GrepArgsHelper.cs
+  IOutputFilter.cs
+  FindFilter.cs
+  GitStatusFilter.cs
+  FilterRegistry.cs
+  DotnetRestoreFilter.cs
+  DotnetBuildFilter.cs
+  LogFileFilter.cs
+  GitDiffFilter.cs
+  DotnetTestFilter.cs
+  GrepFilter.cs
+  GitCompactFilter.cs
+  GitLogFilter.cs

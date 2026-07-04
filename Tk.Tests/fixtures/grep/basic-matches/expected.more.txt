@@ -1,0 +1,12 @@
+grep m=18 f=7
+top=GrepFilter.cs(5),FindFilter.cs(4),LogFileFilter.cs(3),DotnetTestFilter.cs(2),GitDiffFilter.cs(2),FilterRegistry.cs(1)
+samples:
+  DotnetTestFilter.cs:14 var more = detailLevel == DetailLevel.More;
+  FindFilter.cs:9 private readonly DetailLevel _detailLevel;
+  DotnetTestFilter.cs:7 public sealed partial class DotnetTestFilter(DetailLevel detailLevel = DetailLevel.Default) : IOutputFilter
+  FilterRegistry.cs:5 public static IOutputFilter Resolve(string[] args, DetailLevel detailLevel)
+  GitStatusFilter.cs:12 public GitStatusFilter(DetailLevel detailLevel, bool unityMode = false)
+  FindFilter.cs:13 public FindFilter(DetailLevel detailLevel)
+more=GitStatusFilter.cs(1)
++1 more files
+hid=7/18 (--raw)

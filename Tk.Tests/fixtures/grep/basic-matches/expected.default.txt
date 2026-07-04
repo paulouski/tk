@@ -1,0 +1,8 @@
+grep m=18 f=7
+top=GrepFilter.cs(5),FindFilter.cs(4),LogFileFilter.cs(3)
+samples:
+  DotnetTestFilter.cs:14 var more = detailLevel == DetailLevel.More;
+  FindFilter.cs:9 private readonly DetailLevel _detailLevel;
+  DotnetTestFilter.cs:7 public sealed partial class DotnetTestFilter(DetailLevel detailLevel = DetailLevel.Default) : IOutputFilter
++4 more files
+hid=11/18 (--more, --raw)

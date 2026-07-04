@@ -1,0 +1,41 @@
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://localhost:5000
+info: Microsoft.Hosting.Lifetime[0]
+      Application started. Press Ctrl+C to shut down.
+dbug: Npgsql.NpgsqlConnection[0]
+      Opened physical connection to database.
+info: MassTransit[0]
+      Configured endpoint orders-queue, Consumer: Contoso.Orders.Consumers.OrderCreatedConsumer
+info: Contoso.Orders.OrderService[100]
+      Order 12345 created for customer 'Acme Corp'
+info: System.Net.Http.HttpClient.IInvoiceClient.LogicalHandler[100]
+      Start processing HTTP request GET http://localhost:5002/api/v1/invoices/search?query=uber&offset=0
+info: System.Net.Http.HttpClient.IInvoiceClient.ClientHandler[100]
+      Sending HTTP request GET http://localhost:5002/api/v1/invoices/search?query=uber&offset=0
+info: System.Net.Http.HttpClient.IInvoiceClient.ClientHandler[101]
+      Received HTTP response headers after 812.4471ms - 500
+info: System.Net.Http.HttpClient.IInvoiceClient.LogicalHandler[101]
+      End processing HTTP request after 823.5512ms - 500
+info: System.Net.Http.HttpClient.IInvoiceClient.LogicalHandler[100]
+      Start processing HTTP request GET http://localhost:5002/api/v1/invoices/7
+info: System.Net.Http.HttpClient.IInvoiceClient.ClientHandler[101]
+      Received HTTP response headers after 41.0212ms - 200
+info: System.Net.Http.HttpClient.IInvoiceClient.LogicalHandler[101]
+      End processing HTTP request after 45.9981ms - 200
+warn: Microsoft.AspNetCore.Server.Kestrel[23]
+      Heartbeat took longer than "00:00:01" at "07/04/2026 08:15:22 +00:00".
+fail: Contoso.Orders.Api.Controllers.OrdersController[500]
+      Unhandled exception while processing order 98765
+      System.InvalidOperationException: Cannot approve an order that has already shipped.
+         at Contoso.Orders.Api.Controllers.OrdersController.Approve(Int32 orderId) in /src/Contoso.Orders.Api/Controllers/OrdersController.cs:line 47
+         at Microsoft.AspNetCore.Mvc.Infrastructure.ActionMethodExecutor.SyncActionResultExecutor.Execute(IActionResultTypeMapper mapper, ObjectMethodExecutor executor, Object controller, Object[] arguments)
+crit: Contoso.Orders.Worker.OrderSyncWorker[999]
+      Background worker crashed and will not be restarted
+      System.AggregateException: One or more errors occurred. (Connection refused)
+       ---> System.Net.Sockets.SocketException (61): Connection refused
+          at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error)
+       --- End of inner exception stack trace ---
+--- End of stack trace from previous location ---
+          at Contoso.Orders.Worker.OrderSyncWorker.ExecuteAsync(CancellationToken stoppingToken) in /src/Contoso.Orders.Worker/OrderSyncWorker.cs:line 33
+info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+      Request finished HTTP/1.1 GET http://localhost:5000/api/v1/orders/123 - 200 null application/json 12.3456ms

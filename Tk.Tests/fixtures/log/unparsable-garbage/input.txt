@@ -1,0 +1,9 @@
+info: Contoso.Orders.OrderService[1]
+      Order 1 created
+### corrupted binary chunk follows ###
+\x00\x01\xFF garbled-bytes-not-a-log-line
+warn: Contoso.Orders.OrderService[2]
+      Retry scheduled for order 2
+another completely unrelated line dumped mid-stream by a misbehaving process
+info: Contoso.Orders.OrderService[3]
+      Order 3 created

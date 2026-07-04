@@ -1,0 +1,18 @@
+Filters/DotnetTestFilter.cs:7:public sealed partial class DotnetTestFilter(DetailLevel detailLevel = DetailLevel.Default) : IOutputFilter
+Filters/DotnetTestFilter.cs:14:        var more = detailLevel == DetailLevel.More;
+Filters/FilterRegistry.cs:5:    public static IOutputFilter Resolve(string[] args, DetailLevel detailLevel)
+Filters/GitStatusFilter.cs:12:    public GitStatusFilter(DetailLevel detailLevel, bool unityMode = false)
+Filters/FindFilter.cs:9:    private readonly DetailLevel _detailLevel;
+Filters/FindFilter.cs:13:    public FindFilter(DetailLevel detailLevel)
+Filters/FindFilter.cs:16:        _maxPaths = detailLevel == DetailLevel.More ? 20 : 5;
+Filters/FindFilter.cs:17:        _maxGroups = detailLevel == DetailLevel.More ? 6 : 3;
+Filters/GitDiffFilter.cs:20:    public GitDiffFilter(DetailLevel detailLevel, bool summary = false, bool isShow = false)
+Filters/GitDiffFilter.cs:24:        var more = detailLevel == DetailLevel.More;
+Filters/GrepFilter.cs:16:    private readonly DetailLevel _detailLevel;
+Filters/GrepFilter.cs:19:    public GrepFilter(string command, DetailLevel detailLevel, string? pattern = null)
+Filters/GrepFilter.cs:24:        _maxTopFiles = detailLevel == DetailLevel.More ? 6 : 3;
+Filters/GrepFilter.cs:25:        _maxSamples = detailLevel == DetailLevel.More ? 6 : 3;
+Filters/GrepFilter.cs:123:        if (_detailLevel == DetailLevel.More && files.Count > 0)
+Filters/LogFileFilter.cs:25:    public static string Apply(string filePath, string[] flags, DetailLevel level = DetailLevel.Default) =>
+Filters/LogFileFilter.cs:28:    public static string Apply(string filePath, string[] flags, DetailLevel level, out int exitCode)
+Filters/LogFileFilter.cs:66:        if (!errorsOnly && level != DetailLevel.More)

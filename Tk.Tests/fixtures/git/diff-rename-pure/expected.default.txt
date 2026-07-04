@@ -1,0 +1,3 @@
+diff f=1 +0 -0
+top=b.cs->b_renamed.cs(+0 -0)[ren]
+hid=2/4 (--more, --raw)

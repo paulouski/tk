@@ -1,0 +1,10 @@
+find n=13
+top=DotnetBuildFilter.cs(1),DotnetRestoreFilter.cs(1),DotnetTestFilter.cs(1)
+paths:
+  GrepArgsHelper.cs
+  IOutputFilter.cs
+  FindFilter.cs
+  GitStatusFilter.cs
+  FilterRegistry.cs
++8 more paths
+hid=4/13 (--more, --raw)

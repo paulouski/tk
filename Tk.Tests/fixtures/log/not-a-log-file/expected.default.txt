@@ -1,0 +1,1 @@
+warn: no log entries recognized in 19 lines — not an ASP.NET service log?

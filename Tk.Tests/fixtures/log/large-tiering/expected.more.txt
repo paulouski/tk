@@ -1,0 +1,58 @@
+log n=45 file=tk-snapshot-large-tiering.log e=5 w=15 i=25
+---
+[INF] FeedWorker1: Ingested record 6513270e-269e-0d37-f2a7-4de452e6b438 from feed-1 (x100)
+[INF] FeedWorker2: Ingested record 1eb20109-a91c-2439-d5ab-8b4d15b40aeb from feed-2 (x96)
+[INF] FeedWorker3: Ingested record e1c60aa3-d510-bb04-32d9-0dcd57bb7d97 from feed-3 (x92)
+[INF] FeedWorker4: Ingested record e02f9a72-e9d6-25c9-6669-2158a1826327 from feed-4 (x88)
+[INF] FeedWorker5: Ingested record 4f06e95a-d252-a617-c4cb-a0385b4c0d73 from feed-5 (x84)
+[INF] FeedWorker6: Ingested record 658f62d1-e8e8-4b0d-ce74-b3c4a402bb72 from feed-6 (x80)
+[INF] FeedWorker7: Ingested record 4d187e3e-9566-36e6-69c9-fef039690919 from feed-7 (x76)
+[INF] FeedWorker8: Ingested record 0c5166f0-b464-9035-780c-8fb058c6aeea from feed-8 (x72)
+[INF] FeedWorker9: Ingested record 74efd764-9316-6586-d8df-71f419e0d64a from feed-9 (x68)
+[INF] FeedWorker10: Ingested record 369ee145-08ad-794c-24fd-4172e5c69b8e from feed-10 (x64)
+[INF] FeedWorker11: Ingested record 2a9dcb87-ad47-f8fa-7844-f24070503308 from feed-11 (x60)
+[INF] FeedWorker12: Ingested record 17076e31-f594-7675-b4d5-14c01eb2d125 from feed-12 (x56)
+[INF] FeedWorker13: Ingested record 3afcd2ae-c53b-eebd-858b-089a2e1cfdd8 from feed-13 (x52)
+[INF] FeedWorker14: Ingested record 8fa2fc70-d8fe-52f8-668d-3355d0a6abc0 from feed-14 (x48)
+[INF] FeedWorker15: Ingested record 46d8ec2e-d999-1d0c-9c5a-8a4f9dc59da0 from feed-15 (x44)
+[INF] FeedWorker16: Ingested record 57e61ea6-b09c-724a-4b7f-e9b1e4fead80 from feed-16 (x40)
+[INF] FeedWorker17: Ingested record 69dace38-38ad-8f8f-95b6-c70fb7ed5f3e from feed-17 (x36)
+[INF] FeedWorker18: Ingested record e9f21682-8fde-9ebe-116d-be5b1be4e39e from feed-18 (x32)
+[INF] FeedWorker19: Ingested record 6acfffb7-160d-107f-e9e4-b255bfe0ddc7 from feed-19 (x28)
+[INF] FeedWorker20: Ingested record d6e88d16-760f-d085-fab4-008699434ea9 from feed-20 (x24)
+[INF] FeedWorker21: Ingested record b806c5c2-c8dc-a895-1a28-46ff2b2023b5 from feed-21 (x20)
+[INF] FeedWorker22: Ingested record 0e2806fc-a960-42fb-126e-3664488383be from feed-22 (x16)
+[INF] FeedWorker23: Ingested record dd81d987-4c9f-b3c7-2308-be55a5b93d2e from feed-23 (x12)
+[INF] FeedWorker24: Ingested record b587728c-4065-1107-ab94-c66887e0eecb from feed-24 (x8)
+[INF] FeedWorker25: Ingested record a06882b0-1d57-4de5-f2b5-fefdc1c43b63 from feed-25 (x4)
+[WRN] FeedWorker1: Retrying downstream call after transient failure (attempt 1 of 3) (x3)
+[WRN] FeedWorker2: Slow query detected: 260ms (x3)
+[WRN] FeedWorker3: Cache miss for key 'feed-config' (x3)
+[WRN] FeedWorker4: Retrying downstream call after transient failure (attempt 1 of 3) (x3)
+[WRN] FeedWorker5: Slow query detected: 290ms (x3)
+[WRN] FeedWorker1: Cache miss for key 'feed-config' (x3)
+[WRN] FeedWorker2: Retrying downstream call after transient failure (attempt 1 of 3) (x3)
+[WRN] FeedWorker3: Slow query detected: 270ms (x3)
+[WRN] FeedWorker4: Cache miss for key 'feed-config' (x3)
+[WRN] FeedWorker5: Retrying downstream call after transient failure (attempt 1 of 3) (x3)
+[WRN] FeedWorker1: Slow query detected: 250ms (x2)
+[WRN] FeedWorker2: Cache miss for key 'feed-config' (x2)
+[WRN] FeedWorker3: Retrying downstream call after transient failure (attempt 1 of 3) (x2)
+[WRN] FeedWorker4: Slow query detected: 280ms (x2)
+[WRN] FeedWorker5: Cache miss for key 'feed-config' (x2)
+[ERR] FeedWorker1: Unhandled exception processing feed-1
+        System.TimeoutException: The operation has timed out.
+           at Contoso.Ingest.FeedWorker.Process(Int32 feedId) in /src/FeedWorker.cs:line 40
+[ERR] FeedWorker2: Unhandled exception processing feed-2
+        System.TimeoutException: The operation has timed out.
+           at Contoso.Ingest.FeedWorker.Process(Int32 feedId) in /src/FeedWorker.cs:line 41
+[ERR] FeedWorker3: Unhandled exception processing feed-3
+        System.TimeoutException: The operation has timed out.
+           at Contoso.Ingest.FeedWorker.Process(Int32 feedId) in /src/FeedWorker.cs:line 42
+[ERR] FeedWorker4: Unhandled exception processing feed-4
+        System.TimeoutException: The operation has timed out.
+           at Contoso.Ingest.FeedWorker.Process(Int32 feedId) in /src/FeedWorker.cs:line 43
+[ERR] FeedWorker5: Unhandled exception processing feed-5
+        System.TimeoutException: The operation has timed out.
+           at Contoso.Ingest.FeedWorker.Process(Int32 feedId) in /src/FeedWorker.cs:line 44
+hid=2648/2705 (--raw)

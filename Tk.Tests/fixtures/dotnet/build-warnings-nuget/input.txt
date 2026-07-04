@@ -1,0 +1,18 @@
+  Determining projects to restore...
+  Restored /WORK/LibA/LibA.csproj (in 35 ms).
+  Restored /WORK/LibB/LibB.csproj (in 35 ms).
+/WORK/LibB/Formatter.cs(7,13): warning CS0219: The variable 'unused' is assigned but its value is never used [/WORK/LibB/LibB.csproj]
+/WORK/LibA/Calculator.cs(7,13): warning CS0219: The variable 'unused' is assigned but its value is never used [/WORK/LibA/LibA.csproj]
+  LibB -> /WORK/LibB/bin/Debug/net8.0/LibB.dll
+  LibA -> /WORK/LibA/bin/Debug/net8.0/LibA.dll
+
+Build succeeded.
+
+/WORK/LibB/Formatter.cs(7,13): warning CS0219: The variable 'unused' is assigned but its value is never used [/WORK/LibB/LibB.csproj]
+/WORK/LibA/Calculator.cs(7,13): warning CS0219: The variable 'unused' is assigned but its value is never used [/WORK/LibA/LibA.csproj]
+    2 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:00.76
+/WORK/LibA/LibA.csproj : warning NU1903: Package 'System.Text.Encodings.Web' 4.5.0 has a known high severity vulnerability, https://github.com/advisories/GHSA-ahmg-w8w2-h4wc [/WORK/LibA/LibA.csproj]
+/WORK/LibB/LibB.csproj : warning NU1902: Package 'Microsoft.NETCore.App' 2.1.0 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-0000-0000-0000 [/WORK/LibB/LibB.csproj]

@@ -1,0 +1,16 @@
+commit ab4f367aee473581c66daa7547276db74738a8da
+Author: Test User <test@example.com>
+Date:   Sat Jul 4 20:03:48 2026 +0200
+
+    Add note to A
+
+diff --git a/src/a.cs b/src/a.cs
+index eebc964..33b6d52 100644
+--- a/src/a.cs
++++ b/src/a.cs
+@@ -4,3 +4,5 @@ public class A
+ {
+     public int Value => 1;
+ }
++
++// note

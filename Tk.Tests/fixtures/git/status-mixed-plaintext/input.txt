@@ -1,0 +1,18 @@
+On branch master
+Changes to be committed:
+  (use "git restore --staged <file>..." to unstage)
+	deleted:    README.md
+	modified:   src/a.cs
+	new file:   src/c.cs
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   src/a.cs
+	modified:   src/b.cs
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	notes.txt
+	tmp/
+

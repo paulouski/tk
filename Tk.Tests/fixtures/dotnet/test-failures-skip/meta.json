@@ -1,0 +1,1 @@
+{ "filter": "dotnet-test", "exitCode": 1, "detailLevels": ["Default", "More"] }

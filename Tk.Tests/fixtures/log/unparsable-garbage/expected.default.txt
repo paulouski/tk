@@ -1,0 +1,5 @@
+log n=2 file=tk-snapshot-unparsable-garbage.log w=1 i=1 unparsed=3
+---
+[INF] OrderService: Order 1 created (x2)
+[WRN] OrderService: Retry scheduled for order 2
+hid=6/10 (--more, --raw)

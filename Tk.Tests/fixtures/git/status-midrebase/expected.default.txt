@@ -1,0 +1,2 @@
+status st=0 mod=0 untr=0 conf=1 br=HEAD_(no_branch) state=rebase+merge
+  c:src/b.cs

@@ -1,0 +1,8 @@
+grep m=37 f=37
+top=Commands/BranchCommand.cs(1),Commands/BuiltinRegistry.cs(1),Commands/CallersCommand.cs(1)
+samples:
+  Commands/ChangesCommand.cs:7 public sealed class ChangesCommand : ICommand
+  Commands/BuiltinRegistry.cs:7 public sealed class BuiltinRegistry
+  Commands/CallersCommand.cs:5 public sealed class CallersCommand : ICommand
++34 more files
+hid=30/37 (--more, --raw)

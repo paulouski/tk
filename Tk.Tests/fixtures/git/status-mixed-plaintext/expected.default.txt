@@ -1,0 +1,9 @@
+status st=2 mod=2 untr=2 del=1 br=master
+  s:modified:   src/a.cs
+  s:new file:   src/c.cs
+  m:modified:   src/a.cs
+  m:modified:   src/b.cs
+  D:deleted:    README.md
+  u:notes.txt
+  u:tmp/
+hid=10/18 (--more, --raw)

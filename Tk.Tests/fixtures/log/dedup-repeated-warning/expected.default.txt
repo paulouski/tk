@@ -1,0 +1,4 @@
+log n=1 file=tk-snapshot-dedup-repeated-warning.log w=1
+---
+[WRN] PaymentGateway: Retrying payment provider call after transient failure (attempt 1 of 3) (x5)
+hid=8/11 (--more, --raw)

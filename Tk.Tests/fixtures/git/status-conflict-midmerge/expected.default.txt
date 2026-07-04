@@ -1,0 +1,2 @@
+status st=0 mod=0 untr=0 conf=1 br=master
+  c:src/b.cs

@@ -1,0 +1,13 @@
+diff --cc src/b.cs
+index 2ba7c77,2dba682..0000000
+--- a/src/b.cs
++++ b/src/b.cs
+@@@ -4,4 -4,4 +4,8 @@@ public class 
+  {
+      public int Value => 2;
+  }
+++<<<<<<< HEAD
+ +master line
+++=======
++ feature line
+++>>>>>>> feature

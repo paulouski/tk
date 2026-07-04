@@ -1,0 +1,19 @@
+FAIL test pass=1 fail=2 skip=1 p=1
+---
+Failed:
+  Calc.Tests.CalculatorTests.Greet_includes_name [3 ms]
+    Assert.Equal() Failure: Strings differ
+    ↓ (pos 7)
+    Expected: "Hello, Universe!"
+    Actual:   "Hello, World!"
+    ↑ (pos 7)
+    at Calc.Tests.CalculatorTests.Greet_includes_name() in /WORK/Calc.Tests/CalculatorTests.cs:line 16
+    at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  Calc.Tests.CalculatorTests.Divide_by_zero_throws [< 1 ms]
+    System.DivideByZeroException : Attempted to divide by zero.
+    at Calc.Calculator.Divide(Int32 a, Int32 b) in /WORK/Calc/Calculator.cs:line 6
+    at Calc.Tests.CalculatorTests.Divide_by_zero_throws() in /WORK/Calc.Tests/CalculatorTests.cs:line 22
+    at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+hid=13/31 (--raw)

@@ -1,0 +1,5 @@
+find: /repo/private: Permission denied
+src/a.cs
+src/b.cs
+find: /repo/locked-dir: Permission denied
+docs/readme.md

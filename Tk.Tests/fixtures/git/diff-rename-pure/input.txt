@@ -1,0 +1,4 @@
+diff --git a/src/b.cs b/src/b_renamed.cs
+similarity index 100%
+rename from src/b.cs
+rename to src/b_renamed.cs

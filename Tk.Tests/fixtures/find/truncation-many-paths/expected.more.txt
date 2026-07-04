@@ -1,0 +1,25 @@
+find n=122
+top=Tk.Tests(49),Commands(27),Lsp(14),Common(13),Filters(13),Modules(3)
+paths:
+  CliOptions.cs
+  Program.cs
+  HelpRenderer.cs
+  Filters/GrepArgsHelper.cs
+  Filters/IOutputFilter.cs
+  Filters/FindFilter.cs
+  Filters/GitStatusFilter.cs
+  Filters/FilterRegistry.cs
+  Filters/DotnetRestoreFilter.cs
+  Filters/DotnetBuildFilter.cs
+  Filters/LogFileFilter.cs
+  Filters/GitDiffFilter.cs
+  Filters/DotnetTestFilter.cs
+  Filters/GrepFilter.cs
+  Filters/GitCompactFilter.cs
+  Filters/GitLogFilter.cs
+  Lsp/RenameEditApplier.cs
+  Lsp/DaemonClient.cs
+  Lsp/CSharpBackend.cs
+  Lsp/LspDaemon.cs
++102 more paths
+hid=98/122 (--raw)

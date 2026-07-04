@@ -1,0 +1,22 @@
+using System;
+using System.Collections.Generic;
+
+namespace SomeRandomProject;
+
+public class NotALogFile
+{
+    public void DoSomething()
+    {
+        Console.WriteLine("This is a C# source file, not a log");
+        var list = new List<int> { 1, 2, 3 };
+        foreach (var item in list)
+        {
+            Console.WriteLine(item);
+        }
+    }
+
+    public void DoSomethingElse()
+    {
+        Console.WriteLine("more content to exceed the threshold");
+    }
+}

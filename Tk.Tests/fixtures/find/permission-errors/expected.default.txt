@@ -1,0 +1,6 @@
+find n=3 err=2
+top=src(2),docs(1)
+paths:
+  src/a.cs
+  src/b.cs
+  docs/readme.md

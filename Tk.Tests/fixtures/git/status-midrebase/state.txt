@@ -1,0 +1,17 @@
+interactive rebase in progress; onto c262b73
+Last command done (1 command done):
+   pick 3a184b7 # Feature change for rebase
+Next command to do (1 remaining command):
+   pick e4b755e # Second feature commit
+  (use "git rebase --edit-todo" to view and edit)
+You are currently rebasing branch 'feature' on 'c262b73'.
+  (fix conflicts and then run "git rebase --continue")
+  (use "git rebase --skip" to skip this patch)
+  (use "git rebase --abort" to check out the original branch)
+
+Unmerged paths:
+  (use "git restore --staged <file>..." to unstage)
+  (use "git add <file>..." to mark resolution)
+	both modified:   src/b.cs
+
+no changes added to commit (use "git add" and/or "git commit -a")

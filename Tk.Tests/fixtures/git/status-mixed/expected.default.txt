@@ -1,0 +1,8 @@
+status st=2 mod=2 untr=2 del=1 br=master
+  s:src/a.cs
+  s:src/c.cs
+  m:src/a.cs
+  m:src/b.cs
+  D:README.md
+  u:notes.txt
+  u:tmp/

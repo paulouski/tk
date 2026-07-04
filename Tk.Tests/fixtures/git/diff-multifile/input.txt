@@ -1,0 +1,33 @@
+diff --git a/README.md b/README.md
+deleted file mode 100644
+index 4d5b6da..0000000
+--- a/README.md
++++ /dev/null
+@@ -1 +0,0 @@
+-# Scratch repo
+diff --git a/src/a.cs b/src/a.cs
+index 33b6d52..d89fa1a 100644
+--- a/src/a.cs
++++ b/src/a.cs
+@@ -6,3 +6,5 @@ public class A
+ }
+ 
+ // note
++// staged change
++// unstaged change on top
+diff --git a/src/b.cs b/src/b.cs
+index 15a66c4..b0a26df 100644
+--- a/src/b.cs
++++ b/src/b.cs
+@@ -4,3 +4,4 @@ public class B
+ {
+     public int Value => 2;
+ }
++// modified unstaged
+diff --git a/src/c.cs b/src/c.cs
+new file mode 100644
+index 0000000..9d83983
+--- /dev/null
++++ b/src/c.cs
+@@ -0,0 +1 @@
++public class C {}

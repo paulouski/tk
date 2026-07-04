@@ -1,0 +1,13 @@
+Filters/GrepArgsHelper.cs
+Filters/IOutputFilter.cs
+Filters/FindFilter.cs
+Filters/GitStatusFilter.cs
+Filters/FilterRegistry.cs
+Filters/DotnetRestoreFilter.cs
+Filters/DotnetBuildFilter.cs
+Filters/LogFileFilter.cs
+Filters/GitDiffFilter.cs
+Filters/DotnetTestFilter.cs
+Filters/GrepFilter.cs
+Filters/GitCompactFilter.cs
+Filters/GitLogFilter.cs

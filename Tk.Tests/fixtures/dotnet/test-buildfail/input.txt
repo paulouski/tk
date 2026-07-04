@@ -1,0 +1,3 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+/WORK/Calc/Calculator.cs(5,42): error CS1002: ; expected [/WORK/Calc/Calc.csproj]

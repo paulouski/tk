@@ -1,0 +1,1 @@
+{ "filter": "grep", "command": "grep", "pattern": "ThisPatternDoesNotExistAnywhere", "exitCode": 1, "detailLevels": ["Default"] }
