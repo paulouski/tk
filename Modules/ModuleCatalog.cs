@@ -24,7 +24,7 @@ public static class ModuleCatalog
         - `tk git status|diff|log` — compact, complete git output
         - `tk log <file>` — compacted file history
         - `tk changes` — working-tree change summary
-        - `tk mv <old> <new>` — move a file preserving git history (use instead of delete+recreate; keeps git blame and saves tokens). When moving across folders, check the file's namespace and update references afterward — tk does not rewrite them.
+        - `tk mv <old> <new>` — move a file preserving git history (use instead of delete+recreate; keeps git blame and saves tokens). For a .cs file moved across folders, tk fixes the namespace to match the new path and patches referencing files automatically (needs the lsp module); if it can't (module off, unconventional namespace), it still moves the file and prints why the namespace wasn't touched. `--no-fix-ns` skips this; `--ns <namespace>` sets the target explicitly.
 
         Orientation only — prefer native Grep/Read for real work:
         - `tk tree`, `tk files` — quick repo shape
@@ -74,7 +74,7 @@ public static class ModuleCatalog
         - `tk git status|diff|log` — compact, complete git output
         - `tk log <file>` — compacted file history
         - `tk changes` — working-tree change summary
-        - `tk mv <old> <new>` — move a file preserving git history; NEVER delete and recreate a file to rename/relocate it — use this instead to keep git blame and avoid re-emitting file content. After moving across folders, check the file's namespace and update references — tk does not rewrite them.
+        - `tk mv <old> <new>` — move a file preserving git history; NEVER delete and recreate a file to rename/relocate it — use this instead to keep git blame and avoid re-emitting file content. For a .cs file moved across folders, tk fixes the namespace to match the new path and patches referencing files automatically (needs the lsp module); if it can't (module off, unconventional namespace), it still moves the file and prints why the namespace wasn't touched. `--no-fix-ns` skips this; `--ns <namespace>` sets the target explicitly.
 
         Orientation only — prefer native Grep/Read for real work:
         - `tk tree`, `tk files` — quick repo shape
@@ -198,7 +198,12 @@ public static class ModuleCatalog
                 CommandRow.Builtin(new FocusCommand(),
                     "tk focus <word...> [-p path]", "Multi-word OR search ranked by coverage; quote for phrase; --code/--docs/--all/--files-only"),
                 CommandRow.Builtin(new MvCommand(),
-                    "tk mv <old> <new>", "Move file; git mv when tracked (preserves history), else filesystem"),
+                    "tk mv <old> <new>", "Move file; git mv when tracked (preserves history), else filesystem. For .cs files moved across folders, fixes the namespace and referencing files by default (needs lsp module)",
+                    extraHelpLines:
+                    [
+                        ("tk mv <old> <new> --no-fix-ns", "Skip the automatic namespace fix; move only"),
+                        ("tk mv <old> <new> --ns <namespace>", "Use this namespace instead of the computed convention"),
+                    ]),
                 CommandRow.Builtin(new ModuleCommand(),
                     "tk module list|enable|disable", "Manage enabled modules"),
                 CommandRow.Builtin(new GitCommand(),

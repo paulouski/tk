@@ -10,7 +10,11 @@ namespace Tk.Modules;
 /// </summary>
 public sealed class ModuleConfig
 {
-    private static readonly string ConfigPath = TkPaths.ModulesFile();
+    // Resolved fresh on every access rather than cached in a `static readonly` field: the latter
+    // would bind to whatever HOME/XDG_STATE_HOME was set at first touch of this type for the
+    // lifetime of the process — harmless in a real CLI invocation (env never changes mid-run)
+    // but a hermeticity trap for tests that mutate HOME to isolate module state per test.
+    private static string ConfigPath => TkPaths.ModulesFile();
 
     private readonly HashSet<string> _enabled;
     private readonly bool _defaultAll;
