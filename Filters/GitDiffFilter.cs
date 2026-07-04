@@ -17,6 +17,8 @@ public sealed partial class GitDiffFilter : IOutputFilter
     private readonly int _maxLinesPerHunk;
     private readonly int _maxChangedLines;
 
+    private readonly Rule[] _lineRules;
+
     public GitDiffFilter(DetailLevel detailLevel, bool summary = false, bool isShow = false)
     {
         _summary = summary;
@@ -27,7 +29,132 @@ public sealed partial class GitDiffFilter : IOutputFilter
         _maxPreviewHunks = more ? 14 : 6;
         _maxLinesPerHunk = more ? 8 : 4;
         _maxChangedLines = more ? 42 : 18;
+        _lineRules = BuildLineRules();
     }
+
+    // Per-line diff-shape classification, in precedence order (mirrors the original if/else
+    // ladder exactly). The first matching rule wins; rule 12 is a mandatory catch-all so every
+    // line is always classified. Order is load-bearing in several places — see per-rule notes.
+    private readonly record struct Rule(Func<ParseState, string, bool> Match, Action<ParseState, string, UnitLedger> Apply);
+
+    private sealed class ParseState
+    {
+        public FileDiff? Current;
+        public Hunk? CurrentHunk;
+        public List<FileDiff> FileDiffs { get; } = [];
+    }
+
+    private Rule[] BuildLineRules() => new Rule[]
+    {
+        // 1. New file diff header — "diff --git" (regular) or "diff --cc" (combined format for
+        //    unmerged/conflicted paths, e.g. mid-rebase or mid-merge). Must run first: it starts
+        //    a new FileDiff that every rule below depends on.
+        new(
+            Match: (_, line) => line.StartsWith("diff --git ") || line.StartsWith("diff --cc "),
+            Apply: (state, line, ledger) =>
+            {
+                state.Current = new FileDiff(ExtractFileName(line)) { IsConflict = line.StartsWith("diff --cc ") };
+                state.FileDiffs.Add(state.Current);
+                state.CurrentHunk = null;
+                // Not shown verbatim — represented by this file's entry in top=.
+                ledger.Summarize();
+            }),
+
+        // 2. Guard: no file diff header has been seen yet, so nothing below applies — alien
+        //    input (e.g. a `git show` of a commit whose body never reaches a diff at all). Must
+        //    run before every shape rule below, since none of them are meaningful without
+        //    `Current`.
+        new(
+            Match: (state, _) => state.Current == null,
+            Apply: (_, _, ledger) => ledger.Unparsed()),
+
+        // 3. Binary file marker.
+        new(
+            Match: (_, line) => line.StartsWith("Binary files "),
+            Apply: (state, _, ledger) =>
+            {
+                state.Current!.IsBinary = true;
+                // Represented by this file's bin= contribution, not shown verbatim.
+                ledger.Summarize();
+            }),
+
+        // 4. Hunk header ("@@ ... @@", or combined "@@@ ... @@@" for conflicts).
+        new(
+            Match: (_, line) => line.StartsWith("@@"),
+            Apply: (state, line, _) =>
+            {
+                state.CurrentHunk = new Hunk(FormatHunkHeader(state.Current!.Name, line));
+                state.Current!.Hunks.Add(state.CurrentHunk);
+                // Kept-or-summarized decision deferred to emit time (summary mode may cap it).
+            }),
+
+        // 5. Structural metadata lines — recognized git-diff scaffolding, intentionally never
+        //    rendered. Must run before the content-line rules below, since e.g. "---"/"+++"
+        //    would otherwise be mistaken for a deletion/addition line.
+        new(
+            Match: (_, line) => line.StartsWith("index ") || line.StartsWith("---") || line.StartsWith("+++") ||
+                                 line.StartsWith("old mode") || line.StartsWith("new mode") ||
+                                 line.StartsWith("new file") || line.StartsWith("deleted file") ||
+                                 line.StartsWith("similarity") || line.StartsWith("rename ") ||
+                                 line.StartsWith("copy "),
+            Apply: (state, line, ledger) =>
+            {
+                if (line.StartsWith("new file")) state.Current!.IsNew = true;
+                if (line.StartsWith("deleted file")) state.Current!.IsDeleted = true;
+                if (line.StartsWith("rename to ")) state.Current!.RenamedTo = line["rename to ".Length..].Trim();
+                ledger.Hide();
+            }),
+
+        // 6-8. Combined-diff (conflict) content lines: one prefix char per parent (>=2 chars);
+        //    '+'/'-' anywhere in the prefix marks the line changed relative to some parent. Must
+        //    run before the plain +/-/space rules below — a conflict line's 2-char prefix (e.g.
+        //    "+ ") would otherwise be misread using plain unified-diff semantics.
+        new(
+            Match: (state, line) => state.Current!.IsConflict && Prefix(line).Contains('+'),
+            Apply: (state, line, ledger) =>
+            {
+                state.Current!.Additions++;
+                AddHunkLine(state.CurrentHunk, line, isChanged: true, ledger);
+            }),
+        new(
+            Match: (state, line) => state.Current!.IsConflict && Prefix(line).Contains('-'),
+            Apply: (state, line, ledger) =>
+            {
+                state.Current!.Deletions++;
+                AddHunkLine(state.CurrentHunk, line, isChanged: true, ledger);
+            }),
+        new(
+            Match: (state, _) => state.Current!.IsConflict,
+            Apply: (state, line, ledger) => AddHunkLine(state.CurrentHunk, line, isChanged: false, ledger)),
+
+        // 9-11. Plain unified-diff content lines.
+        new(
+            Match: (_, line) => line.StartsWith("+"),
+            Apply: (state, line, ledger) =>
+            {
+                state.Current!.Additions++;
+                AddHunkLine(state.CurrentHunk, line, isChanged: true, ledger);
+            }),
+        new(
+            Match: (_, line) => line.StartsWith("-"),
+            Apply: (state, line, ledger) =>
+            {
+                state.Current!.Deletions++;
+                AddHunkLine(state.CurrentHunk, line, isChanged: true, ledger);
+            }),
+        new(
+            Match: (_, line) => line.StartsWith(" "),
+            // Context line — include for interpretability
+            Apply: (state, line, ledger) => AddHunkLine(state.CurrentHunk, line, isChanged: false, ledger)),
+
+        // 12. Mandatory catch-all — doesn't match any recognized diff line shape (e.g. "\ No
+        //     newline at end of file") — alien input.
+        new(
+            Match: (_, _) => true,
+            Apply: (_, _, ledger) => ledger.Unparsed()),
+    };
+
+    private static string Prefix(string line) => line.Length >= 2 ? line[..2] : line;
 
     public string Apply(string raw, int exitCode) => Apply(raw, exitCode, new UnitLedger());
 
@@ -65,108 +192,19 @@ public sealed partial class GitDiffFilter : IOutputFilter
         if (commitHeader != null)
             ledger.Keep(diffStartIdx);
 
-        var fileDiffs = new List<FileDiff>();
-        FileDiff? current = null;
-        Hunk? currentHunk = null;
+        var state = new ParseState();
 
         foreach (var line in lines[diffStartIdx..])
         {
-            // New file diff — "diff --git" (regular) or "diff --cc" (combined format for
-            // unmerged/conflicted paths, e.g. mid-rebase or mid-merge).
-            if (line.StartsWith("diff --git ") || line.StartsWith("diff --cc "))
+            foreach (var rule in _lineRules)
             {
-                current = new FileDiff(ExtractFileName(line)) { IsConflict = line.StartsWith("diff --cc ") };
-                fileDiffs.Add(current);
-                currentHunk = null;
-                // Not shown verbatim — represented by this file's entry in top=.
-                ledger.Summarize();
-                continue;
-            }
-
-            if (current == null)
-            {
-                // Content before any file diff header was recognized — alien input (e.g. a
-                // `git show` of a commit whose body never reaches a diff at all).
-                ledger.Unparsed();
-                continue;
-            }
-
-            // Binary file
-            if (line.StartsWith("Binary files "))
-            {
-                current.IsBinary = true;
-                // Represented by this file's bin= contribution, not shown verbatim.
-                ledger.Summarize();
-                continue;
-            }
-
-            // Hunk header
-            if (line.StartsWith("@@"))
-            {
-                currentHunk = new Hunk(FormatHunkHeader(current.Name, line));
-                current.Hunks.Add(currentHunk);
-                // Kept-or-summarized decision deferred to emit time (summary mode may cap it).
-                continue;
-            }
-
-            // Skip index/mode lines
-            if (line.StartsWith("index ") || line.StartsWith("---") || line.StartsWith("+++") ||
-                line.StartsWith("old mode") || line.StartsWith("new mode") ||
-                line.StartsWith("new file") || line.StartsWith("deleted file") ||
-                line.StartsWith("similarity") || line.StartsWith("rename ") ||
-                line.StartsWith("copy "))
-            {
-                if (line.StartsWith("new file")) current.IsNew = true;
-                if (line.StartsWith("deleted file")) current.IsDeleted = true;
-                if (line.StartsWith("rename to ")) current.RenamedTo = line["rename to ".Length..].Trim();
-                // Recognized git-diff structural metadata, intentionally not rendered.
-                ledger.Hide();
-                continue;
-            }
-
-            // Count additions/deletions; capture context lines around changes
-            if (current.IsConflict)
-            {
-                // Combined diff format: one prefix char per parent (>=2 chars); '+'/'-' anywhere
-                // in the prefix marks the line changed relative to some parent.
-                var prefix = line.Length >= 2 ? line[..2] : line;
-                if (prefix.Contains('+'))
-                {
-                    current.Additions++;
-                    AddHunkLine(currentHunk, line, isChanged: true, ledger);
-                }
-                else if (prefix.Contains('-'))
-                {
-                    current.Deletions++;
-                    AddHunkLine(currentHunk, line, isChanged: true, ledger);
-                }
-                else
-                {
-                    AddHunkLine(currentHunk, line, isChanged: false, ledger);
-                }
-            }
-            else if (line.StartsWith("+"))
-            {
-                current.Additions++;
-                AddHunkLine(currentHunk, line, isChanged: true, ledger);
-            }
-            else if (line.StartsWith("-"))
-            {
-                current.Deletions++;
-                AddHunkLine(currentHunk, line, isChanged: true, ledger);
-            }
-            else if (line.StartsWith(" "))
-            {
-                // Context line — include for interpretability
-                AddHunkLine(currentHunk, line, isChanged: false, ledger);
-            }
-            else
-            {
-                // Doesn't match any recognized diff line shape (e.g. "\ No newline at end of
-                // file") — alien input.
-                ledger.Unparsed();
+                if (!rule.Match(state, line)) continue;
+                rule.Apply(state, line, ledger);
+                break;
             }
         }
+
+        var fileDiffs = state.FileDiffs;
 
         var sb = new StringBuilder();
 

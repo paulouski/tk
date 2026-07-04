@@ -6,6 +6,82 @@ namespace Tk.Filters;
 
 public sealed partial class DotnetBuildFilter : IOutputFilter
 {
+    // Per-line shape classification, in precedence order (mirrors the original if/else ladder
+    // exactly: blank -> diagnostic -> project-build line -> duration -> unrecognized). The
+    // diagnostic/project/duration parse is done once per line up front (LineInfo) so the match
+    // and apply steps don't re-parse; the catch-all rule is mandatory so every line lands
+    // somewhere. Ledger accounting for most rules happens in aggregate after the loop (see
+    // bottom of Apply) — these rules only accumulate counts/collections.
+    private readonly record struct LineInfo(string Line, int Index, Diagnostic? Diagnostic);
+    private readonly record struct Rule(Func<ParseState, LineInfo, bool> Match, Action<ParseState, LineInfo> Apply);
+
+    private sealed class ParseState
+    {
+        public readonly List<Diagnostic> Errors = [];
+        public readonly List<Diagnostic> Warnings = [];
+        public readonly HashSet<string> Projects = new(StringComparer.OrdinalIgnoreCase);
+        public readonly HashSet<Diagnostic> SeenDiagnostics = [];
+        public readonly List<int> UnrecognizedIndices = [];
+        public string? Duration;
+        public int BlankCount;
+        public int DuplicateDiagnosticCount;
+        public int ProjectLineCount;
+        public int DurationLineCount;
+    }
+
+    private static readonly Rule[] LineRules =
+    {
+        // 1. Blank line.
+        new(
+            Match: (_, li) => string.IsNullOrWhiteSpace(li.Line),
+            Apply: (state, _) => state.BlankCount++),
+
+        // 2. Diagnostic (compiler error/warning). Real MSBuild transcripts list each diagnostic
+        //    twice: once inline, and again in the "Build FAILED" recap — dedupe by full
+        //    diagnostic identity so e=/w= count each diagnostic once. Must run before the
+        //    project-build/duration rules: a diagnostic line never has that shape, but checking
+        //    diagnostics first matches the original ladder's precedence.
+        new(
+            Match: (_, li) => li.Diagnostic is not null,
+            Apply: (state, li) =>
+            {
+                var diag = li.Diagnostic! with { File = NormalizePath(li.Diagnostic!.File) };
+                if (!state.SeenDiagnostics.Add(diag))
+                {
+                    state.DuplicateDiagnosticCount++;
+                    return;
+                }
+
+                if (diag.Kind == "error")
+                    state.Errors.Add(diag);
+                else
+                    state.Warnings.Add(diag);
+            }),
+
+        // 3. Project build line: "ProjectName -> output.dll".
+        new(
+            Match: (_, li) => ProjectBuildRe().IsMatch(li.Line),
+            Apply: (state, li) =>
+            {
+                state.Projects.Add(ProjectBuildRe().Match(li.Line).Groups[1].Value.Trim());
+                state.ProjectLineCount++;
+            }),
+
+        // 4. Duration summary line.
+        new(
+            Match: (_, li) => DurationRe().IsMatch(li.Line),
+            Apply: (state, li) =>
+            {
+                state.Duration = DurationRe().Match(li.Line).Groups[1].Value;
+                state.DurationLineCount++;
+            }),
+
+        // 5. Mandatory catch-all — none of the above shapes matched.
+        new(
+            Match: (_, _) => true,
+            Apply: (state, li) => state.UnrecognizedIndices.Add(li.Index)),
+    };
+
     public string Apply(string raw, int exitCode) => Apply(raw, exitCode, new UnitLedger());
 
     public string Apply(string raw, int exitCode, UnitLedger ledger)
@@ -15,79 +91,30 @@ public sealed partial class DotnetBuildFilter : IOutputFilter
         if (lines.Length > 0 && lines[^1] == string.Empty)
             lines = lines[..^1];
 
-        var errors = new List<Diagnostic>();
-        var warnings = new List<Diagnostic>();
-        var projects = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        string? duration = null;
         bool succeeded = exitCode == 0;
 
-        // Real MSBuild transcripts list each diagnostic twice: once inline, and again in the
-        // "Build FAILED" recap. Dedupe by full diagnostic identity so e=/w= (and the ledger)
-        // count each diagnostic once — recap duplicates are recognized-and-hidden, not alien.
-        var seenDiagnostics = new HashSet<Diagnostic>();
-        var blankCount = 0;
-        var duplicateDiagnosticCount = 0;
-        var projectLineCount = 0;
-        var durationLineCount = 0;
-        var unrecognizedIndices = new List<int>();
-
+        var state = new ParseState();
         for (var i = 0; i < lines.Length; i++)
         {
             var line = lines[i];
-            if (string.IsNullOrWhiteSpace(line))
+            var li = new LineInfo(line, i, string.IsNullOrWhiteSpace(line) ? null : DiagnosticParser.Parse(line));
+            foreach (var rule in LineRules)
             {
-                blankCount++;
-                continue;
+                if (!rule.Match(state, li)) continue;
+                rule.Apply(state, li);
+                break;
             }
-
-            var diagnostic = DiagnosticParser.Parse(line);
-            if (diagnostic is not null)
-            {
-                var diag = diagnostic with { File = NormalizePath(diagnostic.File) };
-                if (!seenDiagnostics.Add(diag))
-                {
-                    duplicateDiagnosticCount++;
-                    continue;
-                }
-
-                if (diag.Kind == "error")
-                    errors.Add(diag);
-                else
-                    warnings.Add(diag);
-
-                continue;
-            }
-
-            // Extract project build lines: "ProjectName -> output.dll"
-            var projMatch = ProjectBuildRe().Match(line);
-            if (projMatch.Success)
-            {
-                projects.Add(projMatch.Groups[1].Value.Trim());
-                projectLineCount++;
-                continue;
-            }
-
-            // Extract duration
-            var durMatch = DurationRe().Match(line);
-            if (durMatch.Success)
-            {
-                duration = durMatch.Groups[1].Value;
-                durationLineCount++;
-                continue;
-            }
-
-            unrecognizedIndices.Add(i);
         }
 
         // Partition NuGet vulnerabilities from real diagnostics
-        var (realErrors, nugetErrorVulns) = PartitionNugetVulns(errors);
-        var (realWarnings, nugetWarnVulns) = PartitionNugetVulns(warnings);
+        var (realErrors, nugetErrorVulns) = PartitionNugetVulns(state.Errors);
+        var (realWarnings, nugetWarnVulns) = PartitionNugetVulns(state.Warnings);
         var allNugetVulns = nugetErrorVulns.Concat(nugetWarnVulns).ToList();
         var totalNuget = allNugetVulns.Sum(g => g.Total);
 
         var sb = new StringBuilder();
         var status = succeeded ? Ansi.Green("ok") : Ansi.Red("FAIL");
-        var projectCount = projects.Count;
+        var projectCount = state.Projects.Count;
 
         sb.Append($"{status} build p={projectCount}");
         if (!succeeded || realErrors.Count > 0 || realWarnings.Count > 0 || totalNuget > 0)
@@ -96,8 +123,8 @@ public sealed partial class DotnetBuildFilter : IOutputFilter
             if (totalNuget > 0)
                 sb.Append($" nu={totalNuget}");
         }
-        if (duration != null)
-            sb.Append($" t={duration}");
+        if (state.Duration != null)
+            sb.Append($" t={state.Duration}");
         sb.AppendLine();
 
         var rawTailFallback = !succeeded && realErrors.Count == 0 && realWarnings.Count == 0;
@@ -133,8 +160,8 @@ public sealed partial class DotnetBuildFilter : IOutputFilter
         }
 
         // Ledger accounting — see docs/output-contract.md.
-        ledger.Hide(blankCount + duplicateDiagnosticCount);
-        ledger.Summarize(projectLineCount + durationLineCount + totalNuget);
+        ledger.Hide(state.BlankCount + state.DuplicateDiagnosticCount);
+        ledger.Summarize(state.ProjectLineCount + state.DurationLineCount + totalNuget);
 
         foreach (var group in errorGroups)
         {
@@ -156,7 +183,7 @@ public sealed partial class DotnetBuildFilter : IOutputFilter
                 .Where(i => !string.IsNullOrWhiteSpace(lines[i]))
                 .ToList();
             var tailIndices = nonBlankIndices.TakeLast(12).ToHashSet();
-            foreach (var idx in unrecognizedIndices)
+            foreach (var idx in state.UnrecognizedIndices)
             {
                 if (tailIndices.Contains(idx)) ledger.Keep();
                 else ledger.Unparsed();
@@ -164,7 +191,7 @@ public sealed partial class DotnetBuildFilter : IOutputFilter
         }
         else
         {
-            ledger.Unparsed(unrecognizedIndices.Count);
+            ledger.Unparsed(state.UnrecognizedIndices.Count);
         }
 
         return sb.ToString();

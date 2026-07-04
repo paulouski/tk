@@ -98,6 +98,18 @@ Not ledger-ized this phase (shared `OutputFooter` renderer only, `unparsedCount`
 `tk tree`, `tk view`, `tk focus`. Ledgerizing these mode-dependent, multi-unit-shape commands is
 left as a TODO for a follow-up phase — see the parent architecture plan.
 
+## Rule-table line classification
+
+`GitDiffFilter`, `LogFileFilter`, and `DotnetBuildFilter` classify each physical line via an
+ordered table of `(Match, Apply)` rules instead of an if/else ladder: the first matching rule
+wins, and a mandatory final catch-all rule handles anything unrecognized. Parse state (current
+file diff, current log entry, etc.) lives in a small per-filter `ParseState`/`Ctx` type that rule
+handlers read and mutate; the table itself is private to each filter (no shared base class) since
+each filter's state shape differs. Rule order encodes real precedence (e.g. a diff's structural
+metadata lines must be recognized before the +/-/space content-line rules, or they'd be misread
+as additions/deletions) — see the comments above each filter's rule table for the specific
+order-sensitive cases.
+
 ## Process-filter stream accounting note
 
 Filters classify the single already-combined `raw` string they are handed (this is what the

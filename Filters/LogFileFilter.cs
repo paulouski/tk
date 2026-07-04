@@ -161,59 +161,87 @@ public static partial class LogFileFilter
         return 0;
     }
 
+    // Per-line shape classification, in precedence order (mirrors the original if/else ladder
+    // exactly: blank -> log-level header -> non-continuation-shaped -> continuation-with-entry
+    // -> unattachable continuation). The log-level regex is matched once per line up front
+    // (LineInfo) so the match and apply steps don't re-parse. Rule 5 is a mandatory catch-all,
+    // reached only for continuation-shaped lines with no entry open to attach to.
+    private readonly record struct LineInfo(string Line, Match LevelMatch);
+    private readonly record struct Rule(Func<ParseState, LineInfo, bool> Match, Action<ParseState, LineInfo, UnitLedger> Apply);
+
+    private sealed class ParseState
+    {
+        public readonly List<LogEntry> Entries = [];
+        public LogEntry? Current;
+    }
+
+    private static readonly Rule[] LineRules =
+    {
+        // 1. Blank line.
+        new(
+            Match: (_, li) => string.IsNullOrWhiteSpace(li.Line),
+            Apply: (_, _, ledger) => ledger.Hide()),
+
+        // 2. Log-level header, e.g. "info: Some.Source[0] message". Starts a new entry. Must run
+        //    before the continuation rules below, since a header line also happens to be
+        //    non-indented text that could otherwise look like a continuation.
+        new(
+            Match: (_, li) => li.LevelMatch.Success,
+            Apply: (state, li, _) =>
+            {
+                state.Current = new LogEntry
+                {
+                    Level = li.LevelMatch.Groups["level"].Value.ToLowerInvariant(),
+                    Source = li.LevelMatch.Groups["source"].Value.Trim(),
+                    Message = li.LevelMatch.Groups["msg"].Value.Trim(),
+                };
+                state.Entries.Add(state.Current);
+            }),
+
+        // 3. Guard: not shaped like a continuation at all (no recognizable log prefix, not
+        //    indented, no exception marker) — foreign/garbage content. Must run before rule 4 so
+        //    it isn't silently glued to whatever entry came before.
+        new(
+            Match: (_, li) => !IsContinuationLike(li.Line),
+            Apply: (_, _, ledger) => ledger.Unparsed()),
+
+        // 4. Continuation line attached to the currently open entry — first non-empty
+        //    continuation becomes the message if the message is still empty.
+        new(
+            Match: (state, _) => state.Current != null,
+            Apply: (state, li, _) =>
+            {
+                var trimmed = li.Line.Trim();
+                if (string.IsNullOrEmpty(state.Current!.Message) && !string.IsNullOrEmpty(trimmed))
+                    state.Current!.Message = trimmed;
+                else
+                    state.Current!.Continuation.Add(li.Line);
+                state.Current!.LineCount++;
+            }),
+
+        // 5. Mandatory catch-all — continuation-shaped line with no entry open to attach to; no
+        //    context to represent it.
+        new(
+            Match: (_, _) => true,
+            Apply: (_, _, ledger) => ledger.Unparsed()),
+    };
+
     private static List<LogEntry> ParseLogEntries(string[] lines, UnitLedger ledger)
     {
-        var entries = new List<LogEntry>();
-        LogEntry? current = null;
+        var state = new ParseState();
 
         foreach (var line in lines)
         {
-            if (string.IsNullOrWhiteSpace(line))
+            var li = new LineInfo(line, LogLevelRe().Match(line));
+            foreach (var rule in LineRules)
             {
-                ledger.Hide();
-                continue;
-            }
-
-            var levelMatch = LogLevelRe().Match(line);
-            if (levelMatch.Success)
-            {
-                current = new LogEntry
-                {
-                    Level = levelMatch.Groups["level"].Value.ToLowerInvariant(),
-                    Source = levelMatch.Groups["source"].Value.Trim(),
-                    Message = levelMatch.Groups["msg"].Value.Trim(),
-                };
-                entries.Add(current);
-                continue;
-            }
-
-            if (!IsContinuationLike(line))
-            {
-                // No recognizable log prefix, not indented, no exception marker — this is
-                // foreign/garbage content, not a genuine continuation. Count it rather than
-                // silently gluing it to whatever entry came before.
-                ledger.Unparsed();
-                continue;
-            }
-
-            // Continuation line — first non-empty continuation becomes message if message is empty
-            if (current != null)
-            {
-                var trimmed = line.Trim();
-                if (string.IsNullOrEmpty(current.Message) && !string.IsNullOrEmpty(trimmed))
-                    current.Message = trimmed;
-                else
-                    current.Continuation.Add(line);
-                current.LineCount++;
-            }
-            else
-            {
-                // Continuation-shaped line with no entry to attach to — no context to represent it.
-                ledger.Unparsed();
+                if (!rule.Match(state, li)) continue;
+                rule.Apply(state, li, ledger);
+                break;
             }
         }
 
-        return entries;
+        return state.Entries;
     }
 
     /// <summary>True for lines that plausibly extend the previous entry: indented text
