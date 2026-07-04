@@ -9,10 +9,10 @@ public sealed class GitCommand : ICommand
 
     public async Task<int> RunAsync(CommandContext ctx)
     {
-        // ctx.Args has the leading "git" token already stripped by CommandContext.FromCli;
-        // BuildGitArgs re-adds it so the spawned process is always the real `git` binary.
+        // ctx.OriginalCommandArgs carries "git" plus the user's operands, so the spawned
+        // process is always the real `git` binary regardless of the subcommand name.
         if (ctx.Raw)
-            return await RunFilteredAsync(BuildGitArgs([], ctx.Args), new PassthroughFilter(), ctx);
+            return await RunFilteredAsync(ctx.OriginalCommandArgs, new PassthroughFilter(), ctx);
 
         var subcommand = FindSubcommand(ctx.Args);
         return subcommand?.Value.ToLowerInvariant() switch
@@ -23,7 +23,7 @@ public sealed class GitCommand : ICommand
             "log" => await RunLogAsync(ctx, subcommand.Value.Index),
             // Everything else (add, commit, push, pull, fetch, stash, branch, checkout,
             // merge, rebase, reset, tag, ...) is a clean, unfiltered passthrough to real git.
-            _ => await RunFilteredAsync(BuildGitArgs([], ctx.Args), new PassthroughFilter(), ctx)
+            _ => await RunFilteredAsync(ctx.OriginalCommandArgs, new PassthroughFilter(), ctx)
         };
     }
 
@@ -100,7 +100,7 @@ public sealed class GitCommand : ICommand
         if (!ctx.Raw)
             filtered = AppendHiddenLinesFooter(raw, filtered, ctx.DetailLevel);
         if (exitCode != 0)
-            filtered = RawOutputStore.AppendFailureReference(raw, filtered, ["git", .. ctx.Args]);
+            filtered = RawOutputStore.AppendFailureReference(raw, filtered, ctx.OriginalCommandArgs);
         ctx.Out.Write(filtered);
         return exitCode;
     }

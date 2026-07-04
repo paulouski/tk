@@ -13,7 +13,7 @@ public class GitCommandTests
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var ctx = new CommandContext(args, detail, raw, stdout, stderr, runner);
+        var ctx = new CommandContext(args, detail, raw, stdout, stderr, runner, commandName: "git");
         var exit = await new GitCommand().RunAsync(ctx);
         return (exit, stdout.ToString(), runner);
     }
@@ -204,6 +204,28 @@ public class GitCommandTests
         await RunAsync(["log"], runner, raw: true);
 
         Assert.Equal(["git", "log"], runner.Calls[0]);
+    }
+
+    [Fact]
+    public async Task Raw_mode_preserves_global_git_flags_ahead_of_the_subcommand()
+    {
+        // Regression for the argument-model fix: raw mode spawns via ctx.OriginalCommandArgs
+        // (CommandName + Operands), so global flags like `-C <path>` must survive in order.
+        var runner = new FakeProcessRunner().Returns(stdout: "On branch main\n");
+
+        await RunAsync(["-C", "/some/repo", "status"], runner, raw: true);
+
+        Assert.Equal(["git", "-C", "/some/repo", "status"], runner.Calls[0]);
+    }
+
+    [Fact]
+    public async Task Passthrough_subcommand_preserves_global_git_flags_ahead_of_the_subcommand()
+    {
+        var runner = new FakeProcessRunner().Returns(exitCode: 0, stdout: "stash list output\n");
+
+        await RunAsync(["-c", "user.name=Test", "stash", "list"], runner);
+
+        Assert.Equal(["git", "-c", "user.name=Test", "stash", "list"], runner.Calls[0]);
     }
 
     [Theory]

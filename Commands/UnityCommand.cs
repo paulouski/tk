@@ -45,5 +45,8 @@ public sealed class UnityCommand : ICommand
     }
 
     private static CommandContext SubContext(CommandContext ctx) =>
-        new(ctx.Args.Length > 1 ? ctx.Args[1..] : [], ctx.DetailLevel, ctx.Raw, ctx.Out, ctx.Err, ctx.Process);
+        new(
+            ctx.Args.Length > 1 ? ctx.Args[1..] : [],
+            ctx.DetailLevel, ctx.Raw, ctx.Out, ctx.Err, ctx.Process,
+            commandName: ctx.Args.Length > 0 ? ctx.Args[0] : "");
 }
