@@ -26,13 +26,11 @@ public enum DaemonState
 /// </summary>
 public sealed class LspDaemon
 {
-    private static readonly TimeSpan IdleTimeout = TimeSpan.FromMinutes(30);
     private static readonly TimeSpan HandshakeTimeout = TimeSpan.FromSeconds(120);
 
     private readonly string _workspaceRoot;
     private readonly ILanguageBackend _backend;
     private readonly string _logPath;
-    private readonly string _pidPath;
 
     // State machine
     private volatile DaemonState _state = DaemonState.Loading;
@@ -40,9 +38,10 @@ public sealed class LspDaemon
     private readonly TaskCompletionSource<bool> _readyTcs =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    // Cancelled when a client sends the "stop" request, so the accept loop unwinds and the
-    // daemon (and its Roslyn child, killed in the RunAsync finally block) actually exits.
-    private readonly CancellationTokenSource _shutdownRequested = new();
+    // Set for the duration of RunAsync. A client's "stop" request calls
+    // DaemonHost.RequestShutdown() on it, which unwinds the host's accept loop and runs its
+    // cleanup (kills the backend child, removes the socket/pid files).
+    private DaemonHost? _host;
 
     // URIs already sent via textDocument/didOpen (required before queries; the server
     // throws "Unexpected null" in FindAllReferencesHandler for an unopened document).
@@ -56,7 +55,6 @@ public sealed class LspDaemon
         _workspaceRoot = workspaceRoot;
         _backend = backend;
         _logPath = DaemonSocket.GetLogPath(workspaceRoot);
-        _pidPath = DaemonSocket.GetPidPath(workspaceRoot);
     }
 
     // For testing: allow injecting a ready/failed state externally
@@ -79,130 +77,91 @@ public sealed class LspDaemon
             throw new InvalidOperationException(msg);
         }
 
-        // ── Step 1: Bind the unix socket FIRST ────────────────────────────────
-        var socketPath = DaemonSocket.GetSocketPath(_workspaceRoot);
-        Directory.CreateDirectory(Path.GetDirectoryName(socketPath)!);
-
-        if (File.Exists(socketPath))
-            File.Delete(socketPath);
-
-        using var server = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
-        server.Bind(new UnixDomainSocketEndPoint(socketPath));
-        server.Listen(8);
-        Log($"socket bound: {socketPath}");
-
-        // ── Step 2: Launch handshake in background ────────────────────────────
-        using var handshakeCts = new CancellationTokenSource(HandshakeTimeout);
-        using var combinedHandshake = CancellationTokenSource.CreateLinkedTokenSource(ct, handshakeCts.Token);
-
         // Diagnostic: point the server's own extension logs to a dir next to our daemon log.
         var extLogDir = Path.Combine(Path.GetDirectoryName(_logPath)!, "serverlogs");
         Directory.CreateDirectory(extLogDir);
 
-        var args = _backend.GetLaunchArgs(serverPath)
-            .Concat(["--extensionLogDirectory", extLogDir])
-            .ToArray();
-        var executable = args[0];
-        var launchArgs = string.Join(" ", args[1..].Select(a => $"\"{a}\""));
+        var host = new DaemonHost();
+        _host = host;
+        MessageLoop? loop = null;
+        CancellationTokenSource? handshakeCts = null;
+        Task? handshakeTask = null;
 
-        using var process = new System.Diagnostics.Process();
-        process.StartInfo = new System.Diagnostics.ProcessStartInfo
-        {
-            FileName = executable,
-            Arguments = launchArgs,
-            UseShellExecute = false,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            WorkingDirectory = _workspaceRoot,
-        };
-
-        // Detect an early server crash (SIGABRT on startup): turn a silent 120s
-        // handshake hang into an immediate Failed with the exit code.
-        process.EnableRaisingEvents = true;
-        process.Exited += (_, _) =>
-        {
-            int code;
-            try { code = process.ExitCode; } catch { code = -1; }
-            Log($"server process EXITED code={code}");
-            if (_state == DaemonState.Loading)
+        var options = new DaemonHost.HostOptions(
+            WorkspaceRoot: _workspaceRoot,
+            Log: Log,
+            StartBackend: () =>
             {
-                TransitionToFailed($"server-exited code={code}");
-                try { handshakeCts.Cancel(); } catch { }
-            }
-        };
-
-        process.Start();
-        Log($"server process launched, pid={process.Id}");
-
-        // Persist both PIDs so `lsp stop`/`lsp status` can verify and, if necessary,
-        // forcibly terminate this daemon and its Roslyn child even if the socket-based
-        // graceful stop below is unresponsive or the socket file itself is gone.
-        DaemonSocket.WritePidInfo(_pidPath, new DaemonPidInfo(Environment.ProcessId, process.Id));
-
-        // Pump server stderr into the daemon log — the one channel that shows
-        // MSBuild/SDK/BuildHost failures (previously discarded).
-        process.ErrorDataReceived += (_, e) =>
-        {
-            if (e.Data is not null) Log($"[stderr] {e.Data}");
-        };
-        process.BeginErrorReadLine();
-
-        var processInput = process.StandardOutput.BaseStream;
-        var processOutput = process.StandardInput.BaseStream;
-
-        await using var loop = new MessageLoop(processInput, processOutput);
-        loop.Trace = m => Log($"<< {m}");
-
-        var handshakeTask = Task.Run(
-            () => HandshakeAsync(loop, _workspaceRoot, combinedHandshake.Token),
-            combinedHandshake.Token);
-
-        // ── Step 3: Accept clients immediately (socket-first) ─────────────────
-        using var idleTimer = new CancellationTokenSource(IdleTimeout);
-        using var combined = CancellationTokenSource.CreateLinkedTokenSource(ct, idleTimer.Token, _shutdownRequested.Token);
-
-        try
-        {
-            while (!combined.Token.IsCancellationRequested)
+                var args = _backend.GetLaunchArgs(serverPath)
+                    .Concat(["--extensionLogDirectory", extLogDir])
+                    .ToArray();
+                var executable = args[0];
+                var launchArgs = string.Join(" ", args[1..].Select(a => $"\"{a}\""));
+                return new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = executable,
+                    Arguments = launchArgs,
+                    UseShellExecute = false,
+                    RedirectStandardInput = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    WorkingDirectory = _workspaceRoot,
+                };
+            },
+            OnBackendStarted: (process, backendCt) =>
             {
-                Socket client;
-                try
-                {
-                    client = await server.AcceptAsync(combined.Token).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
+                // Handshake runs on a background task with its own timeout so client
+                // connections (queued on the socket since it's already listening) are never
+                // blocked behind it.
+                handshakeCts = new CancellationTokenSource(HandshakeTimeout);
+                var combinedHandshake = CancellationTokenSource.CreateLinkedTokenSource(backendCt, handshakeCts.Token);
 
-                Log($"client connected");
-                idleTimer.CancelAfter(IdleTimeout);
-                _ = Task.Run(async () =>
+                loop = new MessageLoop(process.StandardOutput.BaseStream, process.StandardInput.BaseStream)
                 {
-                    try { await HandleClientAsync(client, loop, combined.Token).ConfigureAwait(false); }
-                    catch (Exception ex) { Log($"client handler error: {ex}"); }
-                    finally { client.Dispose(); }
-                }, combined.Token);
-            }
-        }
-        finally
+                    Trace = m => Log($"<< {m}")
+                };
+
+                handshakeTask = Task.Run(
+                    () => HandshakeAsync(loop, _workspaceRoot, combinedHandshake.Token, host.ReportFatalStartupFailure),
+                    combinedHandshake.Token);
+
+                return Task.CompletedTask;
+            },
+            HandleClient: (client, clientCt) => HandleClientAsync(client, loop!, clientCt),
+            OnBackendExited: code =>
+            {
+                // Detect an early server crash (SIGABRT on startup): turn a silent 120s
+                // handshake hang into an immediate Failed with the exit code, and let the
+                // daemon exit right away instead of idling until the timeout.
+                if (_state == DaemonState.Loading)
+                {
+                    TransitionToFailed($"server-exited code={code}");
+                    try { handshakeCts?.Cancel(); } catch { }
+                    host.ReportFatalStartupFailure();
+                }
+            });
+
+        var outcome = await host.RunAsync(options, ct).ConfigureAwait(false);
+        if (outcome == DaemonStartOutcome.AlreadyRunningElsewhere)
         {
-            if (File.Exists(socketPath))
-                File.Delete(socketPath);
-            if (File.Exists(_pidPath))
-                try { File.Delete(_pidPath); } catch { }
-            try { process.Kill(entireProcessTree: true); } catch { }
-            Log("daemon stopped");
+            Log("another daemon already owns this workspace; standing down");
+            return;
         }
 
         // Await handshake to propagate exceptions
-        try { await handshakeTask.ConfigureAwait(false); }
-        catch (OperationCanceledException) { }
-        catch (Exception ex) { Log($"handshake task exception: {ex}"); }
+        if (handshakeTask is not null)
+        {
+            try { await handshakeTask.ConfigureAwait(false); }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { Log($"handshake task exception: {ex}"); }
+        }
+
+        if (loop is not null)
+            await loop.DisposeAsync().ConfigureAwait(false);
+        handshakeCts?.Dispose();
     }
 
-    private async Task HandshakeAsync(MessageLoop loop, string workspaceRoot, CancellationToken ct)
+    private async Task HandshakeAsync(MessageLoop loop, string workspaceRoot, CancellationToken ct, Action reportFatalStartupFailure)
     {
         try
         {
@@ -323,12 +282,14 @@ public sealed class LspDaemon
                 : "cancelled";
             Log($"handshake cancelled/timed-out: {reason}");
             TransitionToFailed(reason);
+            reportFatalStartupFailure();
             throw;
         }
         catch (Exception ex)
         {
             Log($"handshake EXCEPTION: {ex}");
             TransitionToFailed(ex.Message);
+            reportFatalStartupFailure();
             throw;
         }
     }
@@ -712,11 +673,11 @@ public sealed class LspDaemon
             {
                 response = new DaemonResponse(true, null, null);
                 await writer.WriteLineAsync(JsonSerializer.Serialize(response, LspMessage.Options)).ConfigureAwait(false);
-                // Unwind the accept loop so RunAsync's finally block actually runs: kills the
-                // Roslyn child, deletes the socket/pid files, and lets this process exit.
+                // Unwind the host's accept loop so its cleanup actually runs: kills the
+                // backend child, deletes the socket/pid files, and lets this process exit.
                 // Previously this handler only replied success without triggering any of that,
                 // leaving the daemon (and its Roslyn child) running forever after `lsp stop`.
-                _shutdownRequested.Cancel();
+                _host?.RequestShutdown();
                 return;
             }
             else if (request.Method == "symbols" && request.Symbol is not null)

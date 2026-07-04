@@ -5,6 +5,7 @@ using Xunit;
 
 namespace Tk.Tests.Modules;
 
+[Collection("HomeSensitive")]
 public class ModuleCommandTests
 {
     private static async Task<(int ExitCode, string Out, string Err)> RunAsync(string[] args)

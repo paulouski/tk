@@ -8,6 +8,7 @@ namespace Tk.Tests.Modules;
 /// <summary>
 /// Tests that InitCommand only emits snippets for enabled modules.
 /// </summary>
+[Collection("HomeSensitive")]
 public class InitCommandModuleTests
 {
     private static async Task<string> RunInitAndReadClaude(IReadOnlyList<ModuleDescriptor> enabledModules)

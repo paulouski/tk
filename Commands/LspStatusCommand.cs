@@ -35,7 +35,8 @@ public sealed class LspStatusCommand : ICommand
         // A socket FILE can outlive its listener (e.g. the daemon was killed -9 before it
         // could clean up), so File.Exists alone is not proof the daemon is actually running —
         // probe it with a real connect.
-        if (await IsSocketLiveAsync(socketPath).ConfigureAwait(false))
+        using var probeCts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        if (await DaemonHost.IsSocketLiveAsync(socketPath, probeCts.Token).ConfigureAwait(false))
         {
             ctx.Out.WriteLine($"lsp status=running workspace={workspaceRoot}");
             ctx.Out.WriteLine($"  socket={socketPath}");
@@ -43,52 +44,15 @@ public sealed class LspStatusCommand : ICommand
         }
 
         // The socket is dead (missing, or a stale file left by a crash) but the daemon
-        // (and/or its Roslyn child) may still be an orphan — clean it up instead of leaving
+        // (and/or its backend child) may still be an orphan — clean it up instead of leaving
         // it to accumulate, and instead of reporting "stopped" while it is in fact still alive.
         var pidPath = DaemonSocket.GetPidPath(workspaceRoot);
-        var pidInfo = DaemonSocket.TryReadPidInfo(pidPath);
-        if (pidInfo is not null)
-        {
-            var daemonAlive = DaemonSocket.IsProcessAlive(pidInfo.DaemonPid);
-            var serverAlive = pidInfo.ServerPid is int sp && DaemonSocket.IsProcessAlive(sp);
-            if (daemonAlive || serverAlive)
-            {
-                if (daemonAlive) DaemonSocket.TryKillProcessTree(pidInfo.DaemonPid);
-                if (serverAlive) DaemonSocket.TryKillProcessTree(pidInfo.ServerPid!.Value);
-                TryDelete(pidPath);
-                TryDelete(socketPath);
-                ctx.Out.WriteLine($"lsp status=stopped workspace={workspaceRoot} (cleaned up orphaned daemon process)");
-                return 0;
-            }
-            TryDelete(pidPath);
-        }
+        var orphanKilled = DaemonHost.CleanupOrphan(pidPath, socketPath);
 
-        TryDelete(socketPath); // stale file with no live listener behind it
-        ctx.Out.WriteLine($"lsp status=stopped workspace={workspaceRoot}");
+        ctx.Out.WriteLine(orphanKilled
+            ? $"lsp status=stopped workspace={workspaceRoot} (cleaned up orphaned daemon process)"
+            : $"lsp status=stopped workspace={workspaceRoot}");
         return 0;
-    }
-
-    /// <summary>
-    /// True if a unix socket at <paramref name="socketPath"/> both exists and has a live
-    /// listener that accepts a connection. A socket file can outlive its process (e.g. after
-    /// a SIGKILL that skipped cleanup), so a bare File.Exists check is not sufficient proof.
-    /// </summary>
-    private static async Task<bool> IsSocketLiveAsync(string socketPath)
-    {
-        if (!File.Exists(socketPath))
-            return false;
-
-        try
-        {
-            using var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-            await socket.ConnectAsync(new UnixDomainSocketEndPoint(socketPath), cts.Token).ConfigureAwait(false);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
     }
 
     private static async Task<int> RunStopAsync(CommandContext ctx)
@@ -147,20 +111,12 @@ public sealed class LspStatusCommand : ICommand
             while (DateTime.UtcNow < deadline && DaemonSocket.IsProcessAlive(pidInfo.DaemonPid))
                 await Task.Delay(100).ConfigureAwait(false);
 
-            if (DaemonSocket.IsProcessAlive(pidInfo.DaemonPid))
-            {
-                forceKilled = true;
-                DaemonSocket.TryKillProcessTree(pidInfo.DaemonPid);
-            }
-            if (pidInfo.ServerPid is int serverPid && DaemonSocket.IsProcessAlive(serverPid))
-            {
-                forceKilled = true;
-                DaemonSocket.TryKillProcessTree(serverPid);
-            }
+            forceKilled = DaemonHost.TryForceKill(pidInfo);
         }
 
         TryDelete(socketPath);
         TryDelete(pidPath);
+        TryDelete(socketPath + ".lock"); // in case stop raced a still-starting daemon's lock file
 
         ctx.Out.WriteLine(forceKilled
             ? "lsp stop: daemon stopped (force-killed unresponsive/orphaned process)"
