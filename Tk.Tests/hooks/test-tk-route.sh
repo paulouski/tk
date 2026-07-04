@@ -27,21 +27,25 @@ REAL_JQ="$(command -v jq || true)"
 FAKE_BIN="$WORK/bin"
 mkdir -p "$FAKE_BIN"
 ln -s "$REAL_JQ" "$FAKE_BIN/jq"
-for tool in cat date tr bash sh mkdir rm; do
+for tool in cat date tr bash sh mkdir rm sed grep cut tail; do
   p="$(command -v "$tool" || true)"
   [[ -n "$p" ]] && ln -sf "$p" "$FAKE_BIN/$tool"
 done
 
 cat > "$FAKE_BIN/rtk" <<'STUB'
 #!/usr/bin/env bash
-# Fake rtk: recognizes a fixed command list for "rtk rewrite <cmd>"; prints "rtk <cmd>" and
-# exits 0 when recognized, exits 1 (no output) otherwise.
+# Fake rtk: recognizes a fixed command list for "rtk rewrite <cmd>" — including two exact
+# grep commands (not a broad "grep " prefix) so the quote/escape-aware unsafe-detection
+# proof cases below can reach this fallback, while OTHER grep commands stay unrecognized
+# and fall through to the symbol-grep nudge check instead. Prints "rtk <cmd>" and exits 0
+# when recognized, exits 1 (no output) otherwise.
 if [[ "$1" != "rewrite" ]]; then
   exit 1
 fi
 cmd="$2"
 case "$cmd" in
-  "docker ps"|"docker ps -a"|"git commit"|"git commit -m test")
+  "docker ps"|"docker ps -a"|"git commit"|"git commit -m test"| \
+  'grep -rn "class Foo\|class Bar" src'|'grep -r class\|record src')
     printf 'rtk %s' "$cmd"
     exit 0
     ;;
@@ -159,6 +163,56 @@ expect_passthrough() {
   assert_eq "$desc: no decision-log entry" "" "$LOG_CONTENT"
 }
 
+# hook_run_keep_home <path> <command> [cwd]
+# Same as hook_run, but does NOT reset FAKE_HOME first — needed to prove the nudge
+# throttle, which reads the previous "nudge" decision-log timestamp across invocations.
+hook_run_keep_home() {
+  local path="$1" cmd="$2" cwd="${3:-/repo}"
+  mkdir -p "$FAKE_HOME/.claude"
+
+  local input
+  input=$(jq -n --arg c "$cmd" --arg cwd "$cwd" \
+    '{tool_name:"Bash", tool_input:{command:$c}, cwd:$cwd}')
+
+  OUT="$(PATH="$path" HOME="$FAKE_HOME" bash "$HOOK" <<<"$input" 2>"$WORK/stderr")"
+  RC=$?
+  ERR="$(cat "$WORK/stderr")"
+  if [[ -f "$FAKE_HOME/.claude/tk-hook.log" ]]; then
+    LOG_CONTENT="$(cat "$FAKE_HOME/.claude/tk-hook.log")"
+  else
+    LOG_CONTENT=""
+  fi
+}
+
+# expect_nudge <desc> <command> [cwd]
+# Uses hook_run_keep_home so callers can chain a throttle case right after.
+expect_nudge() {
+  local desc="$1" cmd="$2" cwd="${3:-/repo}"
+  hook_run_keep_home "$FAKE_BIN" "$cmd" "$cwd"
+
+  assert_eq "$desc: exit 0" "0" "$RC"
+  local got_ctx
+  got_ctx="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty')"
+  assert_true "$desc: additionalContext present" "$([[ -n "$got_ctx" ]] && echo 1 || echo 0)"
+  local got_updated
+  got_updated="$(printf '%s' "$OUT" | jq -r 'if (.hookSpecificOutput | has("updatedInput")) then "present" else "" end')"
+  assert_eq "$desc: no updatedInput (command unchanged)" "" "$got_updated"
+  assert_true "$desc: decision-log line present" "$([[ "$LOG_CONTENT" == *$'\t'"nudge"$'\t'* ]] && echo 1 || echo 0)"
+}
+
+# expect_no_nudge <desc> <command> [cwd]
+# Like expect_nudge's negative: no stdout at all, no new decision-log entry. Uses
+# hook_run_keep_home so it composes with the throttle test (which needs shared state).
+expect_no_nudge() {
+  local desc="$1" cmd="$2" cwd="${3:-/repo}"
+  local before_log="$LOG_CONTENT"
+  hook_run_keep_home "$FAKE_BIN" "$cmd" "$cwd"
+
+  assert_eq "$desc: exit 0" "0" "$RC"
+  assert_eq "$desc: no stdout" "" "$OUT"
+  assert_eq "$desc: no new decision-log entry" "$before_log" "$LOG_CONTENT"
+}
+
 echo "# hooks/tk-route.sh case matrix"
 
 # ── tk-routed commands ──────────────────────────────────────────────────────
@@ -192,10 +246,35 @@ assert_eq "embedded newline -> pass (unsafe): exit 0" "0" "$RC"
 assert_eq "embedded newline -> pass (unsafe): no stdout" "" "$OUT"
 assert_eq "embedded newline -> pass (unsafe): no decision-log entry" "" "$LOG_CONTENT"
 
-# ── quoted metacharacters: the hook's unsafe-detection is a literal substring match on the
-# raw command string, not shell-aware — it does NOT know "&&" is inside a quoted string here.
-# This documents (and pins) that actual behavior rather than the "ideal" one. ──────────────
-expect_passthrough 'quoted "&&" still flagged unsafe (documented gap)' 'echo "a && b"'
+# ── quoted / escaped metacharacters: the unsafe-detection runs against a copy with
+# backslash-escapes and quoted segments stripped, so metacharacters that are literal text
+# to the shell (inside quotes, or backslash-escaped) no longer false-flag a command as
+# unsafe. These cases prove the fix end-to-end rather than just pinning the old gap. ───────
+
+# (a) quoted "|" inside a grep pattern is literal to the shell -> safe single command ->
+# reaches the rtk fallback (fake rtk recognizes this exact grep command).
+expect_rewrite 'quoted pipe in grep pattern -> safe, routed to rtk' \
+  'grep -rn "class Foo\|class Bar" src' \
+  'rtk grep -rn "class Foo\|class Bar" src' "route-rtk"
+
+# (b) quoted "&&" inside a git log --grep value is literal -> safe single command -> still
+# matches the git-log -> tk route.
+expect_rewrite 'quoted "&&" in git log --grep -> safe, routed to tk' \
+  'git log --grep="fix && cleanup"' \
+  'tk git log --grep="fix && cleanup"' "route-tk"
+
+# (c) unbalanced quote: stripping can't reason past a lone survivor quote -> unsafe.
+expect_passthrough 'unbalanced quote -> pass (unsafe)' 'echo "a && b'
+
+# (d) a real, unquoted pipe is still unsafe -- even in front of an otherwise-routable
+# git command.
+expect_passthrough 'unquoted pipe -> pass (unsafe)' 'git status | head -5'
+
+# (e) backslash-escaped pipe outside quotes: the shell sees a literal "|", so this is a
+# safe single command -> reaches the rtk fallback, same as (a).
+expect_rewrite 'backslash-escaped pipe -> safe, routed to rtk' \
+  'grep -r class\|record src' \
+  'rtk grep -r class\|record src' "route-rtk"
 
 # ── redirects: NOT unsafe; a single redirected command still gets the tk prefix ────────────
 expect_rewrite "redirect -> still routed to tk" "git status > /tmp/tk-route-test-out.txt" \
@@ -223,6 +302,34 @@ ERR="$(cat "$WORK/stderr")"
 assert_eq "jq absent: exit 0" "0" "$RC"
 assert_eq "jq absent: no stdout" "" "$OUT"
 assert_eq "jq absent: no stderr noise" "" "$ERR"
+
+# ── symbol-grep nudge: fires only after tk/rtk rewrite has declined, regardless of the
+# unsafe flag, and is throttled to once per 300s (by decision-log timestamp). Each group
+# below starts from a clean FAKE_HOME so it isn't throttled by an earlier group's log. ────
+
+# Group 1: unsafe path still nudges, and a second symbol-grep right after it is throttled.
+rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
+
+# Symbol grep inside a pipe: unsafe (real unquoted pipe), so it never reaches the
+# rewrite/rtk-fallback path at all -- but the nudge check runs regardless of the unsafe
+# flag, so it still fires.
+expect_nudge 'symbol grep inside a pipe -> still nudged' \
+  'grep -rn "class Gamma\|class Delta" other_src | head -3'
+
+# Second symbol grep run immediately after -> throttled (last nudge logged <300s ago).
+expect_no_nudge 'second symbol grep immediately after -> throttled, not nudged' \
+  'grep -rn "class Epsilon\|class Zeta" other_src'
+
+# Group 2: safe path nudges too, and a non-symbol-shaped grep never nudges at all.
+rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
+
+# Symbol grep via quoted alternation ("class Foo\|class Bar" shape, not one of the fake
+# rtk's two reserved exact-match grep commands) -> safe, unrecognized by rtk -> nudge.
+expect_nudge 'symbol grep (quoted alternation) -> nudge' \
+  'grep -rn "class Alpha\|class Beta" other_src'
+
+# Plain free-text grep, no symbol shape -> no nudge (and no rewrite either).
+expect_no_nudge 'plain free-text grep -> no nudge' 'grep -rn "TODO" src'
 
 echo "# --- $PASS passed, $FAIL failed ---"
 [[ "$FAIL" -eq 0 ]]

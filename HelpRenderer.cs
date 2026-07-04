@@ -37,49 +37,25 @@ internal static class HelpRenderer
         sb.AppendLine("  tk mv <old> <new>          Move file preserving git history (git mv when tracked)");
         sb.AppendLine();
         sb.AppendLine("Commands:");
-        sb.AppendLine("  tk ls <path>                   Names only (no perms/dates/sizes)");
-        sb.AppendLine("  tk grep [flags] pat path       Grep summary: match count, top files, samples");
-        sb.AppendLine("  tk find <path> [flags]         Find with path prefix stripped");
-        sb.AppendLine("  tk view <file[:a-b|::sym]>     File card, line range, or symbol body; multiple files allowed");
-        sb.AppendLine("  tk changes                     Repo status card for agent startup");
-        sb.AppendLine("  tk branch [base]               Branch vs base (auto: upstream, origin/main|origin/master, main|master)");
-        sb.AppendLine("  tk tree [path]                 Repo tree with compact depth and counts; add --code");
-        sb.AppendLine("  tk files [path]                Key files and top directories; add --code");
-        sb.AppendLine("  tk focus <word...> [-p path]   Multi-word OR search ranked by coverage; quote for phrase; --code/--docs/--all/--files-only");
-        sb.AppendLine("  tk mv <old> <new>              Move file; git mv when tracked (preserves history), else filesystem");
-        sb.AppendLine("  tk module list|enable|disable  Manage enabled modules");
-        sb.AppendLine("  tk git status|log|diff|show    Git compact output");
-        sb.AppendLine("  tk log <file>                  Filter service log: warn/fail/crit in full + top info groups");
-        sb.AppendLine("  tk --more log <file>           Same, but every deduped info group (not just the top ones)");
-        sb.AppendLine("  tk log <file> --errors         Errors only (fail/crit)");
-        sb.AppendLine("  tk log <file> --last 20        Last N entries");
-        sb.AppendLine("  tk log <file> --all            No filtering, raw output");
 
-        if (enabled.Contains("dotnet"))
+        foreach (var module in enabledModules)
         {
-            sb.AppendLine("  tk quality [path]              Local analyzers + dotnet build + format check; add --test-filter");
-            sb.AppendLine("  tk dotnet build|test|restore   .NET build output (NuGet dedup, CS grouping)");
-        }
+            foreach (var row in module.Rows)
+            {
+                if (row.Usage is null || row.Description is null)
+                    continue;
 
-        if (enabled.Contains("unity"))
-        {
-            sb.AppendLine("  tk unity tree|files|status     Unity-aware variants: hides Library/Temp/meta files");
-        }
-
-        if (enabled.Contains("lsp"))
-        {
-            sb.AppendLine("  tk refs <symbol>               Find all references to a symbol (LSP-backed)");
-            sb.AppendLine("  tk refs <file:line:col>        Find references at position");
-            sb.AppendLine("  tk def <symbol>                Find where a symbol is defined");
-            sb.AppendLine("  tk def <file:line:col>         Go to definition at position");
-            sb.AppendLine("  tk callers <symbol>            Find incoming callers of a symbol");
-            sb.AppendLine("  tk callers <file:line:col>     Find incoming callers at position");
-            sb.AppendLine("  tk rename <file:line:col> <n>  Rename a symbol everywhere");
-            sb.AppendLine("  tk lsp status|stop             LSP daemon status and control");
+                AppendRow(sb, row.Usage, row.Description);
+                if (row.ExtraHelpLines is not null)
+                {
+                    foreach (var (usage, description) in row.ExtraHelpLines)
+                        AppendRow(sb, usage, description);
+                }
+            }
         }
 
         sb.AppendLine();
-        sb.AppendLine("Any other command passes through unfiltered.");
+        sb.Append("Any other command passes through unfiltered.");
 
         // Show hint only when at least one optional module is absent.
         var optionalNames = ModuleCatalog.All.Where(m => !m.AlwaysOn).Select(m => m.Name);
@@ -92,4 +68,7 @@ internal static class HelpRenderer
 
         return sb.ToString();
     }
+
+    private static void AppendRow(StringBuilder sb, string usage, string description) =>
+        sb.AppendLine("  " + usage.PadRight(31) + description);
 }

@@ -1,9 +1,12 @@
 using Tk.Commands;
+using Tk.Filters;
 
 namespace Tk.Modules;
 
 /// <summary>
-/// Single source of truth for all registered modules and their command instances.
+/// Single source of truth for all registered modules and their command rows. Each row
+/// declares enough to drive builtin dispatch, external-filter resolution, generated help,
+/// and module gating for both kinds of command (see CommandRow, ModuleDescriptor).
 /// </summary>
 public static class ModuleCatalog
 {
@@ -43,6 +46,19 @@ public static class ModuleCatalog
         If compact output is enough to choose the next step, do not rerun raw.
         If compact output is ambiguous, try `--more`.
         If exact original output is needed, use `--raw`.
+
+        Routing: a PreToolUse hook (hooks/tk-route.sh) auto-rewrites bare `dotnet build|test|restore`
+        and `git status|log` to their `tk` equivalents, and falls back to `rtk rewrite` for other
+        recognized generic commands (`git diff`/`show` deliberately stay raw — tk compaction can
+        drop changed lines). You don't need to type `tk` yourself for those. But for tk's unique
+        commands — `view`, `focus`, `mv`, `log <service-log>`, `unity`, and the lsp module
+        (`def`/`refs`/`callers`/`rename`) — always call `tk` explicitly; rtk does not have them.
+
+        Run noisy commands BARE — never defensively pipe them. `dotnet build 2>&1 | tail -50`,
+        `git status | head -20`, `dotnet test | grep FAIL` and similar defeat the whole setup:
+        the pipe makes the command compound, the router skips it, and you get raw output instead
+        of a compact summary that already keeps every error/failure. Trust the compaction: bare
+        `dotnet build`, bare `git status` — escalate with `--more`/`--raw` only if needed.
         """;
 
     private const string CoreAgentsSnippet = """
@@ -80,6 +96,30 @@ public static class ModuleCatalog
 
         If compact output is sufficient to choose the next action, do not rerun the raw command.
         If `tk` emits a raw tail fallback, treat it as parser uncertainty and inspect more carefully.
+
+        No PreToolUse hook runs here — call the proxies explicitly. Use `tk` for `git status`/`log`,
+        `dotnet build|test|restore`, and tk's unique commands (`view`, `focus`, `mv`,
+        `log <service-log>`, `unity`, and the lsp module) that `rtk` does not have. Use `rtk`
+        explicitly for other generic command compaction it supports when tk doesn't cover it.
+
+        Run noisy commands through the proxy BARE — never defensively pipe them. `tk dotnet build`
+        instead of `dotnet build 2>&1 | tail -50`; `tk git status` instead of `git status | head`.
+        The compaction already keeps every error and failed test; piping around it only loses the
+        summary. Escalate with `tk --more` / `tk --raw` when you truly need more.
+
+        - `tk quality [path]`
+        - `tk dotnet build|test|restore`
+
+        Symbol lookup is ALWAYS these, NEVER `grep`/`rg` for `class X` / `record X` / `interface X` or a method name:
+        - `tk refs <symbol>` — all references to a symbol by name (resolves name → position; lists candidates if ambiguous)
+        - `tk refs <file:line:col>` — find references at position
+        - `tk callers <symbol>` — who calls this symbol (incoming call hierarchy; crosses interface dispatch)
+        - `tk callers <file:line:col>` — incoming callers at position
+        - `tk def <symbol>` — show where a symbol is defined (jumps to source; lists candidates if ambiguous)
+        - `tk def <file:line:col>` — go to definition at position
+        - `tk rename <file:line:col> <newName>` — rename a symbol everywhere (for refactoring existing code, NOT for atomic single-file micro-edits)
+        - `tk lsp status` — check LSP daemon status
+        - `tk lsp stop` — stop LSP daemon
         """;
 
     private const string DotnetSnippet = """
@@ -113,44 +153,110 @@ public static class ModuleCatalog
         - `tk lsp stop` — stop LSP daemon
         """;
 
+    private static IOutputFilter ResolveDotnetFilter(string[] args, DetailLevel level)
+    {
+        var subcommand = FilterRegistry.FindDotnetSubcommand(args);
+        return subcommand?.ToLowerInvariant() switch
+        {
+            "build" => new DotnetBuildFilter(),
+            "test" => new DotnetTestFilter(level),
+            "restore" => new DotnetRestoreFilter(),
+            _ => new PassthroughFilter()
+        };
+    }
+
+    private static Func<string[], DetailLevel, IOutputFilter> MakeGrepResolver(string command) =>
+        (args, level) => new GrepFilter(command, level, FilterRegistry.FindSearchPattern(args, command));
+
+    private static IOutputFilter ResolveFindFilter(string[] args, DetailLevel level) => new FindFilter(level);
+
     public static IReadOnlyList<ModuleDescriptor> All { get; } =
     [
         new ModuleDescriptor(
             Name: "core",
-            Commands:
+            Rows:
             [
-                new LsCommand(),
-                new ViewCommand(),
-                new InitCommand(),
-                new LogCommand(),
-                new TreeCommand(),
-                new FilesCommand(),
-                new ChangesCommand(),
-                new BranchCommand(),
-                new GitCommand(),
-                new FocusCommand(),
-                new SwitchCommand(),
-                new ModuleCommand(),
-                new MvCommand(),
+                CommandRow.Builtin(new LsCommand(),
+                    "tk ls <path>", "Names only (no perms/dates/sizes)"),
+                CommandRow.External("grep", MakeGrepResolver("grep"),
+                    "tk grep [flags] pat path", "Grep summary: match count, top files, samples"),
+                CommandRow.External("find", ResolveFindFilter,
+                    "tk find <path> [flags]", "Find with path prefix stripped"),
+                CommandRow.Builtin(new ViewCommand(),
+                    "tk view <file[:a-b|::sym]>", "File card, line range, or symbol body; multiple files allowed"),
+                CommandRow.Builtin(new ChangesCommand(),
+                    "tk changes", "Repo status card for agent startup"),
+                CommandRow.Builtin(new BranchCommand(),
+                    "tk branch [base]", "Branch vs base (auto: upstream, origin/main|origin/master, main|master)"),
+                CommandRow.Builtin(new TreeCommand(),
+                    "tk tree [path]", "Repo tree with compact depth and counts; add --code"),
+                CommandRow.Builtin(new FilesCommand(),
+                    "tk files [path]", "Key files and top directories; add --code"),
+                CommandRow.Builtin(new FocusCommand(),
+                    "tk focus <word...> [-p path]", "Multi-word OR search ranked by coverage; quote for phrase; --code/--docs/--all/--files-only"),
+                CommandRow.Builtin(new MvCommand(),
+                    "tk mv <old> <new>", "Move file; git mv when tracked (preserves history), else filesystem"),
+                CommandRow.Builtin(new ModuleCommand(),
+                    "tk module list|enable|disable", "Manage enabled modules"),
+                CommandRow.Builtin(new GitCommand(),
+                    "tk git status|log|diff|show", "Git compact output"),
+                CommandRow.Builtin(new LogCommand(),
+                    "tk log <file>", "Filter service log: warn/fail/crit in full + top info groups",
+                    extraHelpLines:
+                    [
+                        ("tk --more log <file>", "Same, but every deduped info group (not just the top ones)"),
+                        ("tk log <file> --errors", "Errors only (fail/crit)"),
+                        ("tk log <file> --last 20", "Last N entries"),
+                        ("tk log <file> --all", "No filtering, raw output"),
+                    ]),
+                CommandRow.Builtin(new InitCommand()),
+                CommandRow.Builtin(new SwitchCommand()),
+                CommandRow.External("rg", MakeGrepResolver("rg")),
             ],
             AlwaysOn: true,
             InitSnippet: CoreSnippet),
 
         new ModuleDescriptor(
             Name: "dotnet",
-            Commands: [new QualityCommand()],
+            Rows:
+            [
+                CommandRow.Builtin(new QualityCommand(),
+                    "tk quality [path]", "Local analyzers + dotnet build + format check; add --test-filter"),
+                CommandRow.External("dotnet", ResolveDotnetFilter,
+                    "tk dotnet build|test|restore", ".NET build output (NuGet dedup, CS grouping)"),
+            ],
             AlwaysOn: false,
             InitSnippet: DotnetSnippet),
 
         new ModuleDescriptor(
             Name: "unity",
-            Commands: [new UnityCommand()],
+            Rows:
+            [
+                CommandRow.Builtin(new UnityCommand(),
+                    "tk unity tree|files|status", "Unity-aware variants: hides Library/Temp/meta files"),
+            ],
             AlwaysOn: false,
             InitSnippet: UnitySnippet),
 
         new ModuleDescriptor(
             Name: "lsp",
-            Commands: [new LspStatusCommand(), new RefsCommand(), new CallersCommand(), new DefCommand(), new RenameCommand(), new LspDaemonCommand()],
+            Rows:
+            [
+                CommandRow.Builtin(new RefsCommand(),
+                    "tk refs <symbol>", "Find all references to a symbol (LSP-backed)",
+                    extraHelpLines: [("tk refs <file:line:col>", "Find references at position")]),
+                CommandRow.Builtin(new DefCommand(),
+                    "tk def <symbol>", "Find where a symbol is defined",
+                    extraHelpLines: [("tk def <file:line:col>", "Go to definition at position")]),
+                CommandRow.Builtin(new CallersCommand(),
+                    "tk callers <symbol>", "Find incoming callers of a symbol",
+                    extraHelpLines: [("tk callers <file:line:col>", "Find incoming callers at position")]),
+                CommandRow.Builtin(new RenameCommand(),
+                    "tk rename <file:line:col> <n>", "Rename a symbol everywhere"),
+                CommandRow.Builtin(new LspStatusCommand(),
+                    "tk lsp status|stop", "LSP daemon status and control"),
+                CommandRow.Builtin(new LspDaemonCommand()),
+            ],
             AlwaysOn: false,
             InitSnippet: LspSnippet),
     ];

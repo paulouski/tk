@@ -23,10 +23,8 @@ if (commandArgs[0] is "--version")
 }
 
 var moduleConfig = ModuleConfig.Load();
-var registry = new BuiltinRegistry(
-    ModuleCatalog.All
-        .Where(m => moduleConfig.IsEnabled(m))
-        .SelectMany(m => m.Commands));
+var enabledModules = ModuleCatalog.All.Where(m => moduleConfig.IsEnabled(m)).ToList();
+var registry = new BuiltinRegistry(enabledModules.SelectMany(m => m.Commands));
 
 var sw = Stopwatch.StartNew();
 
@@ -49,7 +47,7 @@ if (GrepArgsHelper.WantsOwnHelp(commandArgs))
 
 var filter = cliOptions.Raw
     ? new PassthroughFilter()
-    : FilterRegistry.Resolve(commandArgs, cliOptions.DetailLevel);
+    : FilterRegistry.Resolve(commandArgs, cliOptions.DetailLevel, enabledModules);
 var execArgs = GrepArgsHelper.EnsureRecursive(commandArgs, Directory.Exists);
 var (exitCode, stdout, stderr) = await ProcessRunner.Default.RunAsync(execArgs);
 var raw = string.IsNullOrWhiteSpace(stderr)

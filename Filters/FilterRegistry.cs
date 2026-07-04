@@ -1,51 +1,34 @@
+using Tk.Modules;
+
 namespace Tk.Filters;
 
+/// <summary>
+/// Resolves the <see cref="IOutputFilter"/> for an external (non-builtin) command by walking
+/// the module catalog's external-filter rows. Module-gated: a row from a disabled module is
+/// invisible here exactly as it is to help and builtin dispatch, so disabling a module (e.g.
+/// `tk module disable dotnet`) also disables its external filter — the command then passes
+/// through unfiltered, like any unrecognized command.
+/// </summary>
 public static class FilterRegistry
 {
-    public static IOutputFilter Resolve(string[] args, DetailLevel detailLevel)
+    public static IOutputFilter Resolve(string[] args, DetailLevel detailLevel, IReadOnlyList<ModuleDescriptor> enabledModules)
     {
         if (args.Length == 0)
             return new PassthroughFilter();
 
         var command = args[0].ToLowerInvariant();
 
-        if (command == "dotnet")
-        {
-            var subcommand = FindDotnetSubcommand(args);
-            return subcommand?.ToLowerInvariant() switch
-            {
-                "build" => new DotnetBuildFilter(),
-                "test" => new DotnetTestFilter(detailLevel),
-                "restore" => new DotnetRestoreFilter(),
-                _ => new PassthroughFilter()
-            };
-        }
+        var row = enabledModules
+            .SelectMany(m => m.Rows)
+            .FirstOrDefault(r => r.Kind == CommandRowKind.ExternalFilter
+                && r.Name.Equals(command, StringComparison.OrdinalIgnoreCase));
 
-        if (command is "grep" or "rg")
-            return new GrepFilter(command, detailLevel, FindSearchPattern(args, command));
-
-        if (command == "find")
-            return new FindFilter(detailLevel);
-
-        if (command == "git")
-        {
-            var subcommand = FindGitSubcommand(args);
-            return subcommand?.ToLowerInvariant() switch
-            {
-                "status" => new GitStatusFilter(detailLevel),
-                "log" => new GitLogFilter(),
-                "diff" or "show" => new GitDiffFilter(detailLevel),
-                "add" or "commit" or "push" or "pull" or "fetch"
-                    or "stash" or "branch" or "checkout" or "switch"
-                    or "merge" or "rebase" or "reset" or "tag" => new GitCompactFilter(),
-                _ => new PassthroughFilter()
-            };
-        }
-
-        return new PassthroughFilter();
+        return row?.ExternalResolve?.Invoke(args, detailLevel) ?? new PassthroughFilter();
     }
 
-    private static string? FindDotnetSubcommand(string[] args)
+    /// <summary>First non-flag argument after the command name — the dotnet subcommand
+    /// (build/test/restore/...). Internal so ModuleCatalog's external-row factories can share it.</summary>
+    internal static string? FindDotnetSubcommand(string[] args)
     {
         foreach (var arg in args.Skip(1))
         {
@@ -56,26 +39,9 @@ public static class FilterRegistry
         return null;
     }
 
-    private static string? FindGitSubcommand(string[] args)
-    {
-        for (var i = 1; i < args.Length; i++)
-        {
-            var arg = args[i];
-            if (!arg.StartsWith('-'))
-                return arg;
-
-            if (GitOptionNeedsValue(arg) && !arg.Contains('='))
-                i++;
-        }
-
-        return null;
-    }
-
-    private static bool GitOptionNeedsValue(string arg) => arg is
-        "-c" or "-C" or "--git-dir" or "--work-tree" or "--namespace"
-        or "--super-prefix" or "--config-env";
-
-    private static string? FindSearchPattern(string[] args, string command)
+    /// <summary>Finds the search pattern argument for a grep/rg invocation, skipping flags
+    /// (including ones that take a value) and honoring `-e`/`--regexp` and `--`.</summary>
+    internal static string? FindSearchPattern(string[] args, string command)
     {
         var endOfOptions = false;
         for (var i = 1; i < args.Length; i++)
