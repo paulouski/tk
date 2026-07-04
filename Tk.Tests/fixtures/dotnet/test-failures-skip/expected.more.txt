@@ -16,4 +16,4 @@ Failed:
     at Calc.Tests.CalculatorTests.Divide_by_zero_throws() in /WORK/Calc.Tests/CalculatorTests.cs:line 22
     at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
     at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
-hid=13/31 (--raw)
+hid=13/31 unparsed=10 (--raw)

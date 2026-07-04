@@ -17,18 +17,38 @@ public sealed class FindFilter : IOutputFilter
         _maxGroups = detailLevel == DetailLevel.More ? 6 : 3;
     }
 
-    public string Apply(string raw, int exitCode)
+    public string Apply(string raw, int exitCode) => Apply(raw, exitCode, new UnitLedger());
+
+    public string Apply(string raw, int exitCode, UnitLedger ledger)
     {
+        var totalLines = HiddenLinesFooter.CountLines(raw);
+
         if (string.IsNullOrWhiteSpace(raw))
+        {
+            ledger.Hide(totalLines);
             return exitCode == 0 ? "find n=0\n" : raw;
+        }
 
-        var lines = raw.Split('\n')
-            .Select(l => l.TrimEnd('\r'))
-            .Where(l => !string.IsNullOrWhiteSpace(l))
-            .ToArray();
+        var rawLines = raw.Split('\n').Select(l => l.TrimEnd('\r')).ToArray();
+        var blankCount = 0;
+        var lines = new List<string>();
+        foreach (var l in rawLines)
+        {
+            if (string.IsNullOrWhiteSpace(l))
+                blankCount++;
+            else
+                lines.Add(l);
+        }
+        // raw.Split('\n') may include a trailing empty artifact when raw ends with '\n' — that
+        // artifact isn't a physical line (totalLines already excludes it), so don't double-hide it.
+        if (rawLines.Length > 0 && rawLines[^1] == string.Empty)
+            blankCount--;
 
-        if (lines.Length == 0)
+        if (lines.Count == 0)
+        {
+            ledger.Hide(blankCount);
             return "find n=0\n";
+        }
 
         var paths = new List<string>();
         var errorCount = 0;
@@ -70,6 +90,16 @@ public sealed class FindFilter : IOutputFilter
         var extra = stripped.Count - _maxPaths;
         if (extra > 0)
             sb.AppendLine(Ansi.Dim($"+{extra} more paths"));
+
+        // Blank lines: recognized formatting, intentionally omitted.
+        ledger.Hide(blankCount);
+        // Error lines (find:/Permission denied): recognized, represented by the err= count.
+        ledger.Summarize(errorCount);
+        // Shown paths: rendered verbatim (after prefix-stripping).
+        ledger.Keep(Math.Min(_maxPaths, stripped.Count));
+        // Paths beyond the cap: represented by the "+N more paths" line.
+        if (extra > 0)
+            ledger.Summarize(extra);
 
         return sb.ToString();
     }

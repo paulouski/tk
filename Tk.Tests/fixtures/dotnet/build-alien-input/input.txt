@@ -1,0 +1,11 @@
+  Determining projects to restore...
+  Restored /WORK/Foo/Foo.csproj (in 20 ms).
+  Foo -> /WORK/Foo/bin/Debug/net8.0/Foo.dll
+
+%%% GARBLED TELEMETRY PING FROM UNRELATED TOOL %%%
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:00.50

@@ -7,29 +7,48 @@ namespace Tk.Filters;
 /// <summary>Compact dotnet restore output. Reuses NuGet dedup from DotnetBuildFilter via shared output.</summary>
 public sealed partial class DotnetRestoreFilter : IOutputFilter
 {
-    public string Apply(string raw, int exitCode)
+    public string Apply(string raw, int exitCode) => Apply(raw, exitCode, new UnitLedger());
+
+    public string Apply(string raw, int exitCode, UnitLedger ledger)
     {
         var lines = raw.Split('\n').Select(l => l.TrimEnd('\r')).ToArray();
+        // Drop the trailing split artifact from a final '\n' — it isn't a physical line.
+        if (lines.Length > 0 && lines[^1] == string.Empty)
+            lines = lines[..^1];
+
         int restoredCount = 0;
         var upToDate = false;
         string? duration = null;
         var nugetWarnings = new Dictionary<string, int>(StringComparer.Ordinal);
         var errors = new List<string>();
 
-        foreach (var line in lines)
+        var blankCount = 0;
+        var noiseCount = 0;
+        var upToDateLineCount = 0;
+        var restoredLineCount = 0;
+        var durationLineCount = 0;
+        var nugetLineCount = 0;
+        var unrecognizedIndices = new List<int>();
+
+        for (var i = 0; i < lines.Length; i++)
         {
-            if (string.IsNullOrWhiteSpace(line)) continue;
+            var line = lines[i];
+            if (string.IsNullOrWhiteSpace(line)) { blankCount++; continue; }
 
             // Skip noise
             if (line.TrimStart().StartsWith("Determining projects") ||
                 line.TrimStart().StartsWith("Nothing to do") ||
                 line.Contains("Microsoft (R) Build Engine") ||
                 line.Contains("Copyright (C) Microsoft"))
+            {
+                noiseCount++;
                 continue;
+            }
 
             if (line.TrimStart().StartsWith("All projects are up-to-date"))
             {
                 upToDate = true;
+                upToDateLineCount++;
                 continue;
             }
 
@@ -37,6 +56,7 @@ public sealed partial class DotnetRestoreFilter : IOutputFilter
             if (RestoredRe().IsMatch(line))
             {
                 restoredCount++;
+                restoredLineCount++;
                 continue;
             }
 
@@ -45,6 +65,7 @@ public sealed partial class DotnetRestoreFilter : IOutputFilter
             if (durMatch.Success)
             {
                 duration = durMatch.Groups[1].Value;
+                durationLineCount++;
                 continue;
             }
 
@@ -53,6 +74,7 @@ public sealed partial class DotnetRestoreFilter : IOutputFilter
             {
                 var normalized = NormalizeNugetWarning(line);
                 nugetWarnings[normalized] = nugetWarnings.GetValueOrDefault(normalized) + 1;
+                nugetLineCount++;
                 continue;
             }
 
@@ -62,6 +84,8 @@ public sealed partial class DotnetRestoreFilter : IOutputFilter
                 errors.Add(line.Trim());
                 continue;
             }
+
+            unrecognizedIndices.Add(i);
         }
 
         var sb = new StringBuilder();
@@ -84,13 +108,14 @@ public sealed partial class DotnetRestoreFilter : IOutputFilter
             sb.Append($" t={duration}");
         sb.AppendLine();
 
+        var rawTailFallback = errors.Count == 0 && exitCode != 0;
         if (errors.Count > 0)
         {
             sb.AppendLine(Ansi.Red("Errors:"));
             foreach (var e in errors)
                 sb.AppendLine($"  {e}");
         }
-        else if (exitCode != 0)
+        else if (rawTailFallback)
         {
             AppendRawTail(sb, lines, 12);
         }
@@ -103,6 +128,28 @@ public sealed partial class DotnetRestoreFilter : IOutputFilter
                 var suffix = pair.Value > 1 ? $" (x{pair.Value})" : "";
                 sb.AppendLine($"  {pair.Key}{suffix}");
             }
+        }
+
+        // Ledger accounting — see docs/output-contract.md.
+        ledger.Hide(blankCount + noiseCount);
+        ledger.Summarize(upToDateLineCount + restoredLineCount + durationLineCount + nugetLineCount);
+        ledger.Keep(errors.Count);
+
+        if (rawTailFallback)
+        {
+            var nonBlankIndices = Enumerable.Range(0, lines.Length)
+                .Where(i => !string.IsNullOrWhiteSpace(lines[i]))
+                .ToList();
+            var tailIndices = nonBlankIndices.TakeLast(12).ToHashSet();
+            foreach (var idx in unrecognizedIndices)
+            {
+                if (tailIndices.Contains(idx)) ledger.Keep();
+                else ledger.Unparsed();
+            }
+        }
+        else
+        {
+            ledger.Unparsed(unrecognizedIndices.Count);
         }
 
         return sb.ToString();

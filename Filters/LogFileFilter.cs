@@ -25,7 +25,10 @@ public static partial class LogFileFilter
     public static string Apply(string filePath, string[] flags, DetailLevel level = DetailLevel.Default) =>
         Apply(filePath, flags, level, out _);
 
-    public static string Apply(string filePath, string[] flags, DetailLevel level, out int exitCode)
+    public static string Apply(string filePath, string[] flags, DetailLevel level, out int exitCode) =>
+        Apply(filePath, flags, level, out exitCode, new UnitLedger());
+
+    public static string Apply(string filePath, string[] flags, DetailLevel level, out int exitCode, UnitLedger ledger)
     {
         if (!File.Exists(filePath))
         {
@@ -42,9 +45,10 @@ public static partial class LogFileFilter
         var lastN = ExtractLastN(flags);
 
         if (showAll)
-            return FormatPassthrough(lines, lastN);
+            return FormatPassthrough(lines, lastN, ledger);
 
-        var rawEntries = ParseLogEntries(lines, out var unparsedCount);
+        var rawEntries = ParseLogEntries(lines, ledger);
+        var unparsedCount = ledger.UnparsedCount;
         var nonEmptyLineCount = lines.Count(l => !string.IsNullOrWhiteSpace(l));
         if (rawEntries.Count == 0 && nonEmptyLineCount > NonLogLineThreshold)
         {
@@ -54,23 +58,49 @@ public static partial class LogFileFilter
 
         var entries = rawEntries;
         if (errorsOnly)
-            entries = entries.Where(e => e.Level is "fail" or "crit" or "error").ToList();
+        {
+            var kept = new List<LogEntry>();
+            foreach (var e in entries)
+            {
+                if (e.Level is "fail" or "crit" or "error")
+                    kept.Add(e);
+                else
+                    ledger.Hide(e.LineCount);
+            }
+            entries = kept;
+        }
         else
-            entries = FilterNoise(entries);
+        {
+            entries = FilterNoise(entries, ledger);
+        }
 
-        entries = DeduplicateEntries(entries);
+        entries = DeduplicateEntries(entries, ledger);
 
         // Default tier: warnings/errors in full, info collapsed to the top-N normalized
         // groups by count. --more (and --errors, which has no info anyway) keep every group.
         var infoGroupTotal = entries.Count(e => e.Level == "info");
         if (!errorsOnly && level != DetailLevel.More)
-            entries = ApplyDefaultInfoTier(entries);
+            entries = ApplyDefaultInfoTier(entries, ledger);
 
         if (lastN > 0)
-            entries = entries.TakeLast(lastN).ToList();
+        {
+            var kept = entries.TakeLast(lastN).ToList();
+            var droppedCount = entries.Count - kept.Count;
+            if (droppedCount > 0)
+                ledger.Hide(entries.Take(droppedCount).Sum(e => e.LineCount));
+            entries = kept;
+        }
+
+        // Every surviving entry is rendered in full (header + all continuation lines).
+        foreach (var e in entries)
+            ledger.Keep(e.LineCount);
 
         var result = FormatEntries(entries, filePath, unparsedCount, infoGroupTotal);
-        var footer = HiddenLinesFooter.Format(lines.Length, HiddenLinesFooter.CountLines(result), level);
+        // unparsedCount is already disclosed in the header above (pre-existing behavior) — pass
+        // 0 here to avoid a duplicate footer token; raw= appears only when there was alien
+        // content, pointing at the source file itself (no copy needed for tk log).
+        var footer = OutputFooter.Format(lines.Length, HiddenLinesFooter.CountLines(result),
+            unparsedCount: 0, level, rawPath: unparsedCount > 0 ? filePath : null);
         if (footer is not null)
             result = result.EndsWith('\n') ? $"{result}{footer}\n" : $"{result}\n{footer}\n";
         return result;
@@ -78,7 +108,7 @@ public static partial class LogFileFilter
 
     /// <summary>Keeps the top <see cref="DefaultInfoSummaryLimit"/> info groups by repeat
     /// count (ties keep first-seen order); all non-info entries are always kept.</summary>
-    private static List<LogEntry> ApplyDefaultInfoTier(List<LogEntry> entries)
+    private static List<LogEntry> ApplyDefaultInfoTier(List<LogEntry> entries, UnitLedger ledger)
     {
         var infoEntries = entries.Where(e => e.Level == "info").ToList();
         if (infoEntries.Count <= DefaultInfoSummaryLimit)
@@ -89,7 +119,17 @@ public static partial class LogFileFilter
             .Take(DefaultInfoSummaryLimit)
             .ToHashSet();
 
-        return entries.Where(e => e.Level != "info" || keepers.Contains(e)).ToList();
+        var survivors = new List<LogEntry>();
+        foreach (var e in entries)
+        {
+            if (e.Level != "info" || keepers.Contains(e))
+                survivors.Add(e);
+            else
+                // Dropped info group beyond the top-N cap — represented by the i=N/M header token.
+                ledger.Summarize(e.LineCount);
+        }
+
+        return survivors;
     }
 
     private static string ReadAutoDetectEncoding(string path)
@@ -121,15 +161,18 @@ public static partial class LogFileFilter
         return 0;
     }
 
-    private static List<LogEntry> ParseLogEntries(string[] lines, out int unparsedCount)
+    private static List<LogEntry> ParseLogEntries(string[] lines, UnitLedger ledger)
     {
         var entries = new List<LogEntry>();
         LogEntry? current = null;
-        unparsedCount = 0;
 
         foreach (var line in lines)
         {
-            if (string.IsNullOrWhiteSpace(line)) continue;
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                ledger.Hide();
+                continue;
+            }
 
             var levelMatch = LogLevelRe().Match(line);
             if (levelMatch.Success)
@@ -149,7 +192,7 @@ public static partial class LogFileFilter
                 // No recognizable log prefix, not indented, no exception marker — this is
                 // foreign/garbage content, not a genuine continuation. Count it rather than
                 // silently gluing it to whatever entry came before.
-                unparsedCount++;
+                ledger.Unparsed();
                 continue;
             }
 
@@ -161,6 +204,12 @@ public static partial class LogFileFilter
                     current.Message = trimmed;
                 else
                     current.Continuation.Add(line);
+                current.LineCount++;
+            }
+            else
+            {
+                // Continuation-shaped line with no entry to attach to — no context to represent it.
+                ledger.Unparsed();
             }
         }
 
@@ -175,7 +224,7 @@ public static partial class LogFileFilter
                              line.Contains("Exception", StringComparison.OrdinalIgnoreCase) ||
                              line.TrimStart().StartsWith("---", StringComparison.Ordinal));
 
-    private static List<LogEntry> FilterNoise(List<LogEntry> entries)
+    private static List<LogEntry> FilterNoise(List<LogEntry> entries, UnitLedger ledger)
     {
         var result = new List<LogEntry>();
         var httpRequests = new Dictionary<string, HttpRequestInfo>();
@@ -183,19 +232,19 @@ public static partial class LogFileFilter
         foreach (var entry in entries)
         {
             // Skip startup noise
-            if (IsStartupNoise(entry)) continue;
+            if (IsStartupNoise(entry)) { ledger.Hide(entry.LineCount); continue; }
 
             // Skip IdentityModel token validation spam
-            if (entry.Source.Contains("IdentityLoggerAdapter")) continue;
+            if (entry.Source.Contains("IdentityLoggerAdapter")) { ledger.Hide(entry.LineCount); continue; }
 
             // Skip MassTransit debug
-            if (entry.Level == "dbug" && entry.Source.Contains("MassTransit")) continue;
+            if (entry.Level == "dbug" && entry.Source.Contains("MassTransit")) { ledger.Hide(entry.LineCount); continue; }
 
             // Skip Npgsql debug (SQL queries)
-            if (entry.Level == "dbug" && entry.Source.Contains("Npgsql")) continue;
+            if (entry.Level == "dbug" && entry.Source.Contains("Npgsql")) { ledger.Hide(entry.LineCount); continue; }
 
             // Skip hosting debug
-            if (entry.Level == "dbug" && entry.Source.Contains("Hosting")) continue;
+            if (entry.Level == "dbug" && entry.Source.Contains("Hosting")) { ledger.Hide(entry.LineCount); continue; }
 
             // Collapse HttpClient 4-line pairs into one
             var fullText = $"{entry.Message} {string.Join(' ', entry.Continuation.Select(c => c.Trim()))}";
@@ -203,7 +252,7 @@ public static partial class LogFileFilter
                 entry.Source.Contains("ClientHandler") ||
                 fullText.Contains("HTTP request") || fullText.Contains("HTTP response"))
             {
-                var collapsed = TryCollapseHttpRequest(entry, fullText, httpRequests);
+                var collapsed = TryCollapseHttpRequest(entry, fullText, httpRequests, ledger);
                 if (collapsed != null)
                     result.Add(collapsed);
                 continue;
@@ -220,8 +269,17 @@ public static partial class LogFileFilter
             if (entry.Level == "info" && !IsFrameworkNoise(entry))
             {
                 result.Add(entry);
+                continue;
             }
+
+            // Everything else here is recognized (a valid level/source/message) but deemed
+            // uninteresting: framework-noise info, or a generic dbug entry.
+            ledger.Hide(entry.LineCount);
         }
+
+        // HTTP request/response groups that never resolved (log truncated mid-exchange).
+        foreach (var pending in httpRequests.Values)
+            ledger.Hide(pending.LineCount);
 
         return result;
     }
@@ -276,7 +334,7 @@ public static partial class LogFileFilter
     }
 
     private static LogEntry? TryCollapseHttpRequest(LogEntry entry, string fullText,
-        Dictionary<string, HttpRequestInfo> httpRequests)
+        Dictionary<string, HttpRequestInfo> httpRequests, UnitLedger ledger)
     {
         var msg = fullText;
 
@@ -287,12 +345,18 @@ public static partial class LogFileFilter
             var method = startMatch.Groups["method"].Value;
             var url = startMatch.Groups["url"].Value;
             var key = $"{method} {url}";
-            httpRequests[key] = new HttpRequestInfo { Method = method, Url = ShortenUrl(url) };
-            return null; // Wait for response
+            httpRequests[key] = new HttpRequestInfo { Method = method, Url = ShortenUrl(url), LineCount = entry.LineCount };
+            // Deferred — classified once the group resolves below, or at the end-of-log sweep
+            // in FilterNoise if this request's response never arrives.
+            return null;
         }
 
         // "Sending HTTP request GET ..." — skip (duplicate of start)
-        if (msg.StartsWith("Sending HTTP request")) return null;
+        if (msg.StartsWith("Sending HTTP request"))
+        {
+            ledger.Hide(entry.LineCount);
+            return null;
+        }
 
         // "Received HTTP response headers after 97.8141ms - 200"
         var responseMatch = HttpResponseRe().Match(msg);
@@ -311,20 +375,40 @@ public static partial class LogFileFilter
                 // Only show non-200 or slow requests (>1s)
                 if (status != "200" || (double.TryParse(duration, out var ms) && ms > 1000))
                 {
+                    // Both the request and response lines are represented by the one synthetic
+                    // collapsed entry this returns.
+                    ledger.Summarize(entry.LineCount + info.LineCount);
                     return new LogEntry
                     {
                         Level = status.StartsWith("2") ? "info" : (status.StartsWith("4") ? "warn" : "fail"),
                         Source = "HTTP",
-                        Message = $"{info.Method} {info.Url} -> {status} ({duration}ms)"
+                        Message = $"{info.Method} {info.Url} -> {status} ({duration}ms)",
+                        // Synthetic entry — its constituent raw lines were already Summarized
+                        // above, so it must not contribute again when it's later Kept/rendered.
+                        LineCount = 0
                     };
                 }
+
+                // Fast, successful request — uninteresting; drop both sides of the pair.
+                ledger.Hide(entry.LineCount + info.LineCount);
+                return null;
             }
+
+            // No matching pending request — orphan "Received" line.
+            ledger.Hide(entry.LineCount);
             return null;
         }
 
         // "End processing HTTP request after ..." — skip (duplicate of received)
-        if (msg.StartsWith("End processing")) return null;
+        if (msg.StartsWith("End processing"))
+        {
+            ledger.Hide(entry.LineCount);
+            return null;
+        }
 
+        // Recognized as HTTP-client plumbing (via source/content) but not one of the known
+        // start/sending/received/end shapes.
+        ledger.Hide(entry.LineCount);
         return null;
     }
 
@@ -343,7 +427,7 @@ public static partial class LogFileFilter
         return url;
     }
 
-    private static List<LogEntry> DeduplicateEntries(List<LogEntry> entries)
+    private static List<LogEntry> DeduplicateEntries(List<LogEntry> entries, UnitLedger ledger)
     {
         var result = new List<LogEntry>();
         var seen = new Dictionary<string, int>(); // key -> index in result
@@ -355,6 +439,8 @@ public static partial class LogFileFilter
             if (seen.TryGetValue(key, out var existingIdx))
             {
                 result[existingIdx].RepeatCount++;
+                // Represented by the surviving entry's "(xN)" marker.
+                ledger.Summarize(entry.LineCount);
             }
             else
             {
@@ -451,11 +537,22 @@ public static partial class LogFileFilter
         return sb.ToString();
     }
 
-    private static string FormatPassthrough(string[] lines, int lastN)
+    private static string FormatPassthrough(string[] lines, int lastN, UnitLedger ledger)
     {
-        var filtered = lines.Where(l => !string.IsNullOrWhiteSpace(l));
-        if (lastN > 0) filtered = filtered.TakeLast(lastN);
-        return string.Join('\n', filtered) + "\n";
+        var nonBlank = new List<string>();
+        foreach (var l in lines)
+        {
+            if (string.IsNullOrWhiteSpace(l)) ledger.Hide();
+            else nonBlank.Add(l);
+        }
+
+        var shown = lastN > 0 ? nonBlank.TakeLast(lastN).ToList() : nonBlank;
+        var droppedByLastN = nonBlank.Count - shown.Count;
+        if (droppedByLastN > 0)
+            ledger.Hide(droppedByLastN);
+        ledger.Keep(shown.Count);
+
+        return string.Join('\n', shown) + "\n";
     }
 
     private static string ShortenSource(string source)
@@ -499,11 +596,14 @@ public static partial class LogFileFilter
         public string Message { get; set; } = "";
         public List<string> Continuation { get; set; } = [];
         public int RepeatCount { get; set; } = 1;
+        // Physical raw lines this entry consumed (1 header + any continuation lines).
+        public int LineCount { get; set; } = 1;
     }
 
     private class HttpRequestInfo
     {
         public string Method { get; set; } = "";
         public string Url { get; set; } = "";
+        public int LineCount { get; set; } = 1;
     }
 }

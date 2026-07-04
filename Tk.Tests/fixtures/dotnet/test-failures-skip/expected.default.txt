@@ -11,4 +11,4 @@ Failed:
   Calc.Tests.CalculatorTests.Divide_by_zero_throws [< 1 ms]
     System.DivideByZeroException : Attempted to divide by zero.
     at Calc.Calculator.Divide(Int32 a, Int32 b) in /WORK/Calc/Calculator.cs:line 6
-hid=18/31 (--more, --raw)
+hid=18/31 unparsed=10 (--more, --raw)

@@ -5,15 +5,22 @@ namespace Tk.Common;
 
 public static class RawOutputStore
 {
-    public static string AppendFailureReference(string raw, string filtered, string[] commandArgs)
+    /// <summary>
+    /// Saves a copy of the raw pre-filter output and returns its path, per the exit-code policy
+    /// in docs/output-contract.md: a raw copy is offered when the command failed OR the filter
+    /// found unparsed (alien) content — either way the agent may want to see what the filter
+    /// didn't (fully) understand. Returns null when neither applies, or when filtering was a
+    /// no-op (raw == filtered, e.g. PassthroughFilter), since there is nothing extra to show.
+    /// </summary>
+    public static string? SaveIfNeeded(string raw, string filteredBeforeFooter, string[] commandArgs,
+        int exitCode, int unparsedCount)
     {
-        if (string.IsNullOrWhiteSpace(raw) || raw == filtered || filtered.Contains("raw=", StringComparison.Ordinal))
-            return filtered;
+        if (exitCode == 0 && unparsedCount <= 0)
+            return null;
+        if (string.IsNullOrWhiteSpace(raw) || raw == filteredBeforeFooter)
+            return null;
 
-        var path = Save(raw, commandArgs);
-        return filtered.EndsWith('\n')
-            ? $"{filtered}raw={path}\n"
-            : $"{filtered}\nraw={path}\n";
+        return Save(raw, commandArgs);
     }
 
     private static string Save(string raw, string[] commandArgs)

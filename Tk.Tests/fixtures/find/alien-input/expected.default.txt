@@ -1,0 +1,6 @@
+find n=3
+top=src(2),totally unrecognized garbage with no slashes at all(1)
+paths:
+  ./src/foo.cs
+  ./src/bar.cs
+  totally unrecognized garbage with no slashes at all

@@ -14,25 +14,52 @@ public sealed partial class GitStatusFilter : IOutputFilter
         _unityMode = unityMode;
     }
 
-    public string Apply(string raw, int exitCode) => Apply(raw, exitCode, stateRaw: null);
+    public string Apply(string raw, int exitCode) => Apply(raw, exitCode, stateRaw: null, new UnitLedger());
 
-    public string Apply(string raw, int exitCode, string? stateRaw)
+    public string Apply(string raw, int exitCode, UnitLedger ledger) =>
+        Apply(raw, exitCode, stateRaw: null, ledger);
+
+    public string Apply(string raw, int exitCode, string? stateRaw) =>
+        Apply(raw, exitCode, stateRaw, new UnitLedger());
+
+    public string Apply(string raw, int exitCode, string? stateRaw, UnitLedger ledger)
     {
-        if (exitCode != 0) return raw;
+        var totalLines = HiddenLinesFooter.CountLines(raw);
+        if (exitCode != 0)
+        {
+            ledger.Keep(totalLines);
+            return raw;
+        }
 
-        var lines = raw.Split('\n').Select(l => l.TrimEnd('\r')).Where(l => !string.IsNullOrWhiteSpace(l)).ToArray();
+        var rawLines = raw.Split('\n').Select(l => l.TrimEnd('\r')).ToArray();
+        var blankCount = 0;
+        var lines = new List<string>();
+        foreach (var l in rawLines)
+        {
+            if (string.IsNullOrWhiteSpace(l))
+                blankCount++;
+            else
+                lines.Add(l);
+        }
+        if (rawLines.Length > 0 && rawLines[^1] == string.Empty)
+            blankCount--;
 
-        if (lines.Length == 0)
+        if (lines.Count == 0)
+        {
+            ledger.Hide(blankCount);
             return "ok status st=0 mod=0 untr=0\n";
+        }
 
-        if (LooksLikePorcelain(lines))
-            return FormatPorcelain(lines, stateRaw);
+        if (LooksLikePorcelain(lines.ToArray()))
+            return FormatPorcelain(lines.ToArray(), stateRaw, ledger, blankCount);
 
         var staged = new List<string>();
         var modified = new List<string>();
         var untracked = new List<string>();
         var deleted = new List<string>();
         string? branch = null;
+        var recognizedBoilerplate = 0;
+        var unrecognized = 0;
 
         var section = Section.None;
 
@@ -41,33 +68,51 @@ public sealed partial class GitStatusFilter : IOutputFilter
             if (line.StartsWith("On branch "))
             {
                 branch = line["On branch ".Length..].Trim();
+                recognizedBoilerplate++;
                 continue;
             }
 
             if (line.StartsWith("Changes to be committed:"))
             {
                 section = Section.Staged;
+                recognizedBoilerplate++;
                 continue;
             }
             if (line.StartsWith("Changes not staged"))
             {
                 section = Section.Modified;
+                recognizedBoilerplate++;
                 continue;
             }
             if (line.StartsWith("Untracked files:"))
             {
                 section = Section.Untracked;
+                recognizedBoilerplate++;
                 continue;
             }
 
             if (line.StartsWith("Your branch ") || line.StartsWith("  (use ") ||
                 line.StartsWith("no changes added"))
+            {
+                recognizedBoilerplate++;
                 continue;
+            }
 
             var trimmed = line.Trim();
-            if (string.IsNullOrEmpty(trimmed)) continue;
+            if (string.IsNullOrEmpty(trimmed))
+            {
+                // Already excluded from `lines` (blank), unreachable — kept for parity with
+                // the original control flow.
+                recognizedBoilerplate++;
+                continue;
+            }
 
-            if (!line.StartsWith("\t")) continue;
+            if (!line.StartsWith("\t"))
+            {
+                // Not a recognized boilerplate line and not tab-indented content — alien input.
+                unrecognized++;
+                continue;
+            }
 
             if (trimmed.StartsWith("deleted:", StringComparison.Ordinal) &&
                 section is Section.Staged or Section.Modified)
@@ -87,10 +132,26 @@ public sealed partial class GitStatusFilter : IOutputFilter
                 case Section.Untracked:
                     untracked.Add(trimmed);
                     break;
+                default:
+                    // Tab-indented content with no known section context.
+                    unrecognized++;
+                    break;
             }
         }
 
-        return FormatSummary(branch, staged, modified, untracked, deleted, stateRaw: stateRaw);
+        ledger.Hide(blankCount + recognizedBoilerplate);
+        ledger.Unparsed(unrecognized);
+
+        // FormatSummary mutates these same list instances in place (unity-mode meta-stripping);
+        // measure before/after so the delta becomes Summarized (represented by meta=N) and the
+        // remainder stays Kept (shown verbatim), whatever FormatSummary does internally.
+        var preStripTotal = staged.Count + modified.Count + untracked.Count + deleted.Count;
+        var result = FormatSummary(branch, staged, modified, untracked, deleted, stateRaw: stateRaw);
+        var postStripTotal = staged.Count + modified.Count + untracked.Count + deleted.Count;
+        ledger.Summarize(preStripTotal - postStripTotal);
+        ledger.Keep(postStripTotal);
+
+        return result;
     }
 
     private string FormatSummary(string? branch, List<string> staged, List<string> modified, List<string> untracked, List<string> deleted, List<string>? conflicts = null, string? stateRaw = null)
@@ -142,7 +203,7 @@ public sealed partial class GitStatusFilter : IOutputFilter
         lines.Any(line => line.StartsWith("## "))
         || lines.All(line => line.Length >= 3 && PorcelainStatusRe().IsMatch(line));
 
-    private string FormatPorcelain(string[] lines, string? stateRaw = null)
+    private string FormatPorcelain(string[] lines, string? stateRaw, UnitLedger ledger, int blankCount)
     {
         string? branch = null;
         var staged = new List<string>();
@@ -150,18 +211,28 @@ public sealed partial class GitStatusFilter : IOutputFilter
         var untracked = new List<string>();
         var deleted = new List<string>();
         var conflicts = new List<string>();
+        var headerCount = 0;
+        var unparsedCount = 0;
+        var provisionallyKept = 0;
 
         foreach (var line in lines)
         {
             if (line.StartsWith("## "))
             {
                 branch = line["## ".Length..].Trim();
+                headerCount++;
                 continue;
             }
 
             var entry = GitPorcelain.ParseLine(line);
             if (entry is null)
+            {
+                unparsedCount++;
                 continue;
+            }
+
+            // One recognized porcelain line, whatever it maps to below.
+            provisionallyKept++;
 
             if (entry.X == '?' && entry.Y == '?')
             {
@@ -187,7 +258,26 @@ public sealed partial class GitStatusFilter : IOutputFilter
                 modified.Add(entry.Path);
         }
 
-        return FormatSummary(branch, staged, modified, untracked, deleted, conflicts, stateRaw);
+        ledger.Hide(blankCount + headerCount);
+        ledger.Unparsed(unparsedCount);
+
+        // FormatSummary mutates these list instances in place (unity-mode meta-stripping) —
+        // measure the total number of list slots before/after so the delta becomes Summarized
+        // (represented by meta=N) and the remainder stays Kept. A dual-status porcelain line
+        // (e.g. "MM") occupies two slots (staged + modified) from one input line; the algebra
+        // below still conserves against `provisionallyKept` regardless, since Keep+Summarize is
+        // just that one bucket split further.
+        var preStripTotal = staged.Count + modified.Count + untracked.Count + deleted.Count + conflicts.Count;
+        var result = FormatSummary(branch, staged, modified, untracked, deleted, conflicts, stateRaw);
+        var postStripTotal = staged.Count + modified.Count + untracked.Count + deleted.Count + conflicts.Count;
+        var slotsRemoved = preStripTotal - postStripTotal;
+        // A dual-status meta line removes 2 slots but was only 1 provisionally-kept unit; cap
+        // the delta so Summarize never exceeds what was actually classified.
+        var summarized = Math.Min(slotsRemoved, provisionallyKept);
+        ledger.Summarize(summarized);
+        ledger.Keep(provisionallyKept - summarized);
+
+        return result;
     }
 
     /// <summary>Porcelain XY codes for an unmerged (conflicted) path: DD, AU, UD, UA, DU, AA, UU.</summary>

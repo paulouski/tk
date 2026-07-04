@@ -1,0 +1,7 @@
+diff f=1 +1 -1
+top=foo.txt(+1 -1)
+@@ foo.txt 1-2
+ line one
+-line two
++line two changed
+hid=3/9 unparsed=1 (--more, --raw)

@@ -55,23 +55,26 @@ var (exitCode, stdout, stderr) = await ProcessRunner.Default.RunAsync(execArgs);
 var raw = string.IsNullOrWhiteSpace(stderr)
     ? stdout
     : $"{stdout.TrimEnd()}\n{stderr}";
-var filtered = filter.Apply(raw, exitCode);
+var ledger = new UnitLedger();
+var filtered = filter.Apply(raw, exitCode, ledger);
 if (!cliOptions.Raw)
 {
-    var footer = HiddenLinesFooter.Format(
+    var rawPath = RawOutputStore.SaveIfNeeded(raw, filtered, commandArgs, exitCode, ledger.UnparsedCount);
+    var footer = OutputFooter.Format(
         HiddenLinesFooter.CountLines(raw),
         HiddenLinesFooter.CountLines(filtered),
-        cliOptions.DetailLevel);
+        ledger.UnparsedCount,
+        cliOptions.DetailLevel,
+        rawPath);
     if (footer is not null)
         filtered = filtered.EndsWith('\n') ? $"{filtered}{footer}\n" : $"{filtered}\n{footer}\n";
 }
-if (exitCode != 0)
-    filtered = RawOutputStore.AppendFailureReference(raw, filtered, commandArgs);
 
 Console.Write(filtered);
 sw.Stop();
+var (shownChars, shownLines, rawChars, rawLines) = Analytics.FromRawAndFiltered(raw, filtered);
 Analytics.Record(commandArgs, exitCode, DetailString(cliOptions), sw.ElapsedMilliseconds,
-    filtered.Length, HiddenLinesFooter.CountLines(filtered), raw.Length, HiddenLinesFooter.CountLines(raw));
+    shownChars, shownLines, rawChars, rawLines);
 return exitCode;
 
 static void PrintHelp()

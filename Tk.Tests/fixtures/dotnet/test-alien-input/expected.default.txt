@@ -1,0 +1,2 @@
+ok test pass=5 p=1 t=<t>
+hid=6/7 unparsed=2 (--more, --raw)

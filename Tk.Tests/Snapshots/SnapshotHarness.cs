@@ -57,7 +57,12 @@ public static class SnapshotHarness
         var meta = FixtureMeta.Load(Path.Combine(caseDir, "meta.json"));
         var level = Enum.Parse<DetailLevel>(detailLevelName);
 
-        var actualRaw = RunFilter(caseDir, meta, level);
+        var (actualRaw, ledger, inputUnits) = RunFilter(caseDir, meta, level);
+
+        // Conservation invariant (docs/output-contract.md): every input unit the filter looked
+        // at must land in exactly one of Kept/Summarized/Hidden/Unparsed.
+        ledger.AssertConserves(inputUnits);
+
         var isGitArea = area == "git";
         var actual = SnapshotNormalizer.Normalize(actualRaw, isGitArea);
 
@@ -90,56 +95,66 @@ public static class SnapshotHarness
     private static string ReadAllTextNormalizedNewlines(string path) =>
         File.ReadAllText(path).Replace("\r\n", "\n").Replace("\r", "\n");
 
-    private static string RunFilter(string caseDir, FixtureMeta meta, DetailLevel level)
+    /// <summary>Runs the fixture's declared filter in-process and returns its output, the
+    /// <see cref="UnitLedger"/> it classified every input unit into, and the true input-unit
+    /// count (physical lines of input.txt) the ledger must conserve against.</summary>
+    private static (string Output, UnitLedger Ledger, int InputUnits) RunFilter(string caseDir, FixtureMeta meta, DetailLevel level)
     {
         var rawPath = Path.Combine(caseDir, "input.txt");
         var raw = ReadAllTextNormalizedNewlines(rawPath);
+        // LogFileFilter deliberately keeps its internal `lines` array (and footer "total")
+        // untrimmed — i.e. it counts a trailing split artifact from a final '\n' as one more
+        // (blank, Hidden) physical line, matching its pre-existing hid=X/Y byte-for-byte. Every
+        // other filter trims that artifact before classifying, so its ledger conserves against
+        // the trimmed HiddenLinesFooter.CountLines. Match whichever this fixture's filter uses.
+        var inputUnits = meta.Filter == "log" ? raw.Split('\n').Length : HiddenLinesFooter.CountLines(raw);
+        var ledger = new UnitLedger();
 
         switch (meta.Filter)
         {
             case "dotnet-build":
-                return WithHiddenLinesFooter(raw, new DotnetBuildFilter().Apply(raw, meta.ExitCode), level);
+                return (WithFooter(raw, new DotnetBuildFilter().Apply(raw, meta.ExitCode, ledger), level, ledger), ledger, inputUnits);
 
             case "dotnet-test":
-                return WithHiddenLinesFooter(raw, new DotnetTestFilter(level).Apply(raw, meta.ExitCode), level);
+                return (WithFooter(raw, new DotnetTestFilter(level).Apply(raw, meta.ExitCode, ledger), level, ledger), ledger, inputUnits);
 
             case "dotnet-restore":
-                return WithHiddenLinesFooter(raw, new DotnetRestoreFilter().Apply(raw, meta.ExitCode), level);
+                return (WithFooter(raw, new DotnetRestoreFilter().Apply(raw, meta.ExitCode, ledger), level, ledger), ledger, inputUnits);
 
             case "git-status":
             {
                 string? state = meta.HasState
                     ? ReadAllTextNormalizedNewlines(Path.Combine(caseDir, "state.txt"))
                     : null;
-                var filtered = new GitStatusFilter(level, meta.UnityMode).Apply(raw, meta.ExitCode, state);
-                return WithHiddenLinesFooter(raw, filtered, level);
+                var filtered = new GitStatusFilter(level, meta.UnityMode).Apply(raw, meta.ExitCode, state, ledger);
+                return (WithFooter(raw, filtered, level, ledger), ledger, inputUnits);
             }
 
             case "git-diff":
-                return WithHiddenLinesFooter(raw, new GitDiffFilter(level, isShow: false).Apply(raw, meta.ExitCode), level);
+                return (WithFooter(raw, new GitDiffFilter(level, isShow: false).Apply(raw, meta.ExitCode, ledger), level, ledger), ledger, inputUnits);
 
             case "git-show":
-                return WithHiddenLinesFooter(raw, new GitDiffFilter(level, isShow: true).Apply(raw, meta.ExitCode), level);
+                return (WithFooter(raw, new GitDiffFilter(level, isShow: true).Apply(raw, meta.ExitCode, ledger), level, ledger), ledger, inputUnits);
 
             case "git-log":
-                return WithHiddenLinesFooter(raw, new GitLogFilter().Apply(raw, meta.ExitCode), level);
+                return (WithFooter(raw, new GitLogFilter().Apply(raw, meta.ExitCode, ledger), level, ledger), ledger, inputUnits);
 
             case "git-compact":
-                return WithHiddenLinesFooter(raw, new GitCompactFilter().Apply(raw, meta.ExitCode), level);
+                return (WithFooter(raw, new GitCompactFilter().Apply(raw, meta.ExitCode, ledger), level, ledger), ledger, inputUnits);
 
             case "grep":
             case "rg":
-                return WithHiddenLinesFooter(raw, new GrepFilter(meta.Command, level, meta.Pattern).Apply(raw, meta.ExitCode), level);
+                return (WithFooter(raw, new GrepFilter(meta.Command, level, meta.Pattern).Apply(raw, meta.ExitCode, ledger), level, ledger), ledger, inputUnits);
 
             case "find":
-                return WithHiddenLinesFooter(raw, new FindFilter(level).Apply(raw, meta.ExitCode), level);
+                return (WithFooter(raw, new FindFilter(level).Apply(raw, meta.ExitCode, ledger), level, ledger), ledger, inputUnits);
 
             case "log":
             {
                 // LogFileFilter reads from a file path rather than a raw string — materialize
                 // the fixture's raw content to a throwaway temp file for this in-process call.
-                // LogFileFilter already appends its own hidden-lines footer internally, so it is
-                // NOT wrapped with WithHiddenLinesFooter here (unlike every other filter above).
+                // LogFileFilter already appends its own footer internally, so it is NOT wrapped
+                // with WithFooter here (unlike every other filter above).
                 // The temp file name is stable (derived from the case name, not a fresh Guid
                 // per run) because LogFileFilter echoes it back in the "file=" field of its
                 // output — a random name would make the snapshot non-deterministic.
@@ -147,7 +162,7 @@ public static class SnapshotHarness
                 File.WriteAllText(tmp, raw);
                 try
                 {
-                    return LogFileFilter.Apply(tmp, meta.Flags, level);
+                    return (LogFileFilter.Apply(tmp, meta.Flags, level, out _, ledger), ledger, inputUnits);
                 }
                 finally
                 {
@@ -160,14 +175,16 @@ public static class SnapshotHarness
         }
     }
 
-    /// <summary>Mirrors the hidden-lines footer wrapping that Program.cs / GitCommand.cs apply
-    /// around every filter's output in production (all filters except "log", which appends its
-    /// own footer internally — see the "log" case above).</summary>
-    private static string WithHiddenLinesFooter(string raw, string filtered, DetailLevel level)
+    /// <summary>Mirrors the shared footer renderer that Program.cs / GitCommand.cs apply around
+    /// every filter's output in production (all filters except "log", which appends its own
+    /// footer internally — see the "log" case above). No raw= reference here: saving a raw copy
+    /// is a live-command concern (RawOutputStore), not exercised by this in-process harness.</summary>
+    private static string WithFooter(string raw, string filtered, DetailLevel level, UnitLedger ledger)
     {
-        var footer = HiddenLinesFooter.Format(
+        var footer = OutputFooter.Format(
             HiddenLinesFooter.CountLines(raw),
             HiddenLinesFooter.CountLines(filtered),
+            ledger.UnparsedCount,
             level);
         if (footer is null)
             return filtered;

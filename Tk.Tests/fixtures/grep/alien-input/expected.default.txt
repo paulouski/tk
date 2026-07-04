@@ -1,0 +1,6 @@
+grep m=2 f=2
+top=bar.cs(1),foo.cs(1)
+samples:
+  foo.cs:12 let result = doThing();
+  bar.cs:34 let other = doOtherThing();
+unparsed=1 (--more, --raw)

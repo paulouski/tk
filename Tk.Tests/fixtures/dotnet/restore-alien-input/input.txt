@@ -1,0 +1,6 @@
+  Determining projects to restore...
+  Restored /WORK/Foo/Foo.csproj (in 15 ms).
+
+@@@ WEIRD BINARY NOISE @@@
+
+Time Elapsed 00:00:00.30

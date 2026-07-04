@@ -1,0 +1,2 @@
+ok restore p=1 t=<t>
+hid=5/6 unparsed=1 (--more, --raw)

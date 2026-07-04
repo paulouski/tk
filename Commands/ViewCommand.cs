@@ -227,7 +227,9 @@ public sealed partial class ViewCommand : ICommand
         var shownLines = Math.Min(previewCap, lines.Length);
         AppendLines(sb, lines, 1, shownLines);
 
-        var footer = HiddenLinesFooter.Format(lines.Length, shownLines, more ? DetailLevel.More : DetailLevel.Default);
+        // view isn't ledger-ized this phase (see docs/output-contract.md) — unparsedCount is
+        // always 0, so this is byte-identical to the pre-existing HiddenLinesFooter.Format call.
+        var footer = OutputFooter.Format(lines.Length, shownLines, unparsedCount: 0, more ? DetailLevel.More : DetailLevel.Default);
         if (footer is not null)
             sb.AppendLine(footer);
 

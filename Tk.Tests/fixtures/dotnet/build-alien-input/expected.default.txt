@@ -1,2 +1,2 @@
-ok build p=2 t=<t>
+ok build p=1 t=<t>
 hid=10/11 unparsed=6 (--more, --raw)

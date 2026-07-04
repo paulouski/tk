@@ -1,0 +1,5 @@
+commit NOTAHASH123
+Author: Someone <someone@example.com>
+Date:   Mon Jan 1 00:00:00 2026 +0000
+
+    A message that never parses because the hash above isn't hex

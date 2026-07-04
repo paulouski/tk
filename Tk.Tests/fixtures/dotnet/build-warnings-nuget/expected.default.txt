@@ -1,7 +1,7 @@
-ok build p=2 e=0 w=4 nu=2 t=<t>
+ok build p=2 e=0 w=2 nu=2 t=<t>
 Warnings:
-  warning CS0219 (x4): The variable 'unused' is assigned but its value is never used [Formatter.cs, Calculator.cs]
+  warning CS0219 (x2): The variable 'unused' is assigned but its value is never used [Formatter.cs, Calculator.cs]
 NuGet Vulnerabilities:
   System.Text.Encodings.Web 4.5.0: 1 (1 high)
   Microsoft.NETCore.App 2.1.0: 1 (1 moderate)
-hid=12/18 (--more, --raw)
+hid=12/18 unparsed=6 (--more, --raw)

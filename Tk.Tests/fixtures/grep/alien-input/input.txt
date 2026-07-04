@@ -1,0 +1,3 @@
+src/foo.cs:12:let result = doThing();
+this line has no colon at all and no slash either
+src/bar.cs:34:let other = doOtherThing();

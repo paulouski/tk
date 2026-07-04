@@ -25,21 +25,52 @@ public sealed partial class GrepFilter : IOutputFilter
         _maxSamples = detailLevel == DetailLevel.More ? 6 : 3;
     }
 
-    public string Apply(string raw, int exitCode)
+    public string Apply(string raw, int exitCode) => Apply(raw, exitCode, new UnitLedger());
+
+    public string Apply(string raw, int exitCode, UnitLedger ledger)
     {
+        var totalLines = HiddenLinesFooter.CountLines(raw);
+
         if (string.IsNullOrWhiteSpace(raw))
-            return exitCode <= 1 ? $"{_command} m=0 f=0\n" : raw;
+        {
+            if (exitCode <= 1)
+            {
+                ledger.Hide(totalLines);
+                return $"{_command} m=0 f=0\n";
+            }
 
-        var lines = raw.Split('\n')
-            .Select(l => l.TrimEnd('\r'))
-            .Where(l => !string.IsNullOrWhiteSpace(l))
-            .ToArray();
+            ledger.Keep(totalLines);
+            return raw;
+        }
 
-        if (lines.Length == 0)
-            return exitCode <= 1 ? $"{_command} m=0 f=0\n" : raw;
+        var rawLines = raw.Split('\n').Select(l => l.TrimEnd('\r')).ToArray();
+        var blankCount = 0;
+        var lines = new List<string>();
+        foreach (var l in rawLines)
+        {
+            if (string.IsNullOrWhiteSpace(l))
+                blankCount++;
+            else
+                lines.Add(l);
+        }
+        if (rawLines.Length > 0 && rawLines[^1] == string.Empty)
+            blankCount--;
+
+        if (lines.Count == 0)
+        {
+            if (exitCode <= 1)
+            {
+                ledger.Hide(blankCount);
+                return $"{_command} m=0 f=0\n";
+            }
+
+            ledger.Keep(blankCount);
+            return raw;
+        }
 
         var entries = new List<GrepEntry>();
         var binaryCount = 0;
+        var unparsedCount = 0;
 
         foreach (var line in lines)
         {
@@ -67,13 +98,23 @@ public sealed partial class GrepFilter : IOutputFilter
                 continue;
             }
 
-            // bare path (grep -l) or unparseable
+            // bare path (grep -l)
             if (line.Contains('/') || line.Contains('\\'))
+            {
                 entries.Add(new GrepEntry(line, 0, ""));
+                continue;
+            }
+
+            // Not any recognized grep/rg output shape — alien input.
+            unparsedCount++;
         }
 
         if (entries.Count == 0 && binaryCount == 0)
+        {
+            ledger.Hide(blankCount);
+            ledger.Unparsed(unparsedCount);
             return raw;
+        }
 
         var prefix = PathUtils.FindCommonPrefix(entries.Select(e => e.File).Distinct());
         var files = entries
@@ -130,6 +171,40 @@ public sealed partial class GrepFilter : IOutputFilter
         var extraFiles = files.Count - _maxTopFiles;
         if (extraFiles > 0)
             sb.AppendLine(Ansi.Dim($"+{extraFiles} more files"));
+
+        // Ledger accounting — see docs/output-contract.md. Only the literal sample/path lines
+        // actually rendered are Kept; every other match is represented via the m=/f=/top=
+        // aggregate counts (Summarized), same as the binary-file matches (via bin=).
+        ledger.Hide(blankCount);
+        ledger.Unparsed(unparsedCount);
+
+        if (samples.Count > 0)
+        {
+            var shownSamples = samples.Take(_maxSamples).ToList();
+            foreach (var sample in shownSamples)
+            {
+                var count = sample.Count();
+                if (count == 1) ledger.Keep(1);
+                else ledger.Summarize(count);
+            }
+            ledger.Summarize(samples.Skip(_maxSamples).Sum(s => s.Count()));
+        }
+        else if (files.Count > 0)
+        {
+            var shownFiles = files.Take(_maxSamples).ToList();
+            foreach (var file in shownFiles)
+            {
+                if (file.Count == 1) ledger.Keep(1);
+                else ledger.Summarize(file.Count);
+            }
+            ledger.Summarize(files.Skip(_maxSamples).Sum(f => f.Count));
+        }
+        else
+        {
+            ledger.Summarize(entries.Count);
+        }
+
+        ledger.Summarize(binaryCount);
 
         return sb.ToString();
     }

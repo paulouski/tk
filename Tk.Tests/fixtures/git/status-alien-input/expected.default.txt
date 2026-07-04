@@ -1,0 +1,4 @@
+status st=0 mod=1 untr=1 br=main
+  m:src/foo.cs
+  u:bar.txt
+hid=1/4 unparsed=1 (--more, --raw)

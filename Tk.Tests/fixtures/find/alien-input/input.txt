@@ -1,0 +1,3 @@
+./src/foo.cs
+./src/bar.cs
+totally unrecognized garbage with no slashes at all

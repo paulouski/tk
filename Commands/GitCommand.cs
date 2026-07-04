@@ -48,9 +48,10 @@ public sealed class GitCommand : ICommand
         var raw = ProcessOutput.Combine(stdout, stderr);
         ctx.RawCharCount = raw.Length;
         ctx.RawLineCount = HiddenLinesFooter.CountLines(raw);
-        var filtered = new GitStatusFilter(ctx.DetailLevel).Apply(raw, exitCode, plainRaw);
+        var ledger = new UnitLedger();
+        var filtered = new GitStatusFilter(ctx.DetailLevel).Apply(raw, exitCode, plainRaw, ledger);
         if (!ctx.Raw)
-            filtered = AppendHiddenLinesFooter(raw, filtered, ctx.DetailLevel);
+            filtered = AppendFooter(raw, filtered, ctx.DetailLevel, ledger, exitCode, ctx.OriginalCommandArgs);
         ctx.Out.Write(filtered);
         return exitCode;
     }
@@ -96,21 +97,27 @@ public sealed class GitCommand : ICommand
         var raw = ProcessOutput.Combine(stdout, stderr);
         ctx.RawCharCount = raw.Length;
         ctx.RawLineCount = HiddenLinesFooter.CountLines(raw);
-        var filtered = filter.Apply(raw, exitCode);
+        var ledger = new UnitLedger();
+        var filtered = filter.Apply(raw, exitCode, ledger);
         if (!ctx.Raw)
-            filtered = AppendHiddenLinesFooter(raw, filtered, ctx.DetailLevel);
-        if (exitCode != 0)
-            filtered = RawOutputStore.AppendFailureReference(raw, filtered, ctx.OriginalCommandArgs);
+            filtered = AppendFooter(raw, filtered, ctx.DetailLevel, ledger, exitCode, ctx.OriginalCommandArgs);
         ctx.Out.Write(filtered);
         return exitCode;
     }
 
-    private static string AppendHiddenLinesFooter(string raw, string filtered, DetailLevel level)
+    /// <summary>Shared footer renderer (docs/output-contract.md): hid=/unparsed=/raw= in that
+    /// order, then the escalation hint. raw= appears when the command failed or the filter
+    /// found unparsed (alien) content — either way there's a saved copy worth pointing at.</summary>
+    private static string AppendFooter(string raw, string filtered, DetailLevel level, UnitLedger ledger,
+        int exitCode, string[] commandArgs)
     {
-        var footer = HiddenLinesFooter.Format(
+        var rawPath = RawOutputStore.SaveIfNeeded(raw, filtered, commandArgs, exitCode, ledger.UnparsedCount);
+        var footer = OutputFooter.Format(
             HiddenLinesFooter.CountLines(raw),
             HiddenLinesFooter.CountLines(filtered),
-            level);
+            ledger.UnparsedCount,
+            level,
+            rawPath);
         if (footer is null)
             return filtered;
         return filtered.EndsWith('\n') ? $"{filtered}{footer}\n" : $"{filtered}\n{footer}\n";

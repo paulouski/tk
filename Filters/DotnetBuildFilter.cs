@@ -6,21 +6,50 @@ namespace Tk.Filters;
 
 public sealed partial class DotnetBuildFilter : IOutputFilter
 {
-    public string Apply(string raw, int exitCode)
+    public string Apply(string raw, int exitCode) => Apply(raw, exitCode, new UnitLedger());
+
+    public string Apply(string raw, int exitCode, UnitLedger ledger)
     {
         var lines = raw.Split('\n').Select(l => l.TrimEnd('\r')).ToArray();
+        // Drop the trailing split artifact from a final '\n' — it isn't a physical line.
+        if (lines.Length > 0 && lines[^1] == string.Empty)
+            lines = lines[..^1];
+
         var errors = new List<Diagnostic>();
         var warnings = new List<Diagnostic>();
         var projects = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         string? duration = null;
         bool succeeded = exitCode == 0;
 
-        foreach (var line in lines)
+        // Real MSBuild transcripts list each diagnostic twice: once inline, and again in the
+        // "Build FAILED" recap. Dedupe by full diagnostic identity so e=/w= (and the ledger)
+        // count each diagnostic once — recap duplicates are recognized-and-hidden, not alien.
+        var seenDiagnostics = new HashSet<Diagnostic>();
+        var blankCount = 0;
+        var duplicateDiagnosticCount = 0;
+        var projectLineCount = 0;
+        var durationLineCount = 0;
+        var unrecognizedIndices = new List<int>();
+
+        for (var i = 0; i < lines.Length; i++)
         {
+            var line = lines[i];
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                blankCount++;
+                continue;
+            }
+
             var diagnostic = DiagnosticParser.Parse(line);
             if (diagnostic is not null)
             {
                 var diag = diagnostic with { File = NormalizePath(diagnostic.File) };
+                if (!seenDiagnostics.Add(diag))
+                {
+                    duplicateDiagnosticCount++;
+                    continue;
+                }
+
                 if (diag.Kind == "error")
                     errors.Add(diag);
                 else
@@ -34,13 +63,20 @@ public sealed partial class DotnetBuildFilter : IOutputFilter
             if (projMatch.Success)
             {
                 projects.Add(projMatch.Groups[1].Value.Trim());
+                projectLineCount++;
                 continue;
             }
 
             // Extract duration
             var durMatch = DurationRe().Match(line);
             if (durMatch.Success)
+            {
                 duration = durMatch.Groups[1].Value;
+                durationLineCount++;
+                continue;
+            }
+
+            unrecognizedIndices.Add(i);
         }
 
         // Partition NuGet vulnerabilities from real diagnostics
@@ -64,23 +100,27 @@ public sealed partial class DotnetBuildFilter : IOutputFilter
             sb.Append($" t={duration}");
         sb.AppendLine();
 
-        if (!succeeded && realErrors.Count == 0 && realWarnings.Count == 0)
+        var rawTailFallback = !succeeded && realErrors.Count == 0 && realWarnings.Count == 0;
+        if (rawTailFallback)
             AppendRawTail(sb, lines, 12);
 
         // Errors — every distinct error site shown; no cap
+        var errorGroups = GroupByCode(realErrors).ToList();
         if (realErrors.Count > 0)
         {
             sb.AppendLine(Ansi.Dim("---"));
             sb.AppendLine(Ansi.Red("Errors:"));
-            foreach (var group in GroupByCode(realErrors))
+            foreach (var group in errorGroups)
                 sb.AppendLine(FormatGroup(group, "error", capFiles: false));
         }
 
         // Warnings — grouped/capped (lower signal); cap is explicit via the +N note
+        var warningGroups = GroupByCode(realWarnings).ToList();
+        var shownWarningGroups = warningGroups.Take(15).ToList();
         if (realWarnings.Count > 0)
         {
             sb.AppendLine(Ansi.Yellow("Warnings:"));
-            foreach (var group in GroupByCode(realWarnings).Take(15))
+            foreach (var group in shownWarningGroups)
                 sb.AppendLine(FormatGroup(group, "warning", capFiles: true));
         }
 
@@ -90,6 +130,41 @@ public sealed partial class DotnetBuildFilter : IOutputFilter
             sb.AppendLine(Ansi.Yellow("NuGet Vulnerabilities:"));
             foreach (var g in allNugetVulns)
                 sb.AppendLine($"  {g.Package} {g.Version}: {g.Total} ({g.Summary()})");
+        }
+
+        // Ledger accounting — see docs/output-contract.md.
+        ledger.Hide(blankCount + duplicateDiagnosticCount);
+        ledger.Summarize(projectLineCount + durationLineCount + totalNuget);
+
+        foreach (var group in errorGroups)
+        {
+            if (group.Count == 1) ledger.Keep(1);
+            else ledger.Summarize(group.Count);
+        }
+
+        foreach (var group in shownWarningGroups)
+        {
+            if (group.Count == 1) ledger.Keep(1);
+            else ledger.Summarize(group.Count);
+        }
+        foreach (var group in warningGroups.Skip(15))
+            ledger.Summarize(group.Count);
+
+        if (rawTailFallback)
+        {
+            var nonBlankIndices = Enumerable.Range(0, lines.Length)
+                .Where(i => !string.IsNullOrWhiteSpace(lines[i]))
+                .ToList();
+            var tailIndices = nonBlankIndices.TakeLast(12).ToHashSet();
+            foreach (var idx in unrecognizedIndices)
+            {
+                if (tailIndices.Contains(idx)) ledger.Keep();
+                else ledger.Unparsed();
+            }
+        }
+        else
+        {
+            ledger.Unparsed(unrecognizedIndices.Count);
         }
 
         return sb.ToString();

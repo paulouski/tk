@@ -9,5 +9,4 @@ top=b.cs(+5 -0)[conflict]
 ++=======
 + feature line
 ++>>>>>>> feature
-
-hid=1/13 (--more, --raw)
+hid=2/13 (--more, --raw)

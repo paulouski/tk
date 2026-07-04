@@ -1,6 +1,6 @@
-FAIL build p=0 e=4 w=0 t=<t>
+FAIL build p=0 e=2 w=0 t=<t>
 ---
 Errors:
-  error CS0103 (x2): The name 'unknownHelper' does not exist in the current context [Formatter.cs]
-  error CS1002 (x2): ; expected [Calculator.cs]
-hid=9/14 (--more, --raw)
+  Formatter.cs error CS0103: The name 'unknownHelper' does not exist in the current context
+  Calculator.cs error CS1002: ; expected
+hid=9/14 unparsed=6 (--more, --raw)

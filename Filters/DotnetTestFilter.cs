@@ -9,10 +9,16 @@ public sealed partial class DotnetTestFilter(DetailLevel detailLevel = DetailLev
     private const int MessageKeepLines = 12;
     private const int MessageCapThreshold = 15;
 
-    public string Apply(string raw, int exitCode)
+    public string Apply(string raw, int exitCode) => Apply(raw, exitCode, new UnitLedger());
+
+    public string Apply(string raw, int exitCode, UnitLedger ledger)
     {
         var more = detailLevel == DetailLevel.More;
         var lines = raw.Split('\n').Select(l => l.TrimEnd('\r')).ToArray();
+        // Drop the trailing split artifact from a final '\n' — it isn't a physical line.
+        if (lines.Length > 0 && lines[^1] == string.Empty)
+            lines = lines[..^1];
+
         var failedTests = new List<FailedTest>();
         var passed = 0;
         var failed = 0;
@@ -22,14 +28,24 @@ public sealed partial class DotnetTestFilter(DetailLevel detailLevel = DetailLev
         int projectCount = 0;
         FailedTest? currentFailure = null;
 
-        foreach (var line in lines)
+        var summaryLineCount = 0;
+        var failedHeaderCount = 0;
+        var boundaryHeaderCount = 0;
+        var blankCount = 0;
+        var durationLineCount = 0;
+        var unrecognizedIndices = new List<int>();
+
+        for (var i = 0; i < lines.Length; i++)
         {
+            var line = lines[i];
+
             // Summary line: "Passed!  - Failed: 0, Passed: 10, Skipped: 2, Total: 12"
             // or "Failed!  - Failed: 1, Passed: 9, Skipped: 2, Total: 12"
             var summaryMatch = SummaryRe().Match(line);
             if (summaryMatch.Success)
             {
                 projectCount++;
+                summaryLineCount++;
                 if (int.TryParse(summaryMatch.Groups["passed"].Value, out var p)) passed += p;
                 if (int.TryParse(summaryMatch.Groups["failed"].Value, out var f)) failed += f;
                 if (int.TryParse(summaryMatch.Groups["skipped"].Value, out var s)) skipped += s;
@@ -44,6 +60,7 @@ public sealed partial class DotnetTestFilter(DetailLevel detailLevel = DetailLev
             {
                 currentFailure = new FailedTest(failedMatch.Groups[1].Value.Trim());
                 failedTests.Add(currentFailure);
+                failedHeaderCount++;
                 continue;
             }
 
@@ -52,12 +69,16 @@ public sealed partial class DotnetTestFilter(DetailLevel detailLevel = DetailLev
                 // "Error Message:" header — content starts in message mode by default already,
                 // this just marks the boundary explicitly (nothing to capture from the header itself).
                 if (ErrorMessageHeaderRe().IsMatch(line))
+                {
+                    boundaryHeaderCount++;
                     continue;
+                }
 
                 // "Stack Trace:" header switches capture from the assertion message to stack frames.
                 if (StackTraceHeaderRe().IsMatch(line))
                 {
                     currentFailure.InStackSection = true;
+                    boundaryHeaderCount++;
                     continue;
                 }
 
@@ -65,6 +86,7 @@ public sealed partial class DotnetTestFilter(DetailLevel detailLevel = DetailLev
                 if (string.IsNullOrWhiteSpace(line))
                 {
                     currentFailure = null;
+                    blankCount++;
                     continue;
                 }
 
@@ -75,10 +97,22 @@ public sealed partial class DotnetTestFilter(DetailLevel detailLevel = DetailLev
                 continue;
             }
 
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                blankCount++;
+                continue;
+            }
+
             // Duration
             var durMatch = DurationRe().Match(line);
             if (durMatch.Success)
+            {
                 duration = durMatch.Groups[1].Value;
+                durationLineCount++;
+                continue;
+            }
+
+            unrecognizedIndices.Add(i);
         }
 
         var sb = new StringBuilder();
@@ -111,7 +145,8 @@ public sealed partial class DotnetTestFilter(DetailLevel detailLevel = DetailLev
             sb.Append($" t={duration}");
         sb.AppendLine();
 
-        if (commandFailed && failedTests.Count == 0)
+        var rawTailFallback = commandFailed && failedTests.Count == 0;
+        if (rawTailFallback)
             AppendRawTail(sb, lines, 12);
 
         // Show failed tests — assertion message (the single most useful line) plus stack
@@ -129,6 +164,46 @@ public sealed partial class DotnetTestFilter(DetailLevel detailLevel = DetailLev
                 foreach (var frame in ft.Stack.Take(framesToShow))
                     sb.AppendLine($"    {frame}");
             }
+        }
+
+        // Ledger accounting — see docs/output-contract.md.
+        ledger.Hide(blankCount + boundaryHeaderCount);
+        ledger.Summarize(summaryLineCount + durationLineCount);
+        ledger.Keep(failedHeaderCount);
+
+        foreach (var ft in failedTests)
+        {
+            if (ft.Message.Count > MessageCapThreshold)
+            {
+                ledger.Keep(MessageKeepLines);
+                ledger.Summarize(ft.Message.Count - MessageKeepLines);
+            }
+            else
+            {
+                ledger.Keep(ft.Message.Count);
+            }
+
+            var framesToShow = more ? ft.Stack.Count : Math.Min(1, ft.Stack.Count);
+            ledger.Keep(framesToShow);
+            // Frames beyond the shown cap are recognized but omitted with no explicit marker.
+            ledger.Hide(ft.Stack.Count - framesToShow);
+        }
+
+        if (rawTailFallback)
+        {
+            var nonBlankIndices = Enumerable.Range(0, lines.Length)
+                .Where(i => !string.IsNullOrWhiteSpace(lines[i]))
+                .ToList();
+            var tailIndices = nonBlankIndices.TakeLast(12).ToHashSet();
+            foreach (var idx in unrecognizedIndices)
+            {
+                if (tailIndices.Contains(idx)) ledger.Keep();
+                else ledger.Unparsed();
+            }
+        }
+        else
+        {
+            ledger.Unparsed(unrecognizedIndices.Count);
         }
 
         return sb.ToString();
