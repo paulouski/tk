@@ -1,3 +1,4 @@
+using Tk;
 using Tk.Filters;
 using Xunit;
 
@@ -82,6 +83,74 @@ public class DotnetTestFilterTests
         for (var i = 0; i < 20; i++)
             Assert.Contains($"Test{i:D2}", actual);
         Assert.DoesNotContain("more", actual);
+    }
+
+    [Fact]
+    public void Default_view_includes_assertion_message_between_name_and_stack_frame()
+    {
+        var raw = """
+            Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 s
+              Failed Tk.Tests.InvoiceTests.Should_format_number [15 ms]
+              Error Message:
+               Expected invoice.InvoiceNumber to be "FA/123/2026" because the number is generated on save, but found "DELIBERATE_WRONG_VALUE_XYZ".
+              Stack Trace:
+                 at FluentAssertions.Execution.XUnit2TestFramework.Throw(String message) in /src/FluentAssertions.cs:line 1
+                 at Tk.Tests.InvoiceTests.Should_format_number() in /src/InvoiceTests.cs:line 42
+                 at System.RuntimeMethodHandle.InvokeMethod()
+
+                Time Elapsed 00:00:00.50
+            """;
+        var actual = new DotnetTestFilter().Apply(raw, 1);
+
+        Assert.Contains("Tk.Tests.InvoiceTests.Should_format_number", actual);
+        Assert.Contains(
+            "Expected invoice.InvoiceNumber to be \"FA/123/2026\" because the number is generated on save, but found \"DELIBERATE_WRONG_VALUE_XYZ\".",
+            actual);
+        // Default view: only the first stack frame, not the rest.
+        Assert.Contains("XUnit2TestFramework.Throw", actual);
+        Assert.DoesNotContain("InvoiceTests.Should_format_number() in", actual);
+        Assert.DoesNotContain("RuntimeMethodHandle.InvokeMethod", actual);
+    }
+
+    [Fact]
+    public void More_detail_level_includes_fuller_stack_trace()
+    {
+        var raw = """
+            Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 s
+              Failed Tk.Tests.InvoiceTests.Should_format_number [15 ms]
+              Error Message:
+               Expected 1 but found 2.
+              Stack Trace:
+                 at Frame1() in /src/A.cs:line 1
+                 at Frame2() in /src/B.cs:line 2
+                 at Frame3() in /src/C.cs:line 3
+
+                Time Elapsed 00:00:00.50
+            """;
+        var actual = new DotnetTestFilter(DetailLevel.More).Apply(raw, 1);
+
+        Assert.Contains("Expected 1 but found 2.", actual);
+        Assert.Contains("Frame1()", actual);
+        Assert.Contains("Frame2()", actual);
+        Assert.Contains("Frame3()", actual);
+    }
+
+    [Fact]
+    public void Long_assertion_message_is_capped_with_marker()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 s");
+        sb.AppendLine("  Failed MyTest [1 ms]");
+        sb.AppendLine("  Error Message:");
+        for (var i = 0; i < 20; i++)
+            sb.AppendLine($"   Message line {i}");
+        var actual = new DotnetTestFilter().Apply(sb.ToString(), 1);
+
+        for (var i = 0; i < 12; i++)
+            Assert.Contains($"Message line {i}", actual);
+        for (var i = 12; i < 20; i++)
+            Assert.DoesNotContain($"Message line {i}", actual);
+        Assert.Contains("…", actual);
     }
 
     [Fact]

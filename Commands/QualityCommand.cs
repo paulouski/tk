@@ -184,9 +184,9 @@ public sealed class QualityCommand : ICommand
         var formatIssues = ParseFormatIssues(raw);
         if (formatIssues.Count > 0)
         {
-            var changedIssueCount = changeSet.Filter(formatIssues).Count();
-            var effectiveExitCode = showAll || !changeSet.IsAvailable || changedIssueCount > 0 ? exitCode : 0;
-            return new QualityStepResult(exitCode, effectiveExitCode, FormatFormatIssues(formatIssues, changeSet, showAll));
+            // The header always reports "FAIL format" regardless of changed-file scoping
+            // (see FormatFormatIssues), so the exit code must match — same as --all.
+            return new QualityStepResult(exitCode, exitCode, FormatFormatIssues(formatIssues, changeSet, showAll));
         }
 
         var lines = raw

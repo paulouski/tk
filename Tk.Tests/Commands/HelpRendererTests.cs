@@ -29,6 +29,8 @@ public class HelpRendererTests
         var help = HelpRenderer.BuildHelp(ModuleCatalog.All);
 
         Assert.Contains("tk refs", help);
+        Assert.Contains("tk def", help);
+        Assert.Contains("tk callers", help);
         Assert.Contains("tk rename", help);
         Assert.Contains("tk lsp", help);
     }
@@ -59,6 +61,8 @@ public class HelpRendererTests
         var help = HelpRenderer.BuildHelp(coreOnly);
 
         Assert.DoesNotContain("tk refs", help);
+        Assert.DoesNotContain("tk def", help);
+        Assert.DoesNotContain("tk callers", help);
         Assert.DoesNotContain("tk rename", help);
         Assert.DoesNotContain("tk lsp", help);
     }
@@ -90,6 +94,14 @@ public class HelpRendererTests
         var help = HelpRenderer.BuildHelp(ModuleCatalog.All);
 
         Assert.DoesNotContain("Disabled modules are hidden", help);
+    }
+
+    [Fact]
+    public void Focus_help_documents_files_only_flag()
+    {
+        var help = HelpRenderer.BuildHelp(ModuleCatalog.All);
+
+        Assert.Contains("--files-only", help);
     }
 
     [Fact]

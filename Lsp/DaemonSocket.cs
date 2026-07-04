@@ -42,6 +42,14 @@ public record DaemonRequest(string Method, string? FilePath, int Line, int Chara
 public record DaemonResponse(bool Success, string? Error, LspLocation[]? Locations, FileEdits[]? Edits = null, SymbolMatch[]? Candidates = null, CallerInfo[]? Callers = null);
 
 /// <summary>
+/// The daemon's own process identity, persisted next to its socket: the daemon process's
+/// PID and (once the language server has been launched) the PID of its Roslyn child.
+/// Lets `lsp stop`/`lsp status` verify and, if necessary, forcibly terminate both even when
+/// the socket is gone, stale, or unresponsive.
+/// </summary>
+public record DaemonPidInfo(int DaemonPid, int? ServerPid);
+
+/// <summary>
 /// Utilities for locating the per-workspace daemon socket and log file.
 /// </summary>
 public static class DaemonSocket
@@ -66,6 +74,76 @@ public static class DaemonSocket
         var hash = ComputeHash(workspaceRoot);
         var dir = TkPaths.DaemonsDir();
         return Path.Combine(dir, $"{hash}.log");
+    }
+
+    /// <summary>
+    /// Returns the pid-file path for the given workspace root.
+    /// Path: &lt;tk-state-root&gt;/daemons/&lt;16-char-hash&gt;.pid
+    /// </summary>
+    public static string GetPidPath(string workspaceRoot)
+    {
+        var hash = ComputeHash(workspaceRoot);
+        var dir = TkPaths.DaemonsDir();
+        return Path.Combine(dir, $"{hash}.pid");
+    }
+
+    /// <summary>
+    /// Writes the daemon's process identity to <paramref name="pidPath"/> as two lines
+    /// (daemon pid, server pid). Best-effort: failures are swallowed since the pid file is
+    /// a diagnostic/cleanup aid, not required for normal daemon operation.
+    /// </summary>
+    public static void WritePidInfo(string pidPath, DaemonPidInfo info)
+    {
+        try
+        {
+            File.WriteAllText(pidPath, $"{info.DaemonPid}\n{info.ServerPid?.ToString() ?? ""}\n");
+        }
+        catch { /* best-effort */ }
+    }
+
+    /// <summary>
+    /// Reads a pid file written by <see cref="WritePidInfo"/>. Returns null if the file is
+    /// missing, empty, or malformed.
+    /// </summary>
+    public static DaemonPidInfo? TryReadPidInfo(string pidPath)
+    {
+        try
+        {
+            if (!File.Exists(pidPath)) return null;
+            var lines = File.ReadAllLines(pidPath);
+            if (lines.Length == 0 || !int.TryParse(lines[0], out var daemonPid)) return null;
+            int? serverPid = lines.Length > 1 && int.TryParse(lines[1], out var sp) ? sp : null;
+            return new DaemonPidInfo(daemonPid, serverPid);
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// True if a process with the given PID exists and has not exited.
+    /// </summary>
+    public static bool IsProcessAlive(int pid)
+    {
+        try
+        {
+            using var proc = System.Diagnostics.Process.GetProcessById(pid);
+            return !proc.HasExited;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>
+    /// Best-effort forceful kill of a process (and its descendants) by PID. No-op if the
+    /// process no longer exists or is inaccessible.
+    /// </summary>
+    public static void TryKillProcessTree(int pid)
+    {
+        try
+        {
+            using var proc = System.Diagnostics.Process.GetProcessById(pid);
+            if (!proc.HasExited)
+                proc.Kill(entireProcessTree: true);
+        }
+        catch { /* already gone or inaccessible */ }
     }
 
     private static string ComputeHash(string workspaceRoot) =>

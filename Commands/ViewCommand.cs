@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using Tk.Common;
 
 namespace Tk.Commands;
 
@@ -10,7 +11,15 @@ public sealed partial class ViewCommand : ICommand
     private const int SmallFileLineLimit = 40;
     private const int SmallFileCharLimit = 3000;
     private const int MaxSymbols = 8;
+    private const int MaxSymbolsMore = 24;
     private const int MaxHotRanges = 5;
+    private const int MaxHotRangesMore = 15;
+    private const int MarkdownLineLimit = 200;
+    private const int MarkdownCharLimit = 12000;
+    private const int MarkdownPreviewLines = 60;
+    private const int MarkdownPreviewLinesMore = 150;
+    private const int OverloadBodyLineBudget = 80;
+    private const int MaxOverloadListed = 8;
 
     public Task<int> RunAsync(CommandContext ctx)
     {
@@ -23,17 +32,21 @@ public sealed partial class ViewCommand : ICommand
             return Task.FromResult(1);
         }
 
+        var exitCode = 0;
         for (var i = 0; i < targets.Length; i++)
         {
             if (i > 0)
                 ctx.Out.WriteLine();
-            ctx.Out.Write(Render(targets[i], flags, ctx.Raw, ctx.DetailLevel == DetailLevel.More));
+            var (output, targetExitCode) = Render(targets[i], flags, ctx.Raw, ctx.DetailLevel == DetailLevel.More);
+            ctx.Out.Write(output);
+            if (targetExitCode != 0)
+                exitCode = targetExitCode;
         }
 
-        return Task.FromResult(0);
+        return Task.FromResult(exitCode);
     }
 
-    internal static string Render(string target, string[] flags, bool ctxRaw, bool ctxMore)
+    internal static (string Output, int ExitCode) Render(string target, string[] flags, bool ctxRaw, bool ctxMore)
     {
         var raw = ctxRaw || flags.Contains("--raw");
         var more = ctxMore || flags.Contains("--more");
@@ -42,37 +55,47 @@ public sealed partial class ViewCommand : ICommand
         var (path, startLine, endLine) = ParseTarget(pathTarget);
 
         if (!File.Exists(path))
-            return $"tk view: {path}: file not found\n";
+            return ($"tk view: {path}: file not found\n", 1);
 
         if (LooksBinary(path))
-            return $"view {Path.GetFileName(path)} binary=1\n";
+            return ($"view {Path.GetFileName(path)} binary=1\n", 0);
 
         var lines = File.ReadAllLines(path);
 
         if (symbolName is not null)
         {
             var symbols = ExtractSymbols(lines).ToList();
-            var range = FindSymbolRange(symbols, lines.Length, symbolName);
-            if (range is null)
-                return $"tk view: {Path.GetFileName(path)}: symbol '{symbolName}' not found\n";
-            return RenderRange(path, lines, range.Value.Start, range.Value.End);
+            var matches = FindSymbolMatches(symbols, lines, symbolName);
+            if (matches.Count == 0)
+                return ($"tk view: {Path.GetFileName(path)}: symbol '{symbolName}' not found\n", 1);
+            if (matches.Count == 1)
+                return (RenderRange(path, lines, matches[0].Start, matches[0].End), 0);
+            return (RenderSymbolMatches(path, lines, symbolName, matches), 0);
         }
 
         if (startLine.HasValue || endLine.HasValue)
-            return RenderRange(path, lines, startLine ?? 1, endLine ?? startLine ?? lines.Length);
+            return (RenderRange(path, lines, startLine ?? 1, endLine ?? startLine ?? lines.Length), 0);
 
         if (raw)
-            return RenderWholeFile(path, lines);
+            return (RenderWholeFile(path, lines), 0);
 
         var allSymbols = ExtractSymbols(lines).ToList();
         if (symbolsOnly)
-            return RenderSummary(path, lines, allSymbols, more);
+            return (RenderSummary(path, lines, allSymbols, more), 0);
 
+        var isMarkdown = Path.GetExtension(path).Equals(".md", StringComparison.OrdinalIgnoreCase)
+            || Path.GetExtension(path).Equals(".markdown", StringComparison.OrdinalIgnoreCase);
         var totalChars = lines.Sum(l => l.Length);
-        if (lines.Length <= SmallFileLineLimit && totalChars <= SmallFileCharLimit)
-            return RenderWholeFile(path, lines);
+        var (lineLimit, charLimit) = isMarkdown
+            ? (MarkdownLineLimit, MarkdownCharLimit)
+            : (SmallFileLineLimit, SmallFileCharLimit);
+        if (lines.Length <= lineLimit && totalChars <= charLimit)
+            return (RenderWholeFile(path, lines), 0);
 
-        return RenderSummary(path, lines, allSymbols, more);
+        if (isMarkdown)
+            return (RenderMarkdownSummary(path, lines, allSymbols, more), 0);
+
+        return (RenderSummary(path, lines, allSymbols, more), 0);
     }
 
     private static (string PathTarget, string? Symbol) SplitSymbolSuffix(string target)
@@ -88,19 +111,60 @@ public sealed partial class ViewCommand : ICommand
         return (target[..idx], symbol);
     }
 
-    private static (int Start, int End)? FindSymbolRange(List<Symbol> symbols, int totalLines, string name)
+    /// <summary>
+    /// Finds every symbol whose name matches (exact match preferred over case-insensitive
+    /// over substring), so overloaded/repeated symbol names surface all declarations
+    /// instead of silently returning just the first one.
+    /// </summary>
+    private static List<HotRange> FindSymbolMatches(List<Symbol> symbols, string[] lines, string name)
     {
-        var ranges = BuildHotRanges(symbols, totalLines).ToList();
-        var exact = ranges.FirstOrDefault(r => r.Name.Equals(name, StringComparison.Ordinal));
-        if (exact is not null)
-            return (exact.Start, exact.End);
+        var ranges = BuildHotRanges(symbols, lines).ToList();
 
-        var ci = ranges.FirstOrDefault(r => r.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
-        if (ci is not null)
-            return (ci.Start, ci.End);
+        var exact = ranges.Where(r => r.Name.Equals(name, StringComparison.Ordinal)).ToList();
+        if (exact.Count > 0)
+            return exact;
 
-        var contains = ranges.FirstOrDefault(r => r.Name.Contains(name, StringComparison.OrdinalIgnoreCase));
-        return contains is null ? null : (contains.Start, contains.End);
+        var ci = ranges.Where(r => r.Name.Equals(name, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (ci.Count > 0)
+            return ci;
+
+        return ranges.Where(r => r.Name.Contains(name, StringComparison.OrdinalIgnoreCase)).ToList();
+    }
+
+    /// <summary>
+    /// Renders N&gt;1 declarations matching a symbol name. Shows every body when the
+    /// combined size is small; otherwise shows the first body plus an explicit manifest
+    /// of the remaining matches with their line ranges. Always discloses "N matches".
+    /// </summary>
+    private static string RenderSymbolMatches(string path, string[] lines, string symbolName, List<HotRange> matches)
+    {
+        var sb = new StringBuilder();
+        var totalBodyLines = matches.Sum(m => m.End - m.Start + 1);
+
+        if (totalBodyLines <= OverloadBodyLineBudget)
+        {
+            sb.AppendLine($"view {Path.GetFileName(path)}::{symbolName} {matches.Count} matches (showing all)");
+            for (var i = 0; i < matches.Count; i++)
+            {
+                if (i > 0)
+                    sb.AppendLine();
+                sb.Append(RenderRange(path, lines, matches[i].Start, matches[i].End));
+            }
+
+            return sb.ToString();
+        }
+
+        var first = matches[0];
+        var others = matches.Skip(1).Take(MaxOverloadListed).Select(m => $"{m.Name}({m.Start}-{m.End})").ToList();
+        var manifest = $"{first.Name}({first.Start}-{first.End}); also: {string.Join(", ", others)}";
+        if (matches.Count - 1 > MaxOverloadListed)
+            manifest += ", …";
+        manifest += $" ({matches.Count} total)";
+
+        sb.AppendLine($"view {Path.GetFileName(path)}::{symbolName} {matches.Count} matches (showing 1 of {matches.Count})");
+        sb.AppendLine(manifest);
+        sb.Append(RenderRange(path, lines, first.Start, first.End));
+        return sb.ToString();
     }
 
     private static string RenderWholeFile(string path, string[] lines)
@@ -129,14 +193,56 @@ public sealed partial class ViewCommand : ICommand
 
         if (symbols.Count > 0)
         {
-            sb.AppendLine($"symbols: {string.Join(", ", symbols.Take(MaxSymbols).Select(s => $"{s.Name}({s.Line})"))}");
-            sb.AppendLine("hot:");
+            var symbolCap = more ? MaxSymbolsMore : MaxSymbols;
+            var shownSymbols = symbols.Take(symbolCap).ToList();
+            sb.AppendLine($"symbols: {string.Join(", ", shownSymbols.Select(s => $"{s.Name}({s.Line})"))}");
+            AppendHiddenFooter(sb, symbols.Count, shownSymbols.Count, "symbols", more);
 
-            foreach (var range in BuildHotRanges(symbols, lines.Length).Take(more ? MaxHotRanges + 3 : MaxHotRanges))
+            sb.AppendLine("hot:");
+            var hotCap = more ? MaxHotRangesMore : MaxHotRanges;
+            var allRanges = BuildHotRanges(symbols, lines).ToList();
+            var shownRanges = allRanges.Take(hotCap).ToList();
+            foreach (var range in shownRanges)
                 sb.AppendLine($"  {range.Start}-{range.End} {range.Name}");
+            AppendHiddenFooter(sb, allRanges.Count, shownRanges.Count, "hot", more);
         }
 
         return sb.ToString();
+    }
+
+    private static string RenderMarkdownSummary(string path, string[] lines, List<Symbol> symbols, bool more)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"view {Path.GetFileName(path)} lines={lines.Length}");
+
+        if (symbols.Count > 0)
+        {
+            var symbolCap = more ? MaxSymbolsMore : MaxSymbols;
+            var shownSymbols = symbols.Take(symbolCap).ToList();
+            sb.AppendLine($"headings: {string.Join(", ", shownSymbols.Select(s => $"{s.Name}({s.Line})"))}");
+            AppendHiddenFooter(sb, symbols.Count, shownSymbols.Count, "headings", more);
+        }
+
+        var previewCap = more ? MarkdownPreviewLinesMore : MarkdownPreviewLines;
+        var shownLines = Math.Min(previewCap, lines.Length);
+        AppendLines(sb, lines, 1, shownLines);
+
+        var footer = HiddenLinesFooter.Format(lines.Length, shownLines, more ? DetailLevel.More : DetailLevel.Default);
+        if (footer is not null)
+            sb.AppendLine(footer);
+
+        return sb.ToString();
+    }
+
+    /// <summary>Honest "hid=X/Y" disclosure when a capped list was truncated (see HiddenLinesFooter).</summary>
+    private static void AppendHiddenFooter(StringBuilder sb, int total, int shown, string label, bool more)
+    {
+        if (shown >= total)
+            return;
+
+        var hidden = total - shown;
+        var suffix = more ? "(--raw)" : "(--more, --raw)";
+        sb.AppendLine($"  hid={hidden}/{total} {label} {suffix}");
     }
 
     private static void AppendLines(StringBuilder sb, string[] lines, int start, int end, string indent = "")
@@ -194,40 +300,141 @@ public sealed partial class ViewCommand : ICommand
     {
         var markdown = MarkdownHeadingRe().Match(line);
         if (markdown.Success)
-            return new Symbol(markdown.Groups["name"].Value.Trim(), lineNumber);
+            return new Symbol(markdown.Groups["name"].Value.Trim(), lineNumber, SymbolKind.Other);
 
         var csType = TypeDeclRe().Match(line);
         if (csType.Success)
-            return new Symbol(csType.Groups["name"].Value, lineNumber);
+            return new Symbol(csType.Groups["name"].Value, lineNumber, SymbolKind.Type);
 
         var csMethod = MethodDeclRe().Match(line);
         if (csMethod.Success)
-            return new Symbol(csMethod.Groups["name"].Value, lineNumber);
+            return new Symbol(csMethod.Groups["name"].Value, lineNumber, SymbolKind.Method);
+
+        var csProperty = PropertyDeclRe().Match(line);
+        if (csProperty.Success)
+            return new Symbol(csProperty.Groups["name"].Value, lineNumber, SymbolKind.Property);
 
         var pyDef = PythonDeclRe().Match(line);
         if (pyDef.Success)
-            return new Symbol(pyDef.Groups["name"].Value, lineNumber);
+            return new Symbol(pyDef.Groups["name"].Value, lineNumber, SymbolKind.Other);
 
         var jsFunc = JsFunctionRe().Match(line);
         if (jsFunc.Success)
-            return new Symbol(jsFunc.Groups["name"].Value, lineNumber);
+            return new Symbol(jsFunc.Groups["name"].Value, lineNumber, SymbolKind.Other);
 
         var jsConst = JsConstFunctionRe().Match(line);
         if (jsConst.Success)
-            return new Symbol(jsConst.Groups["name"].Value, lineNumber);
+            return new Symbol(jsConst.Groups["name"].Value, lineNumber, SymbolKind.JsArrow);
 
         return null;
     }
 
-    private static IEnumerable<HotRange> BuildHotRanges(List<Symbol> symbols, int totalLines)
+    private static IEnumerable<HotRange> BuildHotRanges(List<Symbol> symbols, string[] lines)
     {
+        var totalLines = lines.Length;
         for (var i = 0; i < symbols.Count; i++)
         {
             var current = symbols[i];
             var nextLine = i + 1 < symbols.Count ? symbols[i + 1].Line : totalLines + 1;
-            var end = Math.Max(current.Line, nextLine - 1);
-            yield return new HotRange(current.Name, current.Line, Math.Min(end, totalLines));
+            var fallbackEnd = Math.Min(Math.Max(current.Line, nextLine - 1), totalLines);
+            var end = fallbackEnd;
+
+            if (IsSelfTerminating(current, lines))
+                end = Math.Min(Math.Max(ComputeSelfTerminatingEnd(lines, current.Line, fallbackEnd), current.Line), totalLines);
+
+            yield return new HotRange(current.Name, current.Line, end);
         }
+    }
+
+    /// <summary>
+    /// Expression-bodied members (<c>=&gt; ...;</c>) and arrow functions don't end where the
+    /// next symbol starts — they end at their own terminator. Properties are always short
+    /// enough that computing their real end is cheap and safer than guessing via the next symbol.
+    /// </summary>
+    private static bool IsSelfTerminating(Symbol symbol, string[] lines)
+    {
+        return symbol.Kind switch
+        {
+            SymbolKind.Property or SymbolKind.JsArrow => true,
+            SymbolKind.Method => lines[symbol.Line - 1].Contains("=>", StringComparison.Ordinal),
+            _ => false
+        };
+    }
+
+    /// <summary>
+    /// Scans forward from a declaration line to find where its statement actually ends:
+    /// the first top-level ';' for an expression body (e.g. <c>=&gt; expr;</c>), or the
+    /// matching '}' for the first top-level block opened (e.g. <c>{ ... }</c> or arrow
+    /// function bodies). Tracks paren/bracket/brace nesting and skips string/char literal
+    /// contents so embedded punctuation doesn't confuse the scan. Falls back to
+    /// <paramref name="fallbackEnd"/> if no terminator is found before end of file.
+    /// </summary>
+    private static int ComputeSelfTerminatingEnd(string[] lines, int startLine, int fallbackEnd)
+    {
+        var depth = 0;
+        var inBlock = false;
+        var inString = false;
+        var inChar = false;
+        var escaped = false;
+
+        for (var lineIdx = startLine - 1; lineIdx < lines.Length; lineIdx++)
+        {
+            var line = lines[lineIdx];
+            for (var i = 0; i < line.Length; i++)
+            {
+                var c = line[i];
+
+                if (inString)
+                {
+                    if (escaped) escaped = false;
+                    else if (c == '\\') escaped = true;
+                    else if (c == '"') inString = false;
+                    continue;
+                }
+
+                if (inChar)
+                {
+                    if (escaped) escaped = false;
+                    else if (c == '\\') escaped = true;
+                    else if (c == '\'') inChar = false;
+                    continue;
+                }
+
+                switch (c)
+                {
+                    case '"':
+                        inString = true;
+                        continue;
+                    case '\'':
+                        inChar = true;
+                        continue;
+                    case '(':
+                    case '[':
+                        depth++;
+                        continue;
+                    case ')':
+                    case ']':
+                        depth = Math.Max(0, depth - 1);
+                        continue;
+                    case '{':
+                        if (depth == 0 && !inBlock)
+                            inBlock = true;
+                        depth++;
+                        continue;
+                    case '}':
+                        depth = Math.Max(0, depth - 1);
+                        if (inBlock && depth == 0)
+                            return lineIdx + 1;
+                        continue;
+                    case ';':
+                        if (depth == 0 && !inBlock)
+                            return lineIdx + 1;
+                        continue;
+                }
+            }
+        }
+
+        return fallbackEnd;
     }
 
     [GeneratedRegex(@"^(?<path>.+):(?<start>\d+)(?:-(?<end>\d+))?$")]
@@ -242,6 +449,9 @@ public sealed partial class ViewCommand : ICommand
     [GeneratedRegex(@"^(?:public|private|protected|internal|static|sealed|partial|async|virtual|override|abstract|extern|new|\s)+[\w<>\[\],?.]+\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(")]
     private static partial Regex MethodDeclRe();
 
+    [GeneratedRegex(@"^(?:\[[^\]]*\]\s*)*(?:public|private|protected|internal|static|sealed|partial|readonly|virtual|override|abstract|new|required|\s)+[\w<>\[\],?.]+\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*(?:\{|=>)")]
+    private static partial Regex PropertyDeclRe();
+
     [GeneratedRegex(@"^(?:async\s+)?(?:def|class)\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)")]
     private static partial Regex PythonDeclRe();
 
@@ -251,6 +461,15 @@ public sealed partial class ViewCommand : ICommand
     [GeneratedRegex(@"^(?:export\s+)?(?:const|let|var)\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:async\s*)?\(")]
     private static partial Regex JsConstFunctionRe();
 
-    private sealed record Symbol(string Name, int Line);
+    private enum SymbolKind
+    {
+        Other,
+        Type,
+        Method,
+        Property,
+        JsArrow
+    }
+
+    private sealed record Symbol(string Name, int Line, SymbolKind Kind);
     private sealed record HotRange(string Name, int Start, int End);
 }

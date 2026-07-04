@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Tk.Lsp;
 
 namespace Tk.Commands;
@@ -36,6 +37,15 @@ public sealed class LspDaemonCommand : ICommand
                 e.Cancel = true;
                 cts.Cancel();
             };
+
+            // A plain `kill <pid>` (SIGTERM) would otherwise terminate this process without
+            // running LspDaemon.RunAsync's cleanup (which kills the Roslyn child and removes
+            // the socket/pid files). Route it through the same graceful cancellation path.
+            using var sigterm = PosixSignalRegistration.Create(PosixSignal.SIGTERM, ctx2 =>
+            {
+                ctx2.Cancel = true;
+                cts.Cancel();
+            });
 
             await daemon.RunAsync(cts.Token).ConfigureAwait(false);
             return 0;

@@ -31,6 +31,7 @@ public sealed partial class GitStatusFilter : IOutputFilter
         var staged = new List<string>();
         var modified = new List<string>();
         var untracked = new List<string>();
+        var deleted = new List<string>();
         string? branch = null;
 
         var section = Section.None;
@@ -68,6 +69,13 @@ public sealed partial class GitStatusFilter : IOutputFilter
 
             if (!line.StartsWith("\t")) continue;
 
+            if (trimmed.StartsWith("deleted:", StringComparison.Ordinal) &&
+                section is Section.Staged or Section.Modified)
+            {
+                deleted.Add(trimmed);
+                continue;
+            }
+
             switch (section)
             {
                 case Section.Staged:
@@ -82,11 +90,12 @@ public sealed partial class GitStatusFilter : IOutputFilter
             }
         }
 
-        return FormatSummary(branch, staged, modified, untracked, stateRaw);
+        return FormatSummary(branch, staged, modified, untracked, deleted, stateRaw: stateRaw);
     }
 
-    private string FormatSummary(string? branch, List<string> staged, List<string> modified, List<string> untracked, string? stateRaw = null)
+    private string FormatSummary(string? branch, List<string> staged, List<string> modified, List<string> untracked, List<string> deleted, List<string>? conflicts = null, string? stateRaw = null)
     {
+        conflicts ??= [];
         var metaCount = 0;
         if (_unityMode)
         {
@@ -94,18 +103,23 @@ public sealed partial class GitStatusFilter : IOutputFilter
             metaCount += staged.RemoveAll(IsMeta);
             metaCount += modified.RemoveAll(IsMeta);
             metaCount += untracked.RemoveAll(IsMeta);
+            metaCount += deleted.RemoveAll(IsMeta);
         }
 
-        var clean = staged.Count == 0 && modified.Count == 0 && untracked.Count == 0
+        var clean = staged.Count == 0 && modified.Count == 0 && untracked.Count == 0 && deleted.Count == 0 && conflicts.Count == 0
             && (!_unityMode || metaCount == 0);
         var states = ExtractRepositoryStates(stateRaw).ToList();
         var sb = new StringBuilder();
         sb.Append(clean ? "ok status" : "status");
         sb.Append($" st={staged.Count} mod={modified.Count} untr={untracked.Count}");
+        if (deleted.Count > 0)
+            sb.Append($" del={deleted.Count}");
+        if (conflicts.Count > 0)
+            sb.Append($" conf={conflicts.Count}");
         if (_unityMode && metaCount > 0)
             sb.Append($" meta={metaCount}");
         if (!string.IsNullOrWhiteSpace(branch))
-            sb.Append($" br={SanitizeBranch(branch)}");
+            sb.Append($" br={FormatBranch(branch, stateRaw)}");
         if (states.Count > 0)
             sb.Append($" state={string.Join("+", states)}");
         sb.AppendLine();
@@ -114,6 +128,10 @@ public sealed partial class GitStatusFilter : IOutputFilter
             sb.AppendLine($"  s:{p}");
         foreach (var p in modified)
             sb.AppendLine($"  m:{p}");
+        foreach (var p in deleted)
+            sb.AppendLine($"  D:{p}");
+        foreach (var p in conflicts)
+            sb.AppendLine($"  c:{p}");
         foreach (var p in untracked)
             sb.AppendLine($"  u:{p}");
 
@@ -130,6 +148,8 @@ public sealed partial class GitStatusFilter : IOutputFilter
         var staged = new List<string>();
         var modified = new List<string>();
         var untracked = new List<string>();
+        var deleted = new List<string>();
+        var conflicts = new List<string>();
 
         foreach (var line in lines)
         {
@@ -149,14 +169,30 @@ public sealed partial class GitStatusFilter : IOutputFilter
                 continue;
             }
 
+            if (IsConflict(entry.X, entry.Y))
+            {
+                conflicts.Add(entry.Path);
+                continue;
+            }
+
+            if (entry.X == 'D' || entry.Y == 'D')
+            {
+                deleted.Add(entry.Path);
+                continue;
+            }
+
             if (entry.X != ' ' && entry.X != '?')
                 staged.Add(entry.Path);
             if (entry.Y != ' ' && entry.Y != '?')
                 modified.Add(entry.Path);
         }
 
-        return FormatSummary(branch, staged, modified, untracked, stateRaw);
+        return FormatSummary(branch, staged, modified, untracked, deleted, conflicts, stateRaw);
     }
+
+    /// <summary>Porcelain XY codes for an unmerged (conflicted) path: DD, AU, UD, UA, DU, AA, UU.</summary>
+    private static bool IsConflict(char x, char y) =>
+        x == 'U' || y == 'U' || (x == 'A' && y == 'A') || (x == 'D' && y == 'D');
 
     private static IEnumerable<string> ExtractRepositoryStates(string? raw)
     {
@@ -178,14 +214,33 @@ public sealed partial class GitStatusFilter : IOutputFilter
             yield return "am";
     }
 
-    private static string SanitizeBranch(string branch)
+    /// <summary>Renders the branch field, substituting the detached-HEAD short SHA (from
+    /// <paramref name="stateRaw"/>, e.g. "HEAD detached at 2dc98d7") when git reports the
+    /// branch-less porcelain header "HEAD (no branch)" — otherwise that identity is lost.</summary>
+    private static string FormatBranch(string branch, string? stateRaw)
     {
-        var branchOnly = branch.Split("...", 2, StringSplitOptions.None)[0].Trim();
+        var branchOnly = ExtractBranchOnly(branch);
+        if (branchOnly == "HEAD (no branch)" && ExtractDetachedShortSha(stateRaw) is { } sha)
+            return $"HEAD@{sha}";
         return branchOnly.Replace(' ', '_');
+    }
+
+    private static string ExtractBranchOnly(string branch) =>
+        branch.Split("...", 2, StringSplitOptions.None)[0].Trim();
+
+    private static string? ExtractDetachedShortSha(string? stateRaw)
+    {
+        if (string.IsNullOrWhiteSpace(stateRaw))
+            return null;
+        var match = DetachedHeadRe().Match(stateRaw);
+        return match.Success ? match.Groups[1].Value : null;
     }
 
     [GeneratedRegex(@"^(?:\?\?|!!|[ MARCUD][ MARCUD])\s")]
     private static partial Regex PorcelainStatusRe();
+
+    [GeneratedRegex(@"HEAD detached (?:at|from) (\S+)")]
+    private static partial Regex DetachedHeadRe();
 
     private enum Section { None, Staged, Modified, Untracked }
 }

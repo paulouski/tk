@@ -1,3 +1,4 @@
+using Tk;
 using Tk.Filters;
 using Xunit;
 
@@ -30,6 +31,39 @@ public class LogFileFilterTests : IDisposable
     {
         var actual = LogFileFilter.Apply("/no/such/file.log", []);
         Assert.Equal("File not found: /no/such/file.log\n", actual);
+    }
+
+    [Fact]
+    public void Missing_file_exits_nonzero()
+    {
+        LogFileFilter.Apply("/no/such/file.log", [], DetailLevel.Default, out var exitCode);
+        Assert.Equal(1, exitCode);
+    }
+
+    [Fact]
+    public void Non_log_file_with_many_lines_warns_and_exits_nonzero()
+    {
+        var sb = new System.Text.StringBuilder();
+        for (var i = 0; i < 15; i++)
+            sb.AppendLine($"using System.Line{i};");
+        var path = WriteLog(sb.ToString());
+
+        var actual = LogFileFilter.Apply(path, [], DetailLevel.Default, out var exitCode);
+
+        Assert.Contains("warn:", actual);
+        Assert.Contains("not an ASP.NET service log", actual);
+        Assert.Equal(1, exitCode);
+    }
+
+    [Fact]
+    public void Small_unparseable_file_stays_ok_with_zero_exit()
+    {
+        var path = WriteLog("using System;\nnamespace Foo;\n");
+
+        var actual = LogFileFilter.Apply(path, [], DetailLevel.Default, out var exitCode);
+
+        Assert.StartsWith("ok log n=0", actual);
+        Assert.Equal(0, exitCode);
     }
 
     [Fact]
@@ -172,5 +206,181 @@ public class LogFileFilterTests : IDisposable
         // Deduplicated: only one entry, but count shown
         Assert.Contains("(x2)", actual);
         Assert.Single(actual.Split('\n'), l => l.Contains("database error"));
+    }
+
+    // NormalizeForDedupKey tests
+
+    [Fact]
+    public void Normalize_replaces_plain_numbers()
+    {
+        Assert.Equal("request <num> at <num>", LogFileFilter.NormalizeForDedupKey("request 12345 at 3.14"));
+    }
+
+    [Fact]
+    public void Normalize_replaces_guids()
+    {
+        Assert.Equal("id <guid> done",
+            LogFileFilter.NormalizeForDedupKey("id 9a4c3a2c-5820-4385-a4b7-83fc98be548d done"));
+    }
+
+    [Fact]
+    public void Normalize_replaces_quoted_strings()
+    {
+        Assert.Equal("name <str> ok", LogFileFilter.NormalizeForDedupKey("""name "John Doe" ok"""));
+    }
+
+    [Fact]
+    public void Normalize_replaces_iso_timestamps()
+    {
+        Assert.Equal("at <ts> end", LogFileFilter.NormalizeForDedupKey("at 2024-01-02T03:04:05Z end"));
+    }
+
+    [Fact]
+    public void Normalize_replaces_long_hex_runs()
+    {
+        Assert.Equal("hash <hex> done", LogFileFilter.NormalizeForDedupKey("hash a1b2c3d4e5f6 done"));
+    }
+
+    [Fact]
+    public void Normalize_leaves_unicode_text_untouched()
+    {
+        Assert.Equal("Zażółć gęślą jaźń <num>", LogFileFilter.NormalizeForDedupKey("Zażółć gęślą jaźń 123"));
+    }
+
+    [Fact]
+    public void Normalize_does_not_affect_message_display_only_the_key()
+    {
+        // High-cardinality info entries with unique numbers collapse under one displayed
+        // (verbatim, first-occurrence) sample plus a repeat count.
+        var sb = new System.Text.StringBuilder();
+        for (var i = 0; i < 3; i++)
+        {
+            sb.AppendLine("info: My.Service[0]");
+            sb.AppendLine($"      request for id {1000 + i}");
+        }
+        var path = WriteLog(sb.ToString());
+        var actual = LogFileFilter.Apply(path, [], DetailLevel.More);
+
+        Assert.Contains("request for id 1000 (x3)", actual);
+        Assert.DoesNotContain("<num>", actual);
+    }
+
+    // Tiering tests (default vs --more)
+
+    private static readonly string[] InfoTierWords =
+    [
+        "alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel",
+        "india", "juliet", "kilo", "lima", "mike", "november", "oscar"
+    ];
+
+    [Fact]
+    public void Default_tier_caps_info_to_top_groups_by_count()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("warn: Some.Source[0]");
+        sb.AppendLine("      keep this warning");
+        // Distinct words, not numbers — a trailing number would be normalized away by
+        // NormalizeForDedupKey and collapse all 15 into one group, defeating the test.
+        foreach (var word in InfoTierWords)
+        {
+            sb.AppendLine("info: Some.Source[0]");
+            sb.AppendLine($"      unique info message {word}");
+        }
+        for (var i = 0; i < 5; i++)
+        {
+            sb.AppendLine("info: Some.Source[0]");
+            sb.AppendLine("      hot repeated info message");
+        }
+        var path = WriteLog(sb.ToString());
+
+        var defaultOutput = LogFileFilter.Apply(path, [], DetailLevel.Default);
+
+        Assert.Contains("keep this warning", defaultOutput);
+        Assert.Contains("hot repeated info message (x5)", defaultOutput);
+        Assert.Equal(15, defaultOutput.Split('\n').Count(l => l.Contains("[INF]")));
+        Assert.Contains("i=15/16 (--more)", defaultOutput);
+    }
+
+    [Fact]
+    public void More_tier_shows_every_info_group_uncapped()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("warn: Some.Source[0]");
+        sb.AppendLine("      keep this warning");
+        // Distinct words, not numbers — a trailing number would be normalized away by
+        // NormalizeForDedupKey and collapse all 15 into one group, defeating the test.
+        foreach (var word in InfoTierWords)
+        {
+            sb.AppendLine("info: Some.Source[0]");
+            sb.AppendLine($"      unique info message {word}");
+        }
+        for (var i = 0; i < 5; i++)
+        {
+            sb.AppendLine("info: Some.Source[0]");
+            sb.AppendLine("      hot repeated info message");
+        }
+        var path = WriteLog(sb.ToString());
+
+        var moreOutput = LogFileFilter.Apply(path, [], DetailLevel.More);
+
+        Assert.Equal(16, moreOutput.Split('\n').Count(l => l.Contains("[INF]")));
+        Assert.DoesNotContain("(--more)", moreOutput);
+    }
+
+    [Fact]
+    public void Errors_only_is_unaffected_by_info_tiering()
+    {
+        var sb = new System.Text.StringBuilder();
+        for (var i = 0; i < 20; i++)
+        {
+            sb.AppendLine("info: Some.Source[0]");
+            sb.AppendLine($"      unique info message {i}");
+        }
+        sb.AppendLine("fail: Some.Source[0]");
+        sb.AppendLine("      boom");
+        var path = WriteLog(sb.ToString());
+
+        var actual = LogFileFilter.Apply(path, ["--errors"], DetailLevel.Default);
+
+        Assert.Contains("[ERR]", actual);
+        Assert.Contains("boom", actual);
+        Assert.DoesNotContain("[INF]", actual);
+    }
+
+    // Unparsed/garbage line tests
+
+    [Fact]
+    public void Foreign_garbage_line_is_counted_unparsed_and_not_glued()
+    {
+        var content = "warn: My.Service[0]\n" +
+                      "      disk almost full\n" +
+                      "####CORRUPTED_BLOB####\n" +
+                      "info: My.Service[0]\n" +
+                      "      next entry message\n";
+        var path = WriteLog(content);
+
+        var actual = LogFileFilter.Apply(path, []);
+
+        Assert.Contains("unparsed=1", actual);
+        Assert.DoesNotContain("CORRUPTED_BLOB", actual);
+        Assert.Contains("disk almost full", actual);
+        Assert.Contains("next entry message", actual);
+    }
+
+    [Fact]
+    public void Unindented_exception_header_is_not_counted_as_unparsed()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("fail: My.Service[0]");
+        sb.AppendLine("      Something went wrong");
+        sb.AppendLine("System.InvalidOperationException: boom");
+        sb.AppendLine("   at Method0() in File.cs:line 0");
+        var path = WriteLog(sb.ToString());
+
+        var actual = LogFileFilter.Apply(path, []);
+
+        Assert.DoesNotContain("unparsed=", actual);
+        Assert.Contains("System.InvalidOperationException: boom", actual);
+        Assert.Contains("Method0()", actual);
     }
 }

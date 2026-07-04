@@ -90,7 +90,7 @@ public sealed class BranchCommand : ICommand
 
     private static async Task<string?> ResolveBaseAsync(IProcessRunner runner, string current)
     {
-        var upstream = await TryRevParseAsync(runner, $"{current}@{{upstream}}");
+        var upstream = await ResolveUpstreamAsync(runner, current);
         if (upstream is not null)
             return upstream;
 
@@ -103,6 +103,18 @@ public sealed class BranchCommand : ICommand
         }
 
         return null;
+    }
+
+    /// <summary>Resolves the configured upstream to its real ref name (e.g. "origin/main")
+    /// instead of the literal "&lt;branch&gt;@{upstream}" placeholder.</summary>
+    private static async Task<string?> ResolveUpstreamAsync(IProcessRunner runner, string current)
+    {
+        var (exit, stdout, _) = await runner.RunAsync(
+            ["git", "rev-parse", "--abbrev-ref", $"{current}@{{upstream}}"]);
+        if (exit != 0)
+            return null;
+        var name = stdout.Trim();
+        return string.IsNullOrEmpty(name) ? null : name;
     }
 
     private static async Task<string?> TryRevParseAsync(IProcessRunner runner, string refName)

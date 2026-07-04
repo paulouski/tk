@@ -32,12 +32,17 @@ public sealed class LspDaemon
     private readonly string _workspaceRoot;
     private readonly ILanguageBackend _backend;
     private readonly string _logPath;
+    private readonly string _pidPath;
 
     // State machine
     private volatile DaemonState _state = DaemonState.Loading;
     private volatile string? _failReason;
     private readonly TaskCompletionSource<bool> _readyTcs =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    // Cancelled when a client sends the "stop" request, so the accept loop unwinds and the
+    // daemon (and its Roslyn child, killed in the RunAsync finally block) actually exits.
+    private readonly CancellationTokenSource _shutdownRequested = new();
 
     // URIs already sent via textDocument/didOpen (required before queries; the server
     // throws "Unexpected null" in FindAllReferencesHandler for an unopened document).
@@ -51,6 +56,7 @@ public sealed class LspDaemon
         _workspaceRoot = workspaceRoot;
         _backend = backend;
         _logPath = DaemonSocket.GetLogPath(workspaceRoot);
+        _pidPath = DaemonSocket.GetPidPath(workspaceRoot);
     }
 
     // For testing: allow injecting a ready/failed state externally
@@ -129,6 +135,11 @@ public sealed class LspDaemon
         process.Start();
         Log($"server process launched, pid={process.Id}");
 
+        // Persist both PIDs so `lsp stop`/`lsp status` can verify and, if necessary,
+        // forcibly terminate this daemon and its Roslyn child even if the socket-based
+        // graceful stop below is unresponsive or the socket file itself is gone.
+        DaemonSocket.WritePidInfo(_pidPath, new DaemonPidInfo(Environment.ProcessId, process.Id));
+
         // Pump server stderr into the daemon log — the one channel that shows
         // MSBuild/SDK/BuildHost failures (previously discarded).
         process.ErrorDataReceived += (_, e) =>
@@ -149,7 +160,7 @@ public sealed class LspDaemon
 
         // ── Step 3: Accept clients immediately (socket-first) ─────────────────
         using var idleTimer = new CancellationTokenSource(IdleTimeout);
-        using var combined = CancellationTokenSource.CreateLinkedTokenSource(ct, idleTimer.Token);
+        using var combined = CancellationTokenSource.CreateLinkedTokenSource(ct, idleTimer.Token, _shutdownRequested.Token);
 
         try
         {
@@ -179,6 +190,8 @@ public sealed class LspDaemon
         {
             if (File.Exists(socketPath))
                 File.Delete(socketPath);
+            if (File.Exists(_pidPath))
+                try { File.Delete(_pidPath); } catch { }
             try { process.Kill(entireProcessTree: true); } catch { }
             Log("daemon stopped");
         }
@@ -699,7 +712,20 @@ public sealed class LspDaemon
             {
                 response = new DaemonResponse(true, null, null);
                 await writer.WriteLineAsync(JsonSerializer.Serialize(response, LspMessage.Options)).ConfigureAwait(false);
+                // Unwind the accept loop so RunAsync's finally block actually runs: kills the
+                // Roslyn child, deletes the socket/pid files, and lets this process exit.
+                // Previously this handler only replied success without triggering any of that,
+                // leaving the daemon (and its Roslyn child) running forever after `lsp stop`.
+                _shutdownRequested.Cancel();
                 return;
+            }
+            else if (request.Method == "symbols" && request.Symbol is not null)
+            {
+                await WaitForReadyAsync(ct).ConfigureAwait(false);
+                Log($"symbols query: {request.Symbol}");
+                var matches = await ResolveSymbolAsync(loop, request.Symbol, ct).ConfigureAwait(false);
+                Log($"symbols query done, {matches.Count} matches");
+                response = new DaemonResponse(true, null, null) with { Candidates = matches.ToArray() };
             }
             else if (request.Method == "refs" && request.FilePath is not null)
             {

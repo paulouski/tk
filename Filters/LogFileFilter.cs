@@ -13,11 +13,27 @@ namespace Tk.Filters;
 /// </summary>
 public static partial class LogFileFilter
 {
-    public static string Apply(string filePath, string[] flags, DetailLevel level = DetailLevel.Default)
+    // A non-log file with more than this many non-empty lines but zero recognized log
+    // entries is reported as a warning rather than a silent "ok n=0".
+    private const int NonLogLineThreshold = 10;
+
+    // Default tier caps the collapsed info summary to the N biggest normalized groups by
+    // count, so high-cardinality business logs (unique-per-record info lines) don't flood
+    // the default view. --more shows every group.
+    private const int DefaultInfoSummaryLimit = 15;
+
+    public static string Apply(string filePath, string[] flags, DetailLevel level = DetailLevel.Default) =>
+        Apply(filePath, flags, level, out _);
+
+    public static string Apply(string filePath, string[] flags, DetailLevel level, out int exitCode)
     {
         if (!File.Exists(filePath))
+        {
+            exitCode = 1;
             return $"File not found: {filePath}\n";
+        }
 
+        exitCode = 0;
         var raw = ReadAutoDetectEncoding(filePath);
         var lines = raw.Split('\n').Select(l => l.TrimEnd('\r')).ToArray();
 
@@ -28,8 +44,15 @@ public static partial class LogFileFilter
         if (showAll)
             return FormatPassthrough(lines, lastN);
 
-        var entries = ParseLogEntries(lines);
+        var rawEntries = ParseLogEntries(lines, out var unparsedCount);
+        var nonEmptyLineCount = lines.Count(l => !string.IsNullOrWhiteSpace(l));
+        if (rawEntries.Count == 0 && nonEmptyLineCount > NonLogLineThreshold)
+        {
+            exitCode = 1;
+            return $"warn: no log entries recognized in {nonEmptyLineCount} lines — not an ASP.NET service log?\n";
+        }
 
+        var entries = rawEntries;
         if (errorsOnly)
             entries = entries.Where(e => e.Level is "fail" or "crit" or "error").ToList();
         else
@@ -37,14 +60,36 @@ public static partial class LogFileFilter
 
         entries = DeduplicateEntries(entries);
 
+        // Default tier: warnings/errors in full, info collapsed to the top-N normalized
+        // groups by count. --more (and --errors, which has no info anyway) keep every group.
+        var infoGroupTotal = entries.Count(e => e.Level == "info");
+        if (!errorsOnly && level != DetailLevel.More)
+            entries = ApplyDefaultInfoTier(entries);
+
         if (lastN > 0)
             entries = entries.TakeLast(lastN).ToList();
 
-        var result = FormatEntries(entries, filePath);
+        var result = FormatEntries(entries, filePath, unparsedCount, infoGroupTotal);
         var footer = HiddenLinesFooter.Format(lines.Length, HiddenLinesFooter.CountLines(result), level);
         if (footer is not null)
             result = result.EndsWith('\n') ? $"{result}{footer}\n" : $"{result}\n{footer}\n";
         return result;
+    }
+
+    /// <summary>Keeps the top <see cref="DefaultInfoSummaryLimit"/> info groups by repeat
+    /// count (ties keep first-seen order); all non-info entries are always kept.</summary>
+    private static List<LogEntry> ApplyDefaultInfoTier(List<LogEntry> entries)
+    {
+        var infoEntries = entries.Where(e => e.Level == "info").ToList();
+        if (infoEntries.Count <= DefaultInfoSummaryLimit)
+            return entries;
+
+        var keepers = infoEntries
+            .OrderByDescending(e => e.RepeatCount)
+            .Take(DefaultInfoSummaryLimit)
+            .ToHashSet();
+
+        return entries.Where(e => e.Level != "info" || keepers.Contains(e)).ToList();
     }
 
     private static string ReadAutoDetectEncoding(string path)
@@ -76,10 +121,11 @@ public static partial class LogFileFilter
         return 0;
     }
 
-    private static List<LogEntry> ParseLogEntries(string[] lines)
+    private static List<LogEntry> ParseLogEntries(string[] lines, out int unparsedCount)
     {
         var entries = new List<LogEntry>();
         LogEntry? current = null;
+        unparsedCount = 0;
 
         foreach (var line in lines)
         {
@@ -98,6 +144,15 @@ public static partial class LogFileFilter
                 continue;
             }
 
+            if (!IsContinuationLike(line))
+            {
+                // No recognizable log prefix, not indented, no exception marker — this is
+                // foreign/garbage content, not a genuine continuation. Count it rather than
+                // silently gluing it to whatever entry came before.
+                unparsedCount++;
+                continue;
+            }
+
             // Continuation line — first non-empty continuation becomes message if message is empty
             if (current != null)
             {
@@ -111,6 +166,14 @@ public static partial class LogFileFilter
 
         return entries;
     }
+
+    /// <summary>True for lines that plausibly extend the previous entry: indented text
+    /// (message bodies, stack frames) or an exception-type header line (which .NET often
+    /// emits flush-left, e.g. "System.InvalidOperationException: boom").</summary>
+    private static bool IsContinuationLike(string line) =>
+        line.Length > 0 && (char.IsWhiteSpace(line[0]) ||
+                             line.Contains("Exception", StringComparison.OrdinalIgnoreCase) ||
+                             line.TrimStart().StartsWith("---", StringComparison.Ordinal));
 
     private static List<LogEntry> FilterNoise(List<LogEntry> entries)
     {
@@ -287,9 +350,7 @@ public static partial class LogFileFilter
 
         foreach (var entry in entries)
         {
-            // Key: level + source + first 100 chars of message
-            var msgKey = entry.Message.Length > 100 ? entry.Message[..100] : entry.Message;
-            var key = $"{entry.Level}|{entry.Source}|{msgKey}";
+            var key = BuildDedupKey(entry);
 
             if (seen.TryGetValue(key, out var existingIdx))
             {
@@ -305,10 +366,47 @@ public static partial class LogFileFilter
         return result;
     }
 
-    private static string FormatEntries(List<LogEntry> entries, string filePath)
+    /// <summary>
+    /// Dedup key: level + source + first 100 chars of message. Warn/fail/crit/error keep the
+    /// exact message text (precision matters more there, and volume is low). Info entries key
+    /// on a normalized message so high-cardinality business logs (a different name/id/GUID per
+    /// record) collapse into one group instead of flooding the output with near-duplicates.
+    /// </summary>
+    private static string BuildDedupKey(LogEntry entry)
+    {
+        var msg = entry.Level == "info" ? NormalizeForDedupKey(entry.Message) : entry.Message;
+        var msgKey = msg.Length > 100 ? msg[..100] : msg;
+        return $"{entry.Level}|{entry.Source}|{msgKey}";
+    }
+
+    /// <summary>
+    /// Replaces obvious variable segments (GUIDs, ISO timestamps, quoted strings, long hex
+    /// runs, plain numbers) with placeholders, purely for dedup keying. The displayed sample
+    /// always uses the original, unmodified message — this never touches rendered output.
+    /// Unicode/non-ASCII text (e.g. Polish diacritics) passes through untouched.
+    /// </summary>
+    internal static string NormalizeForDedupKey(string message)
+    {
+        if (string.IsNullOrEmpty(message))
+            return message;
+
+        var s = message;
+        s = GuidRe().Replace(s, "<guid>");
+        s = IsoTimestampRe().Replace(s, "<ts>");
+        s = QuotedStringRe().Replace(s, "<str>");
+        s = LongHexRe().Replace(s, "<hex>");
+        s = NumberRe().Replace(s, "<num>");
+        return s;
+    }
+
+    private static string FormatEntries(List<LogEntry> entries, string filePath, int unparsedCount = 0, int infoGroupTotal = 0)
     {
         if (entries.Count == 0)
-            return $"ok log n=0 file={Path.GetFileName(filePath)}\n";
+        {
+            var empty = $"ok log n=0 file={Path.GetFileName(filePath)}";
+            if (unparsedCount > 0) empty += $" unparsed={unparsedCount}";
+            return empty + "\n";
+        }
 
         var sb = new StringBuilder();
         var fileName = Path.GetFileName(filePath);
@@ -319,7 +417,12 @@ public static partial class LogFileFilter
         sb.Append($"log n={entries.Count} file={fileName}");
         if (errorCount > 0) sb.Append($" e={errorCount}");
         if (warnCount > 0) sb.Append($" w={warnCount}");
-        if (infoCount > 0) sb.Append($" i={infoCount}");
+        if (infoCount > 0)
+        {
+            sb.Append($" i={infoCount}");
+            if (infoGroupTotal > infoCount) sb.Append($"/{infoGroupTotal} (--more)");
+        }
+        if (unparsedCount > 0) sb.Append($" unparsed={unparsedCount}");
         sb.AppendLine();
         sb.AppendLine(Ansi.Dim("---"));
 
@@ -371,6 +474,23 @@ public static partial class LogFileFilter
 
     [GeneratedRegex(@"Received HTTP response headers after (?<duration>[\d.]+)ms\s*-\s*(?<status>\d+)")]
     private static partial Regex HttpResponseRe();
+
+    [GeneratedRegex(@"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")]
+    private static partial Regex GuidRe();
+
+    [GeneratedRegex(@"\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?\b")]
+    private static partial Regex IsoTimestampRe();
+
+    [GeneratedRegex("\"[^\"]*\"|'[^']*'")]
+    private static partial Regex QuotedStringRe();
+
+    // Hex run of 8+ chars, but only when it contains at least one a-f letter — otherwise it's
+    // just a plain decimal number and NumberRe handles it.
+    [GeneratedRegex(@"\b(?=[0-9a-fA-F]{8,}\b)(?=[0-9a-fA-F]*[a-fA-F])[0-9a-fA-F]{8,}\b")]
+    private static partial Regex LongHexRe();
+
+    [GeneratedRegex(@"\b\d+(?:\.\d+)?\b")]
+    private static partial Regex NumberRe();
 
     private class LogEntry
     {

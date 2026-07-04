@@ -9,8 +9,10 @@ public sealed class GitCommand : ICommand
 
     public async Task<int> RunAsync(CommandContext ctx)
     {
+        // ctx.Args has the leading "git" token already stripped by CommandContext.FromCli;
+        // BuildGitArgs re-adds it so the spawned process is always the real `git` binary.
         if (ctx.Raw)
-            return await RunFilteredAsync(ctx.Args, new PassthroughFilter(), ctx);
+            return await RunFilteredAsync(BuildGitArgs([], ctx.Args), new PassthroughFilter(), ctx);
 
         var subcommand = FindSubcommand(ctx.Args);
         return subcommand?.Value.ToLowerInvariant() switch
@@ -19,11 +21,9 @@ public sealed class GitCommand : ICommand
             "diff" => await RunDiffAsync(ctx, subcommand.Value.Index, show: false),
             "show" => await RunDiffAsync(ctx, subcommand.Value.Index, show: true),
             "log" => await RunLogAsync(ctx, subcommand.Value.Index),
-            "add" or "commit" or "push" or "pull" or "fetch"
-                or "stash" or "branch" or "checkout" or "switch"
-                or "merge" or "rebase" or "reset" or "tag" =>
-                await RunFilteredAsync(ctx.Args, new GitCompactFilter(), ctx),
-            _ => await RunFilteredAsync(ctx.Args, new PassthroughFilter(), ctx)
+            // Everything else (add, commit, push, pull, fetch, stash, branch, checkout,
+            // merge, rebase, reset, tag, ...) is a clean, unfiltered passthrough to real git.
+            _ => await RunFilteredAsync(BuildGitArgs([], ctx.Args), new PassthroughFilter(), ctx)
         };
     }
 

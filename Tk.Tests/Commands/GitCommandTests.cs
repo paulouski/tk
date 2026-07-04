@@ -37,7 +37,11 @@ public class GitCommandTests
         var (_, output, _) = await RunAsync(["status"], runner);
 
         Assert.Contains("state=rebase+merge", output);
-        Assert.Contains("mod=1", output);
+        // UU is a conflict (unmerged), not a plain modification — GitStatusFilter now routes
+        // conflicted paths only into the conflict bucket instead of double-counting them into
+        // mod= too (see GitStatusFilter.FormatPorcelain's `continue` after IsConflict).
+        Assert.Contains("conf=1", output);
+        Assert.DoesNotContain("mod=1", output);
         Assert.Equal(["git", "status"], runner.Calls[0]);
         Assert.Equal(["git", "status", "--porcelain=v1", "--branch"], runner.Calls[1]);
     }
@@ -175,5 +179,66 @@ public class GitCommandTests
         Assert.Contains("My commit message.", output);
         Assert.Contains("-old", output);
         Assert.Contains("+new", output);
+    }
+
+    // ─── raw mode and generic passthrough spawn the real "git" binary ──────────
+    // Regression: CommandContext strips the leading "git" token from ctx.Args, so
+    // passthrough branches must re-add it before spawning a process, or they'd try
+    // to exec a program literally named "status"/"stash"/etc.
+
+    [Fact]
+    public async Task Raw_status_spawns_real_git_with_status_subcommand()
+    {
+        var runner = new FakeProcessRunner().Returns(stdout: "On branch main\n");
+
+        await RunAsync(["status"], runner, raw: true);
+
+        Assert.Equal(["git", "status"], runner.Calls[0]);
+    }
+
+    [Fact]
+    public async Task Raw_log_spawns_real_git_with_log_subcommand()
+    {
+        var runner = new FakeProcessRunner().Returns(stdout: "abc1234 msg\n");
+
+        await RunAsync(["log"], runner, raw: true);
+
+        Assert.Equal(["git", "log"], runner.Calls[0]);
+    }
+
+    [Theory]
+    [InlineData("stash list")]
+    [InlineData("branch -a")]
+    [InlineData("checkout main")]
+    [InlineData("merge feature")]
+    [InlineData("rebase --continue")]
+    [InlineData("reset --hard")]
+    [InlineData("tag -l")]
+    [InlineData("add .")]
+    [InlineData("commit -m msg")]
+    [InlineData("push")]
+    [InlineData("pull")]
+    [InlineData("fetch")]
+    public async Task Unfiltered_subcommands_passthrough_to_real_git(string argsLine)
+    {
+        var args = argsLine.Split(' ');
+        var runner = new FakeProcessRunner().Returns(exitCode: 0, stdout: "ok\n");
+
+        var (exit, output, _) = await RunAsync(args, runner);
+
+        Assert.Equal(0, exit);
+        Assert.Equal(["git", .. args], runner.Calls[0]);
+        Assert.Equal("ok\n", output);
+    }
+
+    [Fact]
+    public async Task Unfiltered_subcommand_propagates_nonzero_exit_code()
+    {
+        var runner = new FakeProcessRunner().Returns(exitCode: 1, stderr: "error: pathspec 'x' did not match\n");
+
+        var (exit, output, _) = await RunAsync(["checkout", "x"], runner);
+
+        Assert.Equal(1, exit);
+        Assert.Contains("did not match", output);
     }
 }

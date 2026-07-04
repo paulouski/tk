@@ -55,10 +55,11 @@ public sealed partial class GitDiffFilter : IOutputFilter
 
         foreach (var line in lines[diffStartIdx..])
         {
-            // New file diff
-            if (line.StartsWith("diff --git "))
+            // New file diff — "diff --git" (regular) or "diff --cc" (combined format for
+            // unmerged/conflicted paths, e.g. mid-rebase or mid-merge).
+            if (line.StartsWith("diff --git ") || line.StartsWith("diff --cc "))
             {
-                current = new FileDiff(ExtractFileName(line));
+                current = new FileDiff(ExtractFileName(line)) { IsConflict = line.StartsWith("diff --cc ") };
                 fileDiffs.Add(current);
                 currentHunk = null;
                 continue;
@@ -90,11 +91,32 @@ public sealed partial class GitDiffFilter : IOutputFilter
             {
                 if (line.StartsWith("new file")) current.IsNew = true;
                 if (line.StartsWith("deleted file")) current.IsDeleted = true;
+                if (line.StartsWith("rename to ")) current.RenamedTo = line["rename to ".Length..].Trim();
                 continue;
             }
 
             // Count additions/deletions; capture context lines around changes
-            if (line.StartsWith("+"))
+            if (current.IsConflict)
+            {
+                // Combined diff format: one prefix char per parent (>=2 chars); '+'/'-' anywhere
+                // in the prefix marks the line changed relative to some parent.
+                var prefix = line.Length >= 2 ? line[..2] : line;
+                if (prefix.Contains('+'))
+                {
+                    current.Additions++;
+                    AddHunkLine(currentHunk, line, isChanged: true);
+                }
+                else if (prefix.Contains('-'))
+                {
+                    current.Deletions++;
+                    AddHunkLine(currentHunk, line, isChanged: true);
+                }
+                else
+                {
+                    AddHunkLine(currentHunk, line, isChanged: false);
+                }
+            }
+            else if (line.StartsWith("+"))
             {
                 current.Additions++;
                 AddHunkLine(currentHunk, line, isChanged: true);
@@ -223,6 +245,10 @@ public sealed partial class GitDiffFilter : IOutputFilter
 
     private static string ExtractFileName(string diffLine)
     {
+        // "diff --cc path/file" (combined/conflict format) -> "path/file"
+        if (diffLine.StartsWith("diff --cc "))
+            return diffLine["diff --cc ".Length..].Trim();
+
         // "diff --git a/path/file b/path/file" -> "path/file"
         var match = FileNameRe().Match(diffLine);
         return match.Success ? match.Groups[1].Value : diffLine;
@@ -233,6 +259,11 @@ public sealed partial class GitDiffFilter : IOutputFilter
 
     [GeneratedRegex(@"^@@ -(?<oldStart>\d+)(?:,(?<oldCount>\d+))? \+(?<newStart>\d+)(?:,(?<newCount>\d+))? @@")]
     private static partial Regex HunkHeaderRe();
+
+    // Combined diff hunk header (git diff --cc), e.g. "@@@ -1,3 -1,3 +1,4 @@@": N old ranges
+    // (one per parent), then a single new range.
+    [GeneratedRegex(@"^@{2,}\s(?:-\d+(?:,\d+)?\s)+\+(?<newStart>\d+)(?:,(?<newCount>\d+))?\s@{2,}")]
+    private static partial Regex CombinedHunkHeaderRe();
 
     private void AddHunkLine(Hunk? hunk, string line, bool isChanged)
     {
@@ -260,12 +291,25 @@ public sealed partial class GitDiffFilter : IOutputFilter
     private static string FormatTopFile(FileDiff diff)
     {
         var name = Path.GetFileName(diff.Name);
+        if (diff.RenamedTo is not null)
+            name = $"{name}->{Path.GetFileName(diff.RenamedTo)}";
+
         var suffix = new StringBuilder();
         if (diff.IsNew) suffix.Append("*new");
         if (diff.IsDeleted)
         {
             if (suffix.Length > 0) suffix.Append('|');
             suffix.Append("del");
+        }
+        if (diff.RenamedTo is not null)
+        {
+            if (suffix.Length > 0) suffix.Append('|');
+            suffix.Append("ren");
+        }
+        if (diff.IsConflict)
+        {
+            if (suffix.Length > 0) suffix.Append('|');
+            suffix.Append("conflict");
         }
         if (diff.IsBinary)
         {
@@ -281,6 +325,8 @@ public sealed partial class GitDiffFilter : IOutputFilter
     {
         var match = HunkHeaderRe().Match(rawHeader);
         if (!match.Success)
+            match = CombinedHunkHeaderRe().Match(rawHeader);
+        if (!match.Success)
             return $"@@ {Path.GetFileName(fileName)}";
 
         var newStart = int.Parse(match.Groups["newStart"].Value);
@@ -295,6 +341,8 @@ public sealed partial class GitDiffFilter : IOutputFilter
         public int Additions { get; set; }
         public int Deletions { get; set; }
         public bool IsBinary { get; set; }
+        public bool IsConflict { get; set; }
+        public string? RenamedTo { get; set; }
         public bool IsNew { get; set; }
         public bool IsDeleted { get; set; }
         public List<Hunk> Hunks { get; } = [];

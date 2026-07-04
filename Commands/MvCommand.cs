@@ -43,7 +43,7 @@ public sealed class MvCommand : ICommand
         if (Directory.Exists(newPath))
             newPath = Path.Combine(newPath, Path.GetFileName(oldPath));
 
-        if (string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase))
+        if (IsSamePath(oldPath, newPath))
         {
             ctx.Err.WriteLine("tk mv: source and destination are the same");
             return 1;
@@ -130,6 +130,14 @@ public sealed class MvCommand : ICommand
         }
         catch { return false; }
     }
+
+    /// <summary>
+    /// Whether two resolved paths refer to the same source and destination. Case-sensitive:
+    /// a case-only rename (e.g. Foo.cs -&gt; foo.cs) is a legitimate move — plain `git mv`
+    /// handles it correctly even on case-insensitive filesystems — so it must not be refused.
+    /// </summary>
+    internal static bool IsSamePath(string oldPath, string newPath) =>
+        string.Equals(oldPath, newPath, StringComparison.Ordinal);
 
     /// <summary>
     /// Formats the compact output line.

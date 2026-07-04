@@ -31,7 +31,7 @@ internal static class HelpRenderer
         sb.AppendLine("  tk branch [base]           Branch state vs base (commits + diff)");
         sb.AppendLine("  tk tree [path]             Compact repo tree for agents");
         sb.AppendLine("  tk files [path]            Compact file inventory");
-        sb.AppendLine("  tk focus <word...> [-p path] OR-search words (ranked by coverage); quote for exact phrase");
+        sb.AppendLine("  tk focus <word...> [-p path] OR-search words (ranked by coverage); quote for exact phrase; --files-only");
         sb.AppendLine("  tk init                    Install global Claude + AGENTS instructions");
         sb.AppendLine("  tk switch                  Toggle between two Claude Code accounts");
         sb.AppendLine("  tk mv <old> <new>          Move file preserving git history (git mv when tracked)");
@@ -42,14 +42,15 @@ internal static class HelpRenderer
         sb.AppendLine("  tk find <path> [flags]         Find with path prefix stripped");
         sb.AppendLine("  tk view <file[:a-b|::sym]>     File card, line range, or symbol body; multiple files allowed");
         sb.AppendLine("  tk changes                     Repo status card for agent startup");
-        sb.AppendLine("  tk branch [base]               Branch vs base (auto: upstream/main/master)");
+        sb.AppendLine("  tk branch [base]               Branch vs base (auto: upstream, origin/main|origin/master, main|master)");
         sb.AppendLine("  tk tree [path]                 Repo tree with compact depth and counts; add --code");
         sb.AppendLine("  tk files [path]                Key files and top directories; add --code");
-        sb.AppendLine("  tk focus <word...> [-p path]   Multi-word OR search ranked by coverage; quote for phrase; --code/--docs/--all");
+        sb.AppendLine("  tk focus <word...> [-p path]   Multi-word OR search ranked by coverage; quote for phrase; --code/--docs/--all/--files-only");
         sb.AppendLine("  tk mv <old> <new>              Move file; git mv when tracked (preserves history), else filesystem");
         sb.AppendLine("  tk module list|enable|disable  Manage enabled modules");
         sb.AppendLine("  tk git status|log|diff|show    Git compact output");
-        sb.AppendLine("  tk log <file>                  Filter service log (errors/warnings only)");
+        sb.AppendLine("  tk log <file>                  Filter service log: warn/fail/crit in full + top info groups");
+        sb.AppendLine("  tk --more log <file>           Same, but every deduped info group (not just the top ones)");
         sb.AppendLine("  tk log <file> --errors         Errors only (fail/crit)");
         sb.AppendLine("  tk log <file> --last 20        Last N entries");
         sb.AppendLine("  tk log <file> --all            No filtering, raw output");
@@ -69,6 +70,10 @@ internal static class HelpRenderer
         {
             sb.AppendLine("  tk refs <symbol>               Find all references to a symbol (LSP-backed)");
             sb.AppendLine("  tk refs <file:line:col>        Find references at position");
+            sb.AppendLine("  tk def <symbol>                Find where a symbol is defined");
+            sb.AppendLine("  tk def <file:line:col>         Go to definition at position");
+            sb.AppendLine("  tk callers <symbol>            Find incoming callers of a symbol");
+            sb.AppendLine("  tk callers <file:line:col>     Find incoming callers at position");
             sb.AppendLine("  tk rename <file:line:col> <n>  Rename a symbol everywhere");
             sb.AppendLine("  tk lsp status|stop             LSP daemon status and control");
         }

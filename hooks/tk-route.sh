@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# tk-route.sh — PreToolUse hook: routes single dotnet/git commands through `tk`
-# for compact output, and nudges symbol-grep toward `tk def|refs|callers`.
+# tk-route.sh — PreToolUse hook: routes single commands through compact-output
+# proxies. `dotnet build|test|restore` and `git status|log` are routed to `tk`;
+# any other recognized command falls back to `rtk rewrite` (if `rtk` is
+# installed). Also nudges symbol-grep toward `tk def|refs|callers`.
 #
 # Design note: this hook degrades to a no-op — if the running Claude Code version
 # ignores `updatedInput`/`additionalContext`, the original command simply runs
@@ -32,8 +34,9 @@ _log_decision() {
 # Strip leading whitespace
 trimmed="${cmd#"${cmd%%[![:space:]]*}"}"
 
-# Never double-wrap tk commands
+# Never double-wrap tk or rtk commands
 [[ "$trimmed" =~ ^tk[[:space:]] ]] && exit 0
+[[ "$trimmed" =~ ^rtk[[:space:]] ]] && exit 0
 
 # Detect unsafe commands (pipe, chain, background, subshell, newline).
 # Redirects (>, <, 2>&1, &>file) are NOT treated as unsafe — prepending `tk`
@@ -62,20 +65,40 @@ if [[ "$unsafe" -eq 0 ]]; then
   fi
 
   if [[ -n "$new" ]]; then
-    _log_decision "route" "$cmd"
+    _log_decision "route-tk" "$cmd"
     jq -n --arg c "$new" \
       '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"allow",updatedInput:{command:$c}}}'
     exit 0
   fi
+
+  # git diff/show are deliberately excluded from rtk rewriting too: the agent
+  # often needs the full diff/patch to understand or apply a change, and
+  # compaction can drop added/changed lines, which would mislead it.
+  if [[ "$trimmed" =~ ^git[[:space:]]+(diff|show)([[:space:]]|$) ]]; then
+    exit 0
+  fi
+
+  # RTK FALLBACK: for anything not routed to tk above, ask rtk if it recognizes
+  # the command. rtk exits 0 with the rewritten command on stdout if recognized,
+  # or exits 1 with empty stdout otherwise. Skip entirely if rtk isn't installed.
+  if command -v rtk >/dev/null 2>&1; then
+    rewritten=$(rtk rewrite "$cmd" 2>/dev/null)
+    if [[ $? -eq 0 && -n "$rewritten" ]]; then
+      _log_decision "route-rtk" "$cmd"
+      jq -n --arg c "$rewritten" \
+        '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"allow",updatedInput:{command:$c}}}'
+      exit 0
+    fi
+  fi
 fi
 
-# NUDGE: suggest tk semantic nav for grep-for-symbol (allowed even when unsafe)
-if [[ "$trimmed" =~ ^(grep|egrep|fgrep|rg)[[:space:]] ]] && \
-   [[ "$cmd" =~ (class|record|interface|enum|struct)[[:space:]]+[A-Z] ]]; then
-  _log_decision "nudge" "$cmd"
-  jq -n \
-    '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"allow",additionalContext:"Symbol lookup via grep detected. For where a symbol is defined / its references / its callers, prefer `tk def|refs|callers <Symbol>` — it resolves cross-file and crosses interface dispatch, unlike a text grep for `class X`/`record X`. (tk lsp module)"}}'
-  exit 0
-fi
+# NUDGE: suggest tk semantic nav for grep-for-symbol — disabled (codebase-memory-mcp handles symbol nav)
+# if [[ "$trimmed" =~ ^(grep|egrep|fgrep|rg)[[:space:]] ]] && \
+#    [[ "$cmd" =~ (class|record|interface|enum|struct)[[:space:]]+[A-Z] ]]; then
+#   _log_decision "nudge" "$cmd"
+#   jq -n \
+#     '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"allow",additionalContext:"Symbol lookup via grep detected. For where a symbol is defined / its references / its callers, prefer `tk def|refs|callers <Symbol>` — it resolves cross-file and crosses interface dispatch, unlike a text grep for `class X`/`record X`. (tk lsp module)"}}'
+#   exit 0
+# fi
 
 exit 0

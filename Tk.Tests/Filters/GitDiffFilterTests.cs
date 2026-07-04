@@ -76,6 +76,110 @@ public class GitDiffFilterTests
     }
 
     [Fact]
+    public void Pure_rename_shows_old_arrow_new_with_ren_tag()
+    {
+        var raw = """
+            diff --git a/Old.cs b/New.cs
+            similarity index 100%
+            rename from Old.cs
+            rename to New.cs
+            """;
+        var actual = new GitDiffFilter(DetailLevel.Default).Apply(raw, 0);
+        Assert.Contains("Old.cs->New.cs(+0 -0)[ren]", actual);
+    }
+
+    [Fact]
+    public void Rename_with_content_change_shows_arrow_and_counts()
+    {
+        var raw = """
+            diff --git a/Old.cs b/New.cs
+            similarity index 80%
+            rename from Old.cs
+            rename to New.cs
+            index aaa..bbb 100644
+            --- a/Old.cs
+            +++ b/New.cs
+            @@ -1 +1 @@
+            -old line
+            +new line
+            """;
+        var actual = new GitDiffFilter(DetailLevel.Default).Apply(raw, 0);
+        Assert.Contains("Old.cs->New.cs(+1 -1)[ren]", actual);
+        Assert.Contains("-old line", actual);
+        Assert.Contains("+new line", actual);
+    }
+
+    [Fact]
+    public void Rename_shown_in_show_mode_too()
+    {
+        var raw = """
+            commit abc1234
+            Author: Test User <test@example.com>
+            Date:   Mon Jan 1 00:00:00 2024 +0000
+
+                Rename Old.cs to New.cs.
+
+            diff --git a/Old.cs b/New.cs
+            similarity index 100%
+            rename from Old.cs
+            rename to New.cs
+            """;
+        var actual = new GitDiffFilter(DetailLevel.Default, isShow: true).Apply(raw, 0);
+        Assert.Contains("Old.cs->New.cs(+0 -0)[ren]", actual);
+    }
+
+    // Combined diff ("diff --cc"): the format git emits for unmerged/conflicted paths.
+    [Fact]
+    public void Combined_diff_cc_is_not_swallowed()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("diff --cc conflict.cs");
+        sb.AppendLine("index 1111111,2222222..0000000");
+        sb.AppendLine("--- a/conflict.cs");
+        sb.AppendLine("+++ b/conflict.cs");
+        sb.AppendLine("@@@ -1,3 -1,3 +1,7 @@@");
+        sb.AppendLine("  line1");
+        sb.AppendLine("++<<<<<<< HEAD");
+        sb.AppendLine(" +line_from_head");
+        sb.AppendLine("++=======");
+        sb.AppendLine(" +line_from_branch");
+        sb.AppendLine("++>>>>>>> feature");
+        sb.AppendLine("  line3");
+        var raw = sb.ToString();
+
+        var actual = new GitDiffFilter(DetailLevel.Default).Apply(raw, 0);
+
+        // Must not report f=0 — the conflict diff is real content, not swallowed.
+        Assert.StartsWith("diff f=1 ", actual);
+        Assert.Contains("conflict.cs(", actual);
+        Assert.Contains("[conflict]", actual);
+        Assert.Contains("<<<<<<< HEAD", actual);
+        Assert.Contains("line_from_head", actual);
+        Assert.Contains("=======", actual);
+        Assert.Contains("line_from_branch", actual);
+        Assert.Contains(">>>>>>> feature", actual);
+        Assert.Contains("line1", actual);
+        Assert.Contains("line3", actual);
+    }
+
+    [Fact]
+    public void Combined_diff_hunk_header_shows_new_range()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("diff --cc conflict.cs");
+        sb.AppendLine("index 1111111,2222222..0000000");
+        sb.AppendLine("--- a/conflict.cs");
+        sb.AppendLine("+++ b/conflict.cs");
+        sb.AppendLine("@@@ -1,3 -1,3 +1,7 @@@");
+        sb.AppendLine("  line1");
+        var raw = sb.ToString();
+
+        var actual = new GitDiffFilter(DetailLevel.Default).Apply(raw, 0);
+
+        Assert.Contains("@@ conflict.cs 1-7", actual);
+    }
+
+    [Fact]
     public void Binary_file_counted_in_summary()
     {
         var raw = """

@@ -225,6 +225,39 @@ public class MvCommandTests
         Assert.Equal(expected, actual);
     }
 
+    // ─── IsSamePath pure logic (case-sensitive same-path guard) ──────────────
+
+    [Theory]
+    [InlineData("Foo.cs", "foo.cs", false)]
+    [InlineData("Foo.cs", "Foo.cs", true)]
+    [InlineData("/a/b/Old.cs", "/a/b/old.cs", false)]
+    [InlineData("/a/b/Old.cs", "/a/b/Old.cs", true)]
+    public void IsSamePath_is_case_sensitive(string oldPath, string newPath, bool expected)
+    {
+        Assert.Equal(expected, MvCommand.IsSamePath(oldPath, newPath));
+    }
+
+    // ─── case-only rename is allowed (not blocked as "same path") ────────────
+
+    [Fact]
+    public async Task Case_only_rename_proceeds_via_git_mv()
+    {
+        var (dir, oldPath) = MakeTempFile("Foo.cs");
+        var newPath = Path.Combine(dir, "foo.cs");
+
+        var runner = new FakeProcessRunner()
+            .Returns(exitCode: 0, stdout: "true")   // inside git work tree
+            .Returns(exitCode: 0, stdout: "")       // tracked
+            .Returns(exitCode: 0, stdout: "");      // git mv success
+
+        var (exit, output, err, r) = await RunAsync([oldPath, newPath], runner);
+
+        Assert.Equal(0, exit);
+        Assert.DoesNotContain("same", err);
+        Assert.Contains("git=yes", output);
+        Assert.Contains(r.Calls, c => c.Contains("mv") && c.Contains(oldPath) && c.Contains(newPath));
+    }
+
     // ─── cross-directory namespace reminder ──────────────────────────────────
 
     [Fact]

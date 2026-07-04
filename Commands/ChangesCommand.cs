@@ -10,6 +10,20 @@ public sealed class ChangesCommand : ICommand
 
     public async Task<int> RunAsync(CommandContext ctx)
     {
+        // Plain `git status` probes for in-progress repo state (rebase/merge/conflict/etc.),
+        // the same way `tk git status` does — otherwise this card silently omits it.
+        string? stateRaw = null;
+        if (!ctx.Raw)
+        {
+            var (stateExitCode, stateStdout, stateStderr) = await ctx.Process.RunAsync(["git", "status"]);
+            stateRaw = ProcessOutput.Combine(stateStdout, stateStderr);
+            if (stateExitCode != 0)
+            {
+                ctx.Out.Write(stateRaw);
+                return stateExitCode;
+            }
+        }
+
         var (statusExitCode, statusStdout, statusStderr) = await ctx.Process.RunAsync(
             ["git", "status", "--porcelain=v1", "--branch"]);
         var statusRaw = ProcessOutput.Combine(statusStdout, statusStderr);
@@ -44,7 +58,7 @@ public sealed class ChangesCommand : ICommand
         ctx.RawCharCount = statusRaw.Length + diffRaw.Length;
         ctx.RawLineCount = HiddenLinesFooter.CountLines(statusRaw) + HiddenLinesFooter.CountLines(diffRaw);
 
-        var statusOutput = new GitStatusFilter(ctx.DetailLevel).Apply(statusRaw, 0).TrimEnd();
+        var statusOutput = new GitStatusFilter(ctx.DetailLevel).Apply(statusRaw, 0, stateRaw).TrimEnd();
         var diffOutput = new GitDiffFilter(ctx.DetailLevel).Apply(diffRaw, 0).TrimEnd();
 
         var sb = new StringBuilder();

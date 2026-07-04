@@ -19,7 +19,8 @@ public sealed class LogCommand : ICommand
         if (ctx.Raw && !flags.Contains("--all"))
             flags = [.. flags, "--all"];
 
-        ctx.Out.Write(LogFileFilter.Apply(filePath, flags, ctx.DetailLevel));
-        return Task.FromResult(0);
+        var output = LogFileFilter.Apply(filePath, flags, ctx.DetailLevel, out var exitCode);
+        ctx.Out.Write(output);
+        return Task.FromResult(exitCode);
     }
 }

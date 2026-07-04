@@ -41,10 +41,17 @@ if (registry.TryResolve(commandArgs[0], out var builtin))
     return exit;
 }
 
+if (GrepArgsHelper.WantsOwnHelp(commandArgs))
+{
+    Console.Write(GrepArgsHelper.HelpText());
+    return 0;
+}
+
 var filter = cliOptions.Raw
     ? new PassthroughFilter()
     : FilterRegistry.Resolve(commandArgs, cliOptions.DetailLevel);
-var (exitCode, stdout, stderr) = await ProcessRunner.Default.RunAsync(commandArgs);
+var execArgs = GrepArgsHelper.EnsureRecursive(commandArgs, Directory.Exists);
+var (exitCode, stdout, stderr) = await ProcessRunner.Default.RunAsync(execArgs);
 var raw = string.IsNullOrWhiteSpace(stderr)
     ? stdout
     : $"{stdout.TrimEnd()}\n{stderr}";

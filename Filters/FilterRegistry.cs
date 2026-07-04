@@ -15,7 +15,7 @@ public static class FilterRegistry
             return subcommand?.ToLowerInvariant() switch
             {
                 "build" => new DotnetBuildFilter(),
-                "test" => new DotnetTestFilter(),
+                "test" => new DotnetTestFilter(detailLevel),
                 "restore" => new DotnetRestoreFilter(),
                 _ => new PassthroughFilter()
             };

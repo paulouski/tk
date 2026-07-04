@@ -20,6 +20,7 @@ public class ChangesCommandTests
     public async Task Returns_status_summary_and_skips_diff_when_clean()
     {
         var runner = new FakeProcessRunner()
+            .Returns(stdout: "On branch main\nnothing to commit, working tree clean\n")
             .Returns(stdout: "## main...origin/main\n")
             .Returns(stdout: "");
         var (exit, output) = await RunAsync(runner);
@@ -27,15 +28,17 @@ public class ChangesCommandTests
         Assert.Equal(0, exit);
         Assert.Contains("ok status st=0 mod=0 untr=0 br=main", output);
         Assert.DoesNotContain("diff", output);
-        Assert.Equal(2, runner.Calls.Count);
-        Assert.Equal(new[] { "git", "status", "--porcelain=v1", "--branch" }, runner.Calls[0]);
-        Assert.Equal(new[] { "git", "diff" }, runner.Calls[1]);
+        Assert.Equal(3, runner.Calls.Count);
+        Assert.Equal(new[] { "git", "status" }, runner.Calls[0]);
+        Assert.Equal(new[] { "git", "status", "--porcelain=v1", "--branch" }, runner.Calls[1]);
+        Assert.Equal(new[] { "git", "diff" }, runner.Calls[2]);
     }
 
     [Fact]
     public async Task Includes_diff_summary_when_dirty()
     {
         var runner = new FakeProcessRunner()
+            .Returns(stdout: "On branch main\n")
             .Returns(stdout: "## main\n M src/a.cs\n")
             .Returns(stdout: """
                 diff --git a/src/a.cs b/src/a.cs
@@ -54,7 +57,7 @@ public class ChangesCommandTests
     }
 
     [Fact]
-    public async Task Status_failure_short_circuits_and_returns_raw()
+    public async Task State_probe_failure_short_circuits_and_returns_raw()
     {
         var runner = new FakeProcessRunner()
             .Returns(exitCode: 128, stderr: "fatal: not a git repository\n");
@@ -63,6 +66,32 @@ public class ChangesCommandTests
         Assert.Equal(128, exit);
         Assert.Contains("not a git repository", output);
         Assert.Single(runner.Calls);
+        Assert.Equal(new[] { "git", "status" }, runner.Calls[0]);
+    }
+
+    [Fact]
+    public async Task In_progress_rebase_state_surfaces_in_output()
+    {
+        var runner = new FakeProcessRunner()
+            .Returns(stdout: """
+                On branch main
+                You are currently rebasing branch 'feature' on 'abc123'.
+                  (fix conflicts and then run "git rebase --continue")
+                Unmerged paths:
+                  (use "git add <file>..." to mark resolution)
+                """)
+            .Returns(stdout: """
+                ## main
+                UU src/App.cs
+                """)
+            .Returns(stdout: "");
+
+        var (exit, output) = await RunAsync(runner);
+
+        Assert.Equal(0, exit);
+        Assert.Contains("state=rebase+merge", output);
+        Assert.Contains("conf=1", output);
+        Assert.Contains("c:src/App.cs", output);
     }
 
     [Fact]

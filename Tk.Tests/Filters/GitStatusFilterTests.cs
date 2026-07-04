@@ -166,6 +166,86 @@ public class GitStatusFilterTests
         Assert.Contains("state=cherry-pick", actual);
     }
 
+    // Conflict bucket tests
+
+    [Fact]
+    public void Conflict_code_UU_adds_conflict_bucket_and_count()
+    {
+        var raw = "## main\nUU src/App.cs\n";
+
+        var actual = new GitStatusFilter(DetailLevel.Default).Apply(raw, 0);
+
+        Assert.Contains("conf=1", actual);
+        Assert.Contains("  c:src/App.cs", actual);
+    }
+
+    [Theory]
+    [InlineData("DD")]
+    [InlineData("AU")]
+    [InlineData("UD")]
+    [InlineData("UA")]
+    [InlineData("DU")]
+    [InlineData("AA")]
+    [InlineData("UU")]
+    public void All_conflict_codes_are_flagged(string code)
+    {
+        var raw = $"## main\n{code} conflicted.cs\n";
+
+        var actual = new GitStatusFilter(DetailLevel.Default).Apply(raw, 0);
+
+        Assert.Contains("conf=1", actual);
+        Assert.Contains("  c:conflicted.cs", actual);
+    }
+
+    [Fact]
+    public void Non_conflict_codes_do_not_add_conflict_bucket()
+    {
+        var raw = "## main\nMM both_modified.cs\n";
+
+        var actual = new GitStatusFilter(DetailLevel.Default).Apply(raw, 0);
+
+        Assert.DoesNotContain("conf=", actual);
+        Assert.DoesNotContain("c:", actual);
+    }
+
+    [Fact]
+    public void Conflict_present_repo_is_not_reported_ok()
+    {
+        var raw = "## main\nUU src/App.cs\n";
+
+        var actual = new GitStatusFilter(DetailLevel.Default).Apply(raw, 0);
+
+        Assert.StartsWith("status ", actual);
+        Assert.DoesNotContain("ok status", actual);
+    }
+
+    // Detached HEAD tests
+
+    [Fact]
+    public void Detached_head_shows_short_sha_from_state_raw()
+    {
+        var raw = "## HEAD (no branch)\n";
+        var stateRaw = """
+            HEAD detached at 2dc98d7
+            nothing to commit, working tree clean
+            """;
+
+        var actual = new GitStatusFilter(DetailLevel.Default).Apply(raw, 0, stateRaw);
+
+        Assert.Contains("br=HEAD@2dc98d7", actual);
+        Assert.DoesNotContain("no_branch", actual);
+    }
+
+    [Fact]
+    public void Detached_head_without_state_raw_falls_back_to_sanitized_label()
+    {
+        var raw = "## HEAD (no branch)\n";
+
+        var actual = new GitStatusFilter(DetailLevel.Default).Apply(raw, 0);
+
+        Assert.Contains("br=HEAD_(no_branch)", actual);
+    }
+
     // Unity mode tests
 
     [Fact]
@@ -230,6 +310,111 @@ public class GitStatusFilterTests
 
         Assert.StartsWith("ok status", actual);
         Assert.DoesNotContain("meta=", actual);
+    }
+
+    // Deleted-file bucket tests
+
+    [Fact]
+    public void Porcelain_unstaged_delete_gets_its_own_bucket()
+    {
+        var raw = "## main\n D removed.cs\n";
+
+        var actual = new GitStatusFilter(DetailLevel.Default).Apply(raw, 0);
+
+        Assert.Contains("del=1", actual);
+        Assert.Contains("  D:removed.cs", actual);
+        Assert.DoesNotContain("mod=1", actual);
+        Assert.DoesNotContain("  m:removed.cs", actual);
+    }
+
+    [Fact]
+    public void Porcelain_staged_delete_gets_its_own_bucket()
+    {
+        var raw = "## main\nD  removed.cs\n";
+
+        var actual = new GitStatusFilter(DetailLevel.Default).Apply(raw, 0);
+
+        Assert.Contains("del=1", actual);
+        Assert.Contains("  D:removed.cs", actual);
+        Assert.DoesNotContain("st=1", actual);
+        Assert.DoesNotContain("  s:removed.cs", actual);
+    }
+
+    [Fact]
+    public void Porcelain_mixed_delete_and_modify_reports_both_buckets()
+    {
+        var raw = """
+            ## main
+             D removed.cs
+             M edited.cs
+            """;
+
+        var actual = new GitStatusFilter(DetailLevel.Default).Apply(raw, 0);
+
+        Assert.Contains("mod=1", actual);
+        Assert.Contains("del=1", actual);
+        Assert.Contains("  m:edited.cs", actual);
+        Assert.Contains("  D:removed.cs", actual);
+    }
+
+    [Fact]
+    public void Repo_with_only_a_deletion_is_not_reported_ok()
+    {
+        var raw = "## main\n D removed.cs\n";
+
+        var actual = new GitStatusFilter(DetailLevel.Default).Apply(raw, 0);
+
+        Assert.StartsWith("status ", actual);
+        Assert.DoesNotContain("ok status", actual);
+    }
+
+    [Fact]
+    public void Long_form_deleted_file_gets_its_own_bucket()
+    {
+        var raw = """
+            On branch main
+
+            Changes not staged for commit:
+              (use "git add/rm <file>..." to update what will be committed)
+            	deleted:    src/gone.cs
+
+            """;
+
+        var actual = new GitStatusFilter(DetailLevel.Default).Apply(raw, 0);
+
+        Assert.Contains("del=1", actual);
+        Assert.Contains("  D:deleted:    src/gone.cs", actual);
+        Assert.DoesNotContain("mod=1", actual);
+    }
+
+    [Fact]
+    public void Conflict_codes_are_not_also_double_counted_as_deleted_or_modified()
+    {
+        var raw = "## main\nDD both_deleted.cs\n";
+
+        var actual = new GitStatusFilter(DetailLevel.Default).Apply(raw, 0);
+
+        Assert.Contains("conf=1", actual);
+        Assert.DoesNotContain("del=", actual);
+        Assert.Contains("mod=0", actual);
+        Assert.Contains("st=0", actual);
+    }
+
+    [Fact]
+    public void Unity_mode_deleted_meta_file_excluded_from_del_count()
+    {
+        var raw = """
+            ## main
+             D Assets/Foo.cs.meta
+             D Assets/Bar.cs
+            """;
+
+        var actual = new GitStatusFilter(DetailLevel.Default, unityMode: true).Apply(raw, 0);
+
+        Assert.Contains("del=1", actual);
+        Assert.Contains("meta=1", actual);
+        Assert.Contains("  D:Assets/Bar.cs", actual);
+        Assert.DoesNotContain("Assets/Foo.cs.meta", actual);
     }
 
     [Fact]

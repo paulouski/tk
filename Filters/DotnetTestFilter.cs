@@ -4,10 +4,14 @@ using Tk.Common;
 
 namespace Tk.Filters;
 
-public sealed partial class DotnetTestFilter : IOutputFilter
+public sealed partial class DotnetTestFilter(DetailLevel detailLevel = DetailLevel.Default) : IOutputFilter
 {
+    private const int MessageKeepLines = 12;
+    private const int MessageCapThreshold = 15;
+
     public string Apply(string raw, int exitCode)
     {
+        var more = detailLevel == DetailLevel.More;
         var lines = raw.Split('\n').Select(l => l.TrimEnd('\r')).ToArray();
         var failedTests = new List<FailedTest>();
         var passed = 0;
@@ -43,16 +47,33 @@ public sealed partial class DotnetTestFilter : IOutputFilter
                 continue;
             }
 
-            // Stack trace / error details for current failure (indented lines) — captured in full
-            if (currentFailure != null && line.StartsWith("    ") && !string.IsNullOrWhiteSpace(line))
+            if (currentFailure != null)
             {
-                currentFailure.Details.Add(line.Trim());
+                // "Error Message:" header — content starts in message mode by default already,
+                // this just marks the boundary explicitly (nothing to capture from the header itself).
+                if (ErrorMessageHeaderRe().IsMatch(line))
+                    continue;
+
+                // "Stack Trace:" header switches capture from the assertion message to stack frames.
+                if (StackTraceHeaderRe().IsMatch(line))
+                {
+                    currentFailure.InStackSection = true;
+                    continue;
+                }
+
+                // Empty line ends current failure context
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    currentFailure = null;
+                    continue;
+                }
+
+                if (currentFailure.InStackSection)
+                    currentFailure.Stack.Add(line.Trim());
+                else
+                    currentFailure.Message.Add(line.Trim());
                 continue;
             }
-
-            // Empty line ends current failure context
-            if (currentFailure != null && string.IsNullOrWhiteSpace(line))
-                currentFailure = null;
 
             // Duration
             var durMatch = DurationRe().Match(line);
@@ -93,7 +114,8 @@ public sealed partial class DotnetTestFilter : IOutputFilter
         if (commandFailed && failedTests.Count == 0)
             AppendRawTail(sb, lines, 12);
 
-        // Show failed tests — full detail (assertion diff + stack) for every failed test
+        // Show failed tests — assertion message (the single most useful line) plus stack
+        // context for every failed test. Default: message + first stack frame. --more: full stack.
         if (failedTests.Count > 0)
         {
             sb.AppendLine(Ansi.Dim("---"));
@@ -101,12 +123,32 @@ public sealed partial class DotnetTestFilter : IOutputFilter
             foreach (var ft in failedTests)
             {
                 sb.AppendLine($"  {ft.Name}");
-                foreach (var detail in ft.Details)
-                    sb.AppendLine($"    {detail}");
+                AppendMessage(sb, ft.Message);
+
+                var framesToShow = more ? ft.Stack.Count : Math.Min(1, ft.Stack.Count);
+                foreach (var frame in ft.Stack.Take(framesToShow))
+                    sb.AppendLine($"    {frame}");
             }
         }
 
         return sb.ToString();
+    }
+
+    private static void AppendMessage(StringBuilder sb, List<string> message)
+    {
+        if (message.Count == 0)
+            return;
+
+        if (message.Count > MessageCapThreshold)
+        {
+            foreach (var line in message.Take(MessageKeepLines))
+                sb.AppendLine($"    {line}");
+            sb.AppendLine("    …");
+            return;
+        }
+
+        foreach (var line in message)
+            sb.AppendLine($"    {line}");
     }
 
     [GeneratedRegex(@"(?:Passed|Failed)!\s+-\s+Failed:\s*(?<failed>\d+),\s*Passed:\s*(?<passed>\d+),\s*Skipped:\s*(?<skipped>\d+),\s*Total:\s*(?<total>\d+)")]
@@ -117,6 +159,12 @@ public sealed partial class DotnetTestFilter : IOutputFilter
 
     [GeneratedRegex(@"Time Elapsed\s+(\S+)")]
     private static partial Regex DurationRe();
+
+    [GeneratedRegex(@"^\s*Error Message:\s*$", RegexOptions.IgnoreCase)]
+    private static partial Regex ErrorMessageHeaderRe();
+
+    [GeneratedRegex(@"^\s*Stack Trace:\s*$", RegexOptions.IgnoreCase)]
+    private static partial Regex StackTraceHeaderRe();
 
     private static void AppendRawTail(StringBuilder sb, string[] lines, int maxLines)
     {
@@ -137,6 +185,8 @@ public sealed partial class DotnetTestFilter : IOutputFilter
     private class FailedTest(string name)
     {
         public string Name { get; } = name;
-        public List<string> Details { get; } = [];
+        public List<string> Message { get; } = [];
+        public List<string> Stack { get; } = [];
+        public bool InStackSection { get; set; }
     }
 }

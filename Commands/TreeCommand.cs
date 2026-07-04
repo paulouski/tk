@@ -11,17 +11,18 @@ public sealed class TreeCommand : ICommand
 
     public Task<int> RunAsync(CommandContext ctx, bool unityMode)
     {
-        ctx.Out.Write(Render(ctx.Args, ctx.Raw, ctx.DetailLevel, unityMode));
-        return Task.FromResult(0);
+        var (output, exitCode) = Render(ctx.Args, ctx.Raw, ctx.DetailLevel, unityMode);
+        ctx.Out.Write(output);
+        return Task.FromResult(exitCode);
     }
 
-    private static string Render(string[] args, bool raw, DetailLevel detail, bool unityMode = false)
+    private static (string Output, int ExitCode) Render(string[] args, bool raw, DetailLevel detail, bool unityMode = false)
     {
         var path = args.FirstOrDefault(a => !a.StartsWith('-')) ?? ".";
         var flags = args;
 
         if (!Directory.Exists(path))
-            return $"tk tree: {path}: no such directory\n";
+            return ($"tk tree: {path}: no such directory\n", 1);
 
         var codeFocused = flags.Contains("--code");
         var includeIgnored = raw || flags.Contains("--all");
@@ -43,7 +44,7 @@ public sealed class TreeCommand : ICommand
         if (root.Files.Count > 0)
             sb.AppendLine($"files={string.Join(",", root.Files.Take(topFiles).Select(Path.GetFileName))}");
 
-        return sb.ToString();
+        return (sb.ToString(), 0);
     }
 
     private static DirectoryNode BuildNode(string path, bool includeIgnored, bool codeFocused, int currentDepth, int maxDepth, bool unityMode = false)
@@ -63,7 +64,11 @@ public sealed class TreeCommand : ICommand
         }
 
         if (currentDepth >= maxDepth)
+        {
+            if (directories.Count > 0)
+                node.TrueChildDirCount = directories.Count;
             return node;
+        }
 
         foreach (var directory in directories)
         {
@@ -78,7 +83,10 @@ public sealed class TreeCommand : ICommand
     private static void AppendTreeNode(StringBuilder sb, DirectoryNode node, int depth)
     {
         var indent = new string(' ', depth * 2);
-        sb.AppendLine($"{indent}{Path.GetFileName(node.Path)}/ d={CountDirectories(node) - 1} f={CountFiles(node)}");
+        var dirCount = node.TrueChildDirCount is int trueCount
+            ? $"{trueCount}+"
+            : (CountDirectories(node) - 1).ToString();
+        sb.AppendLine($"{indent}{Path.GetFileName(node.Path)}/ d={dirCount} f={CountFiles(node)}");
         foreach (var child in node.Directories)
             AppendTreeNode(sb, child, depth + 1);
     }
@@ -105,5 +113,11 @@ public sealed class TreeCommand : ICommand
         public string Path { get; } = path;
         public List<DirectoryNode> Directories { get; } = [];
         public List<string> Files { get; } = [];
+
+        /// <summary>
+        /// True direct-child directory count when the depth cutoff hid this node's children
+        /// (set instead of leaving it indistinguishable from a genuine leaf at d=0).
+        /// </summary>
+        public int? TrueChildDirCount { get; set; }
     }
 }

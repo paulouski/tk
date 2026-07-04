@@ -12,17 +12,18 @@ public sealed class FilesCommand : ICommand
 
     public async Task<int> RunAsync(CommandContext ctx, bool unityMode)
     {
-        ctx.Out.Write(await RenderAsync(ctx.Args, ctx.Raw, ctx.DetailLevel, ctx.Process, unityMode));
-        return 0;
+        var (output, exitCode) = await RenderAsync(ctx.Args, ctx.Raw, ctx.DetailLevel, ctx.Process, unityMode);
+        ctx.Out.Write(output);
+        return exitCode;
     }
 
-    private static async Task<string> RenderAsync(string[] args, bool raw, DetailLevel detail, IProcessRunner runner, bool unityMode = false)
+    private static async Task<(string Output, int ExitCode)> RenderAsync(string[] args, bool raw, DetailLevel detail, IProcessRunner runner, bool unityMode = false)
     {
         var path = FindPathArg(args) ?? ".";
         var flags = args;
 
         if (!Directory.Exists(path))
-            return $"tk files: {path}: no such directory\n";
+            return ($"tk files: {path}: no such directory\n", 1);
 
         var changedOnly = flags.Contains("--changed");
         var codeFocused = flags.Contains("--code");
@@ -81,7 +82,7 @@ public sealed class FilesCommand : ICommand
         if (extra > 0)
             sb.AppendLine(Ansi.Dim($"+{extra} more files"));
 
-        return sb.ToString();
+        return (sb.ToString(), 0);
     }
 
     private static IEnumerable<string> EnumerateFiles(string path, bool includeIgnored, bool codeFocused, bool unityMode = false)
