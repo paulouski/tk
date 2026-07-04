@@ -142,12 +142,15 @@ public static class ModuleCatalog
 
     private const string LspSnippet = """
         Symbol lookup is ALWAYS these, NEVER `grep`/`rg` for `class X` / `record X` / `interface X` or a method name:
+        - `tk diag <file|project|dir>` — compile diagnostics straight from the warm daemon, no build. To check for compile errors after an edit, prefer this over `dotnet build` — it's sub-second; `dotnet build` is still needed to produce binaries or run tests.
         - `tk refs <symbol>` — all references to a symbol by name (resolves name → position; lists candidates if ambiguous)
         - `tk refs <file:line:col>` — find references at position
         - `tk callers <symbol>` — who calls this symbol (incoming call hierarchy; crosses interface dispatch)
         - `tk callers <file:line:col>` — incoming callers at position
         - `tk def <symbol>` — show where a symbol is defined (jumps to source; lists candidates if ambiguous)
         - `tk def <file:line:col>` — go to definition at position
+        - `tk impl <symbol>` — who implements this interface / overrides this abstract member (textDocument/implementation)
+        - `tk impl <file:line:col>` — find implementations at position
         - `tk rename <file:line:col> <newName>` — rename a symbol everywhere (for refactoring existing code, NOT for atomic single-file micro-edits)
         - `tk lsp status` — check LSP daemon status
         - `tk lsp stop` — stop LSP daemon
@@ -242,12 +245,18 @@ public static class ModuleCatalog
             Name: "lsp",
             Rows:
             [
+                CommandRow.Builtin(new DiagCommand(),
+                    "tk diag <file|project|dir>", "Compile diagnostics from the warm LSP daemon (no build)",
+                    extraHelpLines: [("tk diag <path> --errors", "Errors only")]),
                 CommandRow.Builtin(new RefsCommand(),
                     "tk refs <symbol>", "Find all references to a symbol (LSP-backed)",
                     extraHelpLines: [("tk refs <file:line:col>", "Find references at position")]),
                 CommandRow.Builtin(new DefCommand(),
                     "tk def <symbol>", "Find where a symbol is defined",
                     extraHelpLines: [("tk def <file:line:col>", "Go to definition at position")]),
+                CommandRow.Builtin(new ImplCommand(),
+                    "tk impl <symbol>", "Find implementations of an interface/abstract member",
+                    extraHelpLines: [("tk impl <file:line:col>", "Find implementations at position")]),
                 CommandRow.Builtin(new CallersCommand(),
                     "tk callers <symbol>", "Find incoming callers of a symbol",
                     extraHelpLines: [("tk callers <file:line:col>", "Find incoming callers at position")]),

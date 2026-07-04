@@ -43,10 +43,19 @@ public sealed class LspDaemon
     // cleanup (kills the backend child, removes the socket/pid files).
     private DaemonHost? _host;
 
-    // URIs already sent via textDocument/didOpen (required before queries; the server
-    // throws "Unexpected null" in FindAllReferencesHandler for an unopened document).
-    private readonly HashSet<string> _openedUris = new(StringComparer.Ordinal);
-    private readonly object _openLock = new();
+    // Files already sent via textDocument/didOpen (required before queries; the server
+    // throws "Unexpected null" in FindAllReferencesHandler for an unopened document), keyed
+    // by URI, with the LSP document version and the source mtime as of the last open/sync —
+    // used by DecideSyncAction to detect edits made outside this process (e.g. by the agent,
+    // with no `dotnet build` in between) and resync via didChange before querying.
+    private readonly Dictionary<string, OpenDocState> _openDocs = new(StringComparer.Ordinal);
+    // Serializes the whole open/resync decision+notification (not just the dictionary
+    // mutation) so two concurrent requests for the same URI can't race a didOpen against a
+    // didChange, or send two didChange notifications with the same version. Held across
+    // await, hence SemaphoreSlim rather than a plain lock.
+    private readonly SemaphoreSlim _openLock = new(1, 1);
+
+    private readonly record struct OpenDocState(int Version, DateTime Mtime);
 
     public DaemonState State => _state;
 
@@ -221,6 +230,11 @@ public sealed class LspDaemon
                         synchronization = new { dynamicRegistration = false, didSave = false },
                         publishDiagnostics = new { relatedInformation = true },
                         callHierarchy = new { dynamicRegistration = false },
+                        // Enables textDocument/diagnostic (LSP 3.17 pull diagnostics) — the
+                        // mechanism `tk diag` relies on. See docs/lsp-daemon-architecture.md
+                        // for why pull (not publishDiagnostics push) was chosen.
+                        diagnostic = new { dynamicRegistration = false },
+                        implementation = new { dynamicRegistration = false },
                     },
                     window = new
                     {
@@ -463,7 +477,37 @@ public sealed class LspDaemon
         };
 
         var result = await loop.SendRequestAsync("textDocument/definition", defParams, ct).ConfigureAwait(false);
+        return ParseLocationOrLinkResult(result);
+    }
 
+    /// <summary>
+    /// Finds implementation location(s) for the symbol at the given position via
+    /// textDocument/implementation (e.g. classes implementing an interface, or overrides of
+    /// an abstract member). Same Location/LocationLink result shape as textDocument/definition.
+    /// </summary>
+    private async Task<LspLocation[]> FindImplementationsAsync(
+        MessageLoop loop, string filePath, int line, int character, CancellationToken ct)
+    {
+        var fileUri = new Uri(filePath).ToString();
+        await EnsureFileOpenAsync(loop, filePath, fileUri, ct).ConfigureAwait(false);
+
+        var implParams = new
+        {
+            textDocument = new { uri = fileUri },
+            position = new { line, character }
+        };
+
+        var result = await loop.SendRequestAsync("textDocument/implementation", implParams, ct).ConfigureAwait(false);
+        return ParseLocationOrLinkResult(result);
+    }
+
+    /// <summary>
+    /// Shared result parsing for textDocument/definition and textDocument/implementation:
+    /// both return null/undefined, a single Location, an array of Location, or an array of
+    /// LocationLink (targetUri / targetSelectionRange / targetRange).
+    /// </summary>
+    private static LspLocation[] ParseLocationOrLinkResult(JsonElement result)
+    {
         if (result.ValueKind == JsonValueKind.Null || result.ValueKind == JsonValueKind.Undefined)
             return [];
 
@@ -503,6 +547,72 @@ public sealed class LspDaemon
 
         return [.. locations];
     }
+
+    /// <summary>
+    /// Pulls diagnostics for a single file via textDocument/diagnostic (LSP 3.17 pull
+    /// diagnostics — see docs/lsp-daemon-architecture.md for why pull was chosen over
+    /// publishDiagnostics push). No previousResultId is sent, so the server always answers
+    /// with a full report (never "unchanged").
+    /// </summary>
+    private async Task<LspDiagnostic[]> FindFileDiagnosticsAsync(
+        MessageLoop loop, string filePath, CancellationToken ct)
+    {
+        var fileUri = new Uri(filePath).ToString();
+        await EnsureFileOpenAsync(loop, filePath, fileUri, ct).ConfigureAwait(false);
+
+        var diagParams = new { textDocument = new { uri = fileUri } };
+        var result = await loop.SendRequestAsync("textDocument/diagnostic", diagParams, ct).ConfigureAwait(false);
+
+        if (result.ValueKind == JsonValueKind.Null || result.ValueKind == JsonValueKind.Undefined)
+            return [];
+
+        // DocumentDiagnosticReport: { kind: "full"|"unchanged", resultId?, items?: Diagnostic[] }
+        if (!result.TryGetProperty("kind", out var kindProp) || kindProp.GetString() != "full")
+            return [];
+
+        if (!result.TryGetProperty("items", out var itemsProp) || itemsProp.ValueKind != JsonValueKind.Array)
+            return [];
+
+        var diagnostics = new List<LspDiagnostic>();
+        foreach (var item in itemsProp.EnumerateArray())
+        {
+            if (!item.TryGetProperty("range", out var range)) continue;
+            if (!range.TryGetProperty("start", out var start)) continue;
+            if (!range.TryGetProperty("end", out var end)) continue;
+
+            var severity = item.TryGetProperty("severity", out var sevProp) ? sevProp.GetInt32() : 1;
+            string? code = null;
+            if (item.TryGetProperty("code", out var codeProp))
+            {
+                code = codeProp.ValueKind == JsonValueKind.String
+                    ? codeProp.GetString()
+                    : codeProp.ValueKind is JsonValueKind.Number
+                        ? codeProp.GetRawText()
+                        : null;
+            }
+            var message = item.TryGetProperty("message", out var msgProp) ? msgProp.GetString() ?? "" : "";
+
+            diagnostics.Add(new LspDiagnostic(
+                start.TryGetProperty("line", out var sl) ? sl.GetInt32() : 0,
+                start.TryGetProperty("character", out var sc) ? sc.GetInt32() : 0,
+                end.TryGetProperty("line", out var el) ? el.GetInt32() : 0,
+                end.TryGetProperty("character", out var ec) ? ec.GetInt32() : 0,
+                DiagnosticSeverityName(severity),
+                code,
+                message));
+        }
+
+        return [.. diagnostics];
+    }
+
+    private static string DiagnosticSeverityName(int severity) => severity switch
+    {
+        1 => "error",
+        2 => "warning",
+        3 => "info",
+        4 => "hint",
+        _ => "info",
+    };
 
     /// <summary>
     /// Finds incoming callers of the symbol at the given position using the LSP call hierarchy.
@@ -626,29 +736,91 @@ public sealed class LspDaemon
     }
 
     /// <summary>
-    /// Sends textDocument/didOpen for a file once. Roslyn requires the document to be open
-    /// before it will answer position-based queries; otherwise it faults with "Unexpected null".
+    /// Sends textDocument/didOpen for a file the first time it's queried; on later calls,
+    /// resyncs it via <see cref="DecideSyncAction"/> against the file's current mtime — a
+    /// didChange (full-document replace) if it was edited on disk since the last open/sync
+    /// (e.g. by the agent, with no `dotnet build` in between), or a didClose if it was
+    /// deleted. Roslyn requires the document to be open before it will answer position-based
+    /// queries; otherwise it faults with "Unexpected null".
     /// </summary>
     private async Task EnsureFileOpenAsync(MessageLoop loop, string filePath, string fileUri, CancellationToken ct)
     {
-        lock (_openLock)
+        await _openLock.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
-            if (!_openedUris.Add(fileUri))
+            var fileExists = File.Exists(filePath);
+            var currentMtime = fileExists ? File.GetLastWriteTimeUtc(filePath) : default;
+
+            if (!_openDocs.TryGetValue(fileUri, out var state))
+            {
+                if (!fileExists) return;
+
+                string text;
+                try { text = await File.ReadAllTextAsync(filePath, ct).ConfigureAwait(false); }
+                catch { return; }
+
+                await loop.SendNotificationAsync("textDocument/didOpen", new
+                {
+                    textDocument = new { uri = fileUri, languageId = "csharp", version = 1, text }
+                }, ct).ConfigureAwait(false);
+                Log($"didOpen {fileUri}");
+                _openDocs[fileUri] = new OpenDocState(1, currentMtime);
+
+                // Give the server a moment to register the document before querying.
+                await Task.Delay(300, ct).ConfigureAwait(false);
                 return;
+            }
+
+            switch (DecideSyncAction(state.Mtime, fileExists, currentMtime))
+            {
+                case SyncAction.Close:
+                    await loop.SendNotificationAsync("textDocument/didClose", new
+                    {
+                        textDocument = new { uri = fileUri }
+                    }, ct).ConfigureAwait(false);
+                    _openDocs.Remove(fileUri);
+                    Log($"didClose (file missing) {fileUri}");
+                    break;
+
+                case SyncAction.Change:
+                    string newText;
+                    try { newText = await File.ReadAllTextAsync(filePath, ct).ConfigureAwait(false); }
+                    catch { return; }
+
+                    // A rangeless (whole-document) textDocument/didChange — the LSP-spec shape
+                    // for full-document sync — crashes this server version: its
+                    // DidChangeHandler.GetUpdatedSourceText dereferences the (absent) range
+                    // unconditionally (NullReferenceException in
+                    // ProtocolConversions.RangeToLinePositionSpan), which takes the whole
+                    // Roslyn child process down (SIGABRT), zombie-ing the daemon. didClose +
+                    // didOpen achieves the same "resync to current content" outcome without
+                    // going anywhere near that code path, at the cost of one extra
+                    // notification — resync is already the cold path (only fires when the
+                    // file changed since it was last opened), so this isn't perf-sensitive.
+                    await loop.SendNotificationAsync("textDocument/didClose", new
+                    {
+                        textDocument = new { uri = fileUri }
+                    }, ct).ConfigureAwait(false);
+                    await loop.SendNotificationAsync("textDocument/didOpen", new
+                    {
+                        textDocument = new { uri = fileUri, languageId = "csharp", version = 1, text = newText }
+                    }, ct).ConfigureAwait(false);
+                    _openDocs[fileUri] = new OpenDocState(1, currentMtime);
+                    Log($"didClose+didOpen (stale) {fileUri}");
+
+                    // Give the server a moment to reprocess before querying.
+                    await Task.Delay(300, ct).ConfigureAwait(false);
+                    break;
+
+                case SyncAction.None:
+                default:
+                    break;
+            }
         }
-
-        string text;
-        try { text = await File.ReadAllTextAsync(filePath, ct).ConfigureAwait(false); }
-        catch { return; }
-
-        await loop.SendNotificationAsync("textDocument/didOpen", new
+        finally
         {
-            textDocument = new { uri = fileUri, languageId = "csharp", version = 1, text }
-        }, ct).ConfigureAwait(false);
-        Log($"didOpen {fileUri}");
-
-        // Give the server a moment to register the document before querying.
-        await Task.Delay(300, ct).ConfigureAwait(false);
+            _openLock.Release();
+        }
     }
 
     private async Task HandleClientAsync(Socket client, MessageLoop loop, CancellationToken ct)
@@ -813,6 +985,67 @@ public sealed class LspDaemon
                 var locs = await FindDefinitionAsync(loop, defPath, defLine, defChar, ct).ConfigureAwait(false);
                 Log($"def query done, {locs.Length} locations");
                 response = new DaemonResponse(true, null, locs);
+            }
+            else if (request.Method == "impl")
+            {
+                await WaitForReadyAsync(ct).ConfigureAwait(false);
+
+                string implPath;
+                int implLine;
+                int implChar;
+
+                if (request.FilePath is not null)
+                {
+                    implPath = request.FilePath;
+                    implLine = request.Line;
+                    implChar = request.Character;
+                }
+                else if (request.Symbol is not null)
+                {
+                    var matches = await ResolveSymbolAsync(loop, request.Symbol, ct).ConfigureAwait(false);
+                    if (matches.Count == 0)
+                    {
+                        response = new DaemonResponse(false, $"symbol '{request.Symbol}' not found", null);
+                        await writer.WriteLineAsync(JsonSerializer.Serialize(response, LspMessage.Options)).ConfigureAwait(false);
+                        return;
+                    }
+                    if (matches.Count > 1)
+                    {
+                        response = new DaemonResponse(true, null, null) with { Candidates = matches.ToArray() };
+                        await writer.WriteLineAsync(JsonSerializer.Serialize(response, LspMessage.Options)).ConfigureAwait(false);
+                        return;
+                    }
+                    var loc = matches[0].Location;
+                    implPath = new Uri(loc.Uri).LocalPath;
+                    implLine = loc.StartLine;
+                    implChar = loc.StartChar;
+                }
+                else
+                {
+                    response = new DaemonResponse(false, "impl requires a file position or symbol name", null);
+                    await writer.WriteLineAsync(JsonSerializer.Serialize(response, LspMessage.Options)).ConfigureAwait(false);
+                    return;
+                }
+
+                Log($"impl query: {implPath}:{implLine}:{implChar}");
+                var implLocs = await FindImplementationsAsync(loop, implPath, implLine, implChar, ct).ConfigureAwait(false);
+                Log($"impl query done, {implLocs.Length} locations");
+                response = new DaemonResponse(true, null, implLocs);
+            }
+            else if (request.Method == "diag" && request.Paths is { Length: > 0 } diagPaths)
+            {
+                await WaitForReadyAsync(ct).ConfigureAwait(false);
+                Log($"diag query: {diagPaths.Length} file(s)");
+
+                var byFile = new List<FileDiagnostics>();
+                foreach (var path in diagPaths)
+                {
+                    var diags = await FindFileDiagnosticsAsync(loop, path, ct).ConfigureAwait(false);
+                    byFile.Add(new FileDiagnostics(new Uri(path).ToString(), diags));
+                }
+
+                Log($"diag query done, {byFile.Sum(f => f.Diagnostics.Length)} diagnostics across {byFile.Count} file(s)");
+                response = new DaemonResponse(true, null, null) with { DiagnosticsByFile = byFile.ToArray() };
             }
             else if (request.Method == "rename" && request.FilePath is not null && request.NewName is not null)
             {

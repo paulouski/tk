@@ -23,8 +23,8 @@ this phase (deferred to the TypeScript-backend work).
 | Socket/PID file cleanup on exit | `DaemonHost` | Same `finally` block as above. |
 | LSP handshake, capabilities, `initialize`/`initialized` | `LspDaemon` (session) | Unchanged. |
 | `workspace/configuration`, `client/registerCapability` answers | `LspDaemon` (session) | Unchanged. |
-| `didOpen` / document sync (mtime resync) | `LspDaemon` (session) | Unchanged (`DecideSyncAction` pure helper). |
-| Request handling (def/refs/callers/rename/symbols) | `LspDaemon` (session) | Unchanged. |
+| `didOpen`/`didChange`/`didClose` document sync (mtime resync) | `LspDaemon` (session) | Wired in wave 2 (see below) — `DecideSyncAction` was a pure helper with unit tests but was not actually called anywhere; `EnsureFileOpenAsync` now uses it on every query. |
+| Request handling (def/refs/callers/rename/symbols/diag/impl) | `LspDaemon` (session) | `diag`/`impl` added in wave 2 (see below). |
 | Readiness signal detection (`projectInitializationComplete`) | `LspDaemon` (session) / `ILanguageBackend.IsReadySignal` | Unchanged. |
 | `DaemonClient` / CLI command behavior | `Commands/*`, `Lsp/DaemonClient.cs` | Unchanged public behavior; `LspStatusCommand` now calls `DaemonHost` statics instead of re-implementing orphan/liveness logic inline. |
 
@@ -60,3 +60,85 @@ All other daemon behavior — wave-1 fixes (graceful stop → PID verify →
 force-kill, stale-socket connect probe, orphan cleanup, SIGTERM handler,
 `.pid` file format), document sync, and request handling — is preserved
 identically.
+
+## Wave 2: `tk diag` and `tk impl`
+
+### Diagnostics mechanism: pull (`textDocument/diagnostic`), not push, not workspace-wide
+
+The Roslyn server backing this daemon (`Microsoft.CodeAnalysis.LanguageServer`, resolved via
+the VS Code C# extension's `.roslyn` directory or `TK_LSP_CSHARP_SERVER`) moved to the LSP
+3.17 **pull diagnostics** model — its own changelog documents "Move VS Code To Pull
+Diagnostics" as a deliberate migration away from server-initiated `publishDiagnostics` push.
+Three mechanisms were available and considered:
+
+1. **`textDocument/diagnostic` (per file, pull) — chosen.** Client sends the request, gated on
+   advertising `capabilities.textDocument.diagnostic` in `initialize` (added to the daemon's
+   capabilities alongside the existing `references`/`rename`/etc.). The daemon never sends a
+   `previousResultId`, so the server always answers with a full `DocumentDiagnosticReport`
+   (`{ kind: "full", items: Diagnostic[] }`) rather than `"unchanged"` — simplest correct
+   behavior for a short-lived CLI invocation with no result-id cache to maintain.
+2. **`workspace/diagnostic` (whole-workspace pull).** Exists in the protocol and the server's
+   changelog references "workspace diagnostics", but its exact capability gating and
+   partial-result-stream shape for this server version were not validated here, and a
+   solution-wide pull is unnecessary complexity when per-file pull already answers both the
+   single-file and project/directory-scope cases (see below).
+3. **`publishDiagnostics` push (listen after `didOpen`).** Would require buffering
+   asynchronous, server-initiated notifications per file and racing them against an
+   after-open deadline — exactly the complexity the server's own pull migration was meant to
+   avoid. Not used.
+
+`tk diag <file>` therefore pulls one file. `tk diag <project.csproj|dir>` resolves the scope
+to every `.cs` file under that directory (excluding `bin`/`obj`) and pulls them one at a time
+over the same daemon connection, aggregating into one response — there is no dependency on
+`workspace/diagnostic` at all. The file count is capped (`DiagCommand.DefaultMaxFiles`,
+raised by `--more`) since each file is a separate pull request; narrowing the path scopes it
+further. This is a rough wall-clock bound, not a diagnostics-count cap — every diagnostic
+found in the (possibly capped) scope is reported.
+
+### Freshness: wiring `DecideSyncAction` into `EnsureFileOpenAsync`
+
+Diagnostics are only useful if they reflect the file's current on-disk content, but the
+daemon's open-document tracking (`EnsureFileOpenAsync`) previously only ever sent
+`textDocument/didOpen` once per URI (tracked in a `HashSet<string>`) and never resynced —
+`DecideSyncAction` existed as a pure, unit-tested helper (`Lsp/LspDaemon.cs`,
+`Tk.Tests/Lsp/DocSyncTests.cs`) but nothing called it. Any edit made to an already-opened
+file without an intervening `dotnet build` (which doesn't touch the daemon at all) would have
+been invisible to a long-lived warm daemon — a latent staleness bug affecting `refs`/`def`/
+`callers`/`rename` too, just less visible there than it is for `diag`, whose entire purpose is
+reacting to uncommitted edits.
+
+`EnsureFileOpenAsync` now tracks `(Version, Mtime)` per open URI and, on every query, compares
+the file's current mtime via `DecideSyncAction`: `None` (up to date) does nothing; `Close`
+sends `textDocument/didClose` and forgets the URI (the file was deleted); `Change` re-reads
+the file and resyncs it — see below for exactly how. The whole decide-and-notify sequence for
+a URI is serialized under an async `SemaphoreSlim` (previously a raw `lock` guarded only the
+`HashSet.Add` check, not the `didOpen` that followed it) so two concurrent requests for the
+same file can't race a `didOpen` against a resync.
+
+**`Change` resyncs via `didClose` + `didOpen`, not `didChange`.** The first implementation
+sent a spec-legal rangeless `textDocument/didChange` (`contentChanges: [{ text }]`, no
+`range` — the standard shape for whole-document/full sync). Live-tested against the actual
+server (`Microsoft.CodeAnalysis.LanguageServer` from the VS Code C# extension), this crashed
+it outright: `DidChangeHandler.GetUpdatedSourceText` → `ProtocolConversions.
+RangeToLinePositionSpan` dereferences the content change's range unconditionally, so an
+absent range throws `NullReferenceException`, which is unhandled at the top of the request
+queue and takes the whole Roslyn child process down (`SIGABRT`, exit code 134) — silently
+zombie-ing the daemon (it keeps reporting `running`; every subsequent query then hangs or
+fails against a dead child, since nothing currently detects a post-`Ready` backend exit — a
+pre-existing gap, not introduced here, and out of scope for this wave). Sending `didClose`
+then a fresh `didOpen` with the new content achieves the identical "resync to current
+content" outcome without going anywhere near that handler at all. Resync is already the cold
+path (only fires when the file changed on disk since it was last opened), so the extra
+notification is not perf-sensitive. This was caught by the mandatory live edit→diag→revert
+cycle (see below) — it could not have been caught by unit tests, which is exactly why that
+live check is a required part of this feature, not optional polish.
+
+### `tk impl`
+
+`textDocument/implementation` returns the same `Location`/`LocationLink` result shape as
+`textDocument/definition`, so `FindDefinitionAsync` and the new `FindImplementationsAsync`
+share one result parser (`ParseLocationOrLinkResult`). Symbol-name resolution, ambiguity
+handling (`Candidates`), and the not-found error shape are identical to `def`/`refs`/
+`callers` — `impl` reuses the existing `DaemonResponse.Locations` field, no new protocol
+field needed (unlike `diag`, which added `DaemonRequest.Paths` and
+`DaemonResponse.DiagnosticsByFile`).

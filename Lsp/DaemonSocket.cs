@@ -32,14 +32,26 @@ public record SymbolMatch(string Name, string ContainerName, string Kind, LspLoc
 public record CallerInfo(string Name, string ContainerName, string Kind, LspLocation Location, LspLocation[] CallSites);
 
 /// <summary>
-/// Request sent to the LSP daemon over the unix socket.
+/// A single compiler/analyzer diagnostic returned by a textDocument/diagnostic pull, in
+/// 0-based LSP coordinates. Severity is one of "error", "warning", "info", "hint".
 /// </summary>
-public record DaemonRequest(string Method, string? FilePath, int Line, int Character, string? Symbol, string? NewName = null);
+public record LspDiagnostic(int Line, int Character, int EndLine, int EndChar, string Severity, string? Code, string Message);
+
+/// <summary>
+/// All diagnostics pulled for a single file (identified by its file:// URI).
+/// </summary>
+public record FileDiagnostics(string Uri, LspDiagnostic[] Diagnostics);
+
+/// <summary>
+/// Request sent to the LSP daemon over the unix socket. <see cref="Paths"/> is used only by
+/// "diag", which can query multiple files (a project/directory scope) in a single round trip.
+/// </summary>
+public record DaemonRequest(string Method, string? FilePath, int Line, int Character, string? Symbol, string? NewName = null, string[]? Paths = null);
 
 /// <summary>
 /// Response from the LSP daemon.
 /// </summary>
-public record DaemonResponse(bool Success, string? Error, LspLocation[]? Locations, FileEdits[]? Edits = null, SymbolMatch[]? Candidates = null, CallerInfo[]? Callers = null);
+public record DaemonResponse(bool Success, string? Error, LspLocation[]? Locations, FileEdits[]? Edits = null, SymbolMatch[]? Candidates = null, CallerInfo[]? Callers = null, FileDiagnostics[]? DiagnosticsByFile = null);
 
 /// <summary>
 /// The daemon's own process identity, persisted next to its socket: the daemon process's
