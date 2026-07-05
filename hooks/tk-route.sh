@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # tk-route.sh — PreToolUse hook: routes single commands through compact-output
-# proxies. `dotnet build|test|restore` and `git status|log` are routed to `tk`;
-# any other recognized command falls back to `rtk rewrite` (if `rtk` is
-# installed). Also nudges symbol-grep toward `tk def|refs|callers`.
+# proxies. `dotnet build|test|restore` and `git status|log` (optionally prefixed
+# by `-C <path>` / `-c <key=val>` global flags) are routed to `tk`; any other
+# recognized command falls back to `rtk rewrite` (if `rtk` is installed). Also
+# nudges symbol-grep toward `tk def|refs|callers`, and nudges large whole-file
+# Reads (no offset/limit) toward a slice or a symbol lookup.
 #
 # Design note: this hook degrades to a no-op — if the running Claude Code version
 # ignores `updatedInput`/`additionalContext`, the original command simply runs
@@ -12,15 +14,18 @@
 INPUT=$(cat)
 
 tool=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
-[[ "$tool" != "Bash" ]] && exit 0
+[[ "$tool" != "Bash" && "$tool" != "Read" ]] && exit 0
 
-cmd=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
-[[ -z "$cmd" ]] && exit 0
-
-# Capture cwd to tag log entries. Log to a single global file (~/.claude/) rather
-# than per-repo, so a globally installed hook never drops .tk-hook.log into every
-# repo's working tree. Each line carries the cwd column to disambiguate by repo.
+# Capture cwd to tag log entries. Log to a single global directory (~/.claude/)
+# rather than per-repo, so a globally installed hook never drops a log file into
+# every repo's working tree. Each line carries the cwd column to disambiguate by
+# repo. The log file rotates daily (tk-hook-YYYYMMDD.log) so the nudge throttle
+# below only ever greps a single day's worth of lines instead of an
+# ever-growing file. Old dated files (and any pre-rotation tk-hook.log) are left
+# alone — no migration, no deletion.
 _cwd=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
+_today=$(date +%Y%m%d)
+_log_file="${HOME}/.claude/tk-hook-${_today}.log"
 _log_decision() {
   local decision="$1" raw_cmd="$2"
   [[ -z "$HOME" ]] && return
@@ -28,8 +33,42 @@ _log_decision() {
   local one_line
   one_line=$(printf '%s' "$raw_cmd" | tr '\n' ' ')
   printf '%s\t%s\t%s\t%s\n' "$(date +%s)" "$decision" "$_cwd" "$one_line" \
-    >> "${HOME}/.claude/tk-hook.log" 2>/dev/null || true
+    >> "$_log_file" 2>/dev/null || true
 }
+
+# --- Read handling: nudge away from large whole-file reads with no offset/limit. ---
+if [[ "$tool" == "Read" ]]; then
+  file_path=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
+  offset=$(printf '%s' "$INPUT" | jq -r '.tool_input.offset // empty' 2>/dev/null)
+  limit=$(printf '%s' "$INPUT" | jq -r '.tool_input.limit // empty' 2>/dev/null)
+
+  if [[ -z "$offset" && -z "$limit" && -n "$file_path" && -f "$file_path" ]]; then
+    _lines=$(wc -l < "$file_path" 2>/dev/null | tr -d '[:space:]')
+    if [[ "$_lines" =~ ^[0-9]+$ ]] && (( _lines > 400 )); then
+      # Throttle: skip if the last logged "nudge-read" is under 300s old. Independent
+      # of the symbol-grep "nudge" throttle below — neither suppresses the other.
+      _nudge=1
+      if [[ -n "$HOME" && -r "$_log_file" ]]; then
+        _last_nudge_ts=$(grep -F "$(printf '\tnudge-read\t')" "$_log_file" 2>/dev/null | tail -1 | cut -f1)
+        if [[ "$_last_nudge_ts" =~ ^[0-9]+$ ]]; then
+          _now=$(date +%s)
+          (( _now - _last_nudge_ts < 300 )) && _nudge=0
+        fi
+      fi
+
+      if [[ "$_nudge" -eq 1 ]]; then
+        _log_decision "nudge-read" "$file_path"
+        jq -n \
+          '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"allow",additionalContext:"Large file read without offset/limit detected. If you need one symbol or section, prefer codebase-memory MCP get_code_snippet / `tk def <Symbol>` to locate it, or `tk view <file>` for a structure map, then Read the relevant slice with offset/limit. Full reads are right when editing or reviewing the whole file."}}'
+      fi
+    fi
+  fi
+  exit 0
+fi
+
+# --- Bash handling below (existing routing/nudge logic). ---
+cmd=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
+[[ -z "$cmd" ]] && exit 0
 
 # Strip leading whitespace
 trimmed="${cmd#"${cmd%%[![:space:]]*}"}"
@@ -60,6 +99,13 @@ esac
 [[ "$stripped" =~ \&[[:space:]]*$ ]] && unsafe=1   # trailing background &
 [[ "$cmd" == *$'\n'* ]] && unsafe=1
 
+# Same quote/escape-stripping applied to $trimmed (rather than $cmd), used only to
+# detect the git subcommand past a leading `-C <path>`/`-c <k=v>` prefix — a quoted
+# path (e.g. `-C "/some path"`) collapses to nothing but leaves the surrounding
+# whitespace, so the subcommand regexes below still line up correctly.
+route_probe=$(printf '%s' "$trimmed" | sed -E "s/\\\\.//g; s/'[^']*'//g; s/\"[^\"]*\"//g")
+GIT_GLOBAL_FLAGS_RE='(-C|-c)[[:space:]]+[^[:space:]]*[[:space:]]+'
+
 # REWRITE: only for safe, single commands
 if [[ "$unsafe" -eq 0 ]]; then
   new=""
@@ -67,8 +113,9 @@ if [[ "$unsafe" -eq 0 ]]; then
     new="tk $trimmed"
   # Only status/log. diff/show are deliberately NOT routed: the agent often needs
   # the full diff/patch to understand or apply a change, and tk compacts diffs
-  # (and can drop added/changed lines), which would mislead it.
-  elif [[ "$trimmed" =~ ^git[[:space:]]+(status|log)([[:space:]]|$) ]]; then
+  # (and can drop added/changed lines), which would mislead it. A leading run of
+  # `-C <path>` / `-c <key=val>` global flags before the subcommand is allowed.
+  elif [[ "$route_probe" =~ ^git[[:space:]]+(${GIT_GLOBAL_FLAGS_RE})*(status|log)([[:space:]]|$) ]]; then
     new="tk $trimmed"
   fi
 
@@ -81,8 +128,9 @@ if [[ "$unsafe" -eq 0 ]]; then
 
   # git diff/show are deliberately excluded from rtk rewriting too: the agent
   # often needs the full diff/patch to understand or apply a change, and
-  # compaction can drop added/changed lines, which would mislead it.
-  if [[ "$trimmed" =~ ^git[[:space:]]+(diff|show)([[:space:]]|$) ]]; then
+  # compaction can drop added/changed lines, which would mislead it. Same
+  # `-C`/`-c` prefix allowance as above, so `git -C <path> diff` still excludes.
+  if [[ "$route_probe" =~ ^git[[:space:]]+(${GIT_GLOBAL_FLAGS_RE})*(diff|show)([[:space:]]|$) ]]; then
     exit 0
   fi
 
@@ -118,7 +166,6 @@ if [[ "$trimmed" =~ ^(grep|egrep|fgrep|rg)[[:space:]] ]] && \
   # doesn't get re-nudged on every call. Stateless hook, so this is a log-timestamp check,
   # not a session counter. An unreadable/missing log means "just nudge" (no throttle).
   _nudge=1
-  _log_file="${HOME}/.claude/tk-hook.log"
   if [[ -n "$HOME" && -r "$_log_file" ]]; then
     _last_nudge_ts=$(grep -F "$(printf '\tnudge\t')" "$_log_file" 2>/dev/null | tail -1 | cut -f1)
     if [[ "$_last_nudge_ts" =~ ^[0-9]+$ ]]; then

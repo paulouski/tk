@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # test-tk-route.sh — case-matrix test for hooks/tk-route.sh, the production PreToolUse router
 # that has had zero test coverage. Runs each case against the REAL hook script in a fully
-# isolated environment: a temp HOME (so the decision log never touches the real
-# ~/.claude/tk-hook.log) and a controlled PATH containing a FAKE `rtk` stub (recognizes a fixed
+# isolated environment: a temp HOME (so the decision log never touches the real, dated
+# ~/.claude/tk-hook-YYYYMMDD.log) and a controlled PATH containing a FAKE `rtk` stub (recognizes a fixed
 # command list, prints "rtk <cmd>" and exits 0; anything else exits 1) plus the real `jq` and
 # the handful of core utils the hook script itself needs.
 #
@@ -27,7 +27,7 @@ REAL_JQ="$(command -v jq || true)"
 FAKE_BIN="$WORK/bin"
 mkdir -p "$FAKE_BIN"
 ln -s "$REAL_JQ" "$FAKE_BIN/jq"
-for tool in cat date tr bash sh mkdir rm sed grep cut tail; do
+for tool in cat date tr bash sh mkdir rm sed grep cut tail wc; do
   p="$(command -v "$tool" || true)"
   [[ -n "$p" ]] && ln -sf "$p" "$FAKE_BIN/$tool"
 done
@@ -73,6 +73,12 @@ for f in "$FAKE_BIN"/*; do
   [[ "$base" == "jq" ]] && continue
   ln -sf "$f" "$FAKE_BIN_NO_JQ/$base"
 done
+
+# The hook rotates its decision log daily via the real `date +%Y%m%d` (not faked here) —
+# compute the same filename the hook itself computes, so log-content assertions below read
+# the right file without needing to fake `date`.
+TODAY="$(date +%Y%m%d)"
+today_log_file() { printf '%s' "$FAKE_HOME/.claude/tk-hook-${TODAY}.log"; }
 
 PASS=0
 FAIL=0
@@ -130,8 +136,8 @@ hook_run() {
   OUT="$(PATH="$path" HOME="$FAKE_HOME" bash "$HOOK" <<<"$input" 2>"$WORK/stderr")"
   RC=$?
   ERR="$(cat "$WORK/stderr")"
-  if [[ -f "$FAKE_HOME/.claude/tk-hook.log" ]]; then
-    LOG_CONTENT="$(cat "$FAKE_HOME/.claude/tk-hook.log")"
+  if [[ -f "$(today_log_file)" ]]; then
+    LOG_CONTENT="$(cat "$(today_log_file)")"
   else
     LOG_CONTENT=""
   fi
@@ -177,8 +183,8 @@ hook_run_keep_home() {
   OUT="$(PATH="$path" HOME="$FAKE_HOME" bash "$HOOK" <<<"$input" 2>"$WORK/stderr")"
   RC=$?
   ERR="$(cat "$WORK/stderr")"
-  if [[ -f "$FAKE_HOME/.claude/tk-hook.log" ]]; then
-    LOG_CONTENT="$(cat "$FAKE_HOME/.claude/tk-hook.log")"
+  if [[ -f "$(today_log_file)" ]]; then
+    LOG_CONTENT="$(cat "$(today_log_file)")"
   else
     LOG_CONTENT=""
   fi
@@ -280,12 +286,26 @@ expect_rewrite 'backslash-escaped pipe -> safe, routed to rtk' \
 expect_rewrite "redirect -> still routed to tk" "git status > /tmp/tk-route-test-out.txt" \
   "tk git status > /tmp/tk-route-test-out.txt" "route-tk"
 
-# ── git -C / git -c: the routing regex anchors on '^git status'/'^git log', so these do NOT
-# match — documents the current (gap) behavior rather than asserting an "ideal" one. ────────
-expect_passthrough "git -C <dir> status -> pass (regex doesn't match, documented gap)" \
-  "git -C /some/other/repo status"
-expect_passthrough "git -c k=v status -> pass (regex doesn't match, documented gap)" \
-  "git -c core.pager=cat status"
+# ── git -C / git -c: a leading run of `-C <path>` / `-c <key=val>` global flags before the
+# subcommand is recognized and routed just like the bare form. ─────────────────────────────
+expect_rewrite "git -C <dir> status -> tk" \
+  "git -C /some/other/repo status" "tk git -C /some/other/repo status" "route-tk"
+expect_rewrite "git -c k=v status -> tk" \
+  "git -c core.pager=cat status" "tk git -c core.pager=cat status" "route-tk"
+expect_rewrite "git -c k=v -C <dir> log --oneline -> tk (combo)" \
+  "git -c core.pager=cat -C /x/y log --oneline" \
+  "tk git -c core.pager=cat -C /x/y log --oneline" "route-tk"
+expect_rewrite 'git -C "<quoted path with spaces>" status -> tk' \
+  'git -C "/some path/with spaces" status' \
+  'tk git -C "/some path/with spaces" status' "route-tk"
+expect_rewrite "git -C <dir> log -5 -> tk" \
+  "git -C /some/other/repo log -5" "tk git -C /some/other/repo log -5" "route-tk"
+
+# git -C/-c diff|show: still excluded, same reasoning as bare diff/show.
+expect_passthrough "git -C <dir> diff -> pass (excluded, same as bare diff)" \
+  "git -C /some/other/repo diff"
+expect_passthrough "git -C <dir> show HEAD -> pass (excluded, same as bare show)" \
+  "git -C /some/other/repo show HEAD"
 
 # ── rtk unavailable ──────────────────────────────────────────────────────────
 expect_passthrough "rtk missing from PATH -> pass" "docker ps" "/repo" "$FAKE_BIN_NO_RTK"
@@ -330,6 +350,119 @@ expect_nudge 'symbol grep (quoted alternation) -> nudge' \
 
 # Plain free-text grep, no symbol shape -> no nudge (and no rewrite either).
 expect_no_nudge 'plain free-text grep -> no nudge' 'grep -rn "TODO" src'
+
+# ── daily log rotation: decisions land in a dated file (tk-hook-YYYYMMDD.log), never the
+# old flat tk-hook.log. ──────────────────────────────────────────────────────────────────────
+rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
+hook_run "$FAKE_BIN" "git status"
+assert_true "log rotation: computed dated log filename matches YYYYMMDD pattern" \
+  "$([[ "$(today_log_file)" =~ tk-hook-[0-9]{8}\.log$ ]] && echo 1 || echo 0)"
+assert_true "log rotation: dated log file was created" \
+  "$([[ -f "$(today_log_file)" ]] && echo 1 || echo 0)"
+assert_true "log rotation: dated log file contains the route-tk line" \
+  "$([[ "$LOG_CONTENT" == *$'\t'"route-tk"$'\t'* ]] && echo 1 || echo 0)"
+assert_true "log rotation: legacy flat tk-hook.log is NOT created" \
+  "$([[ ! -f "$FAKE_HOME/.claude/tk-hook.log" ]] && echo 1 || echo 0)"
+
+# ── Read-tool nudge: large whole-file reads (no offset/limit, >400 lines) get an
+# additionalContext hint; silent for small files, missing files, or when offset/limit is
+# given; throttled like the symbol-grep nudge but independently (own "nudge-read" decision,
+# own 300s window, does not suppress or get suppressed by the symbol-grep "nudge"). ─────────
+BIG_FILE="$WORK/big_file.txt"
+seq 1 500 > "$BIG_FILE"
+SMALL_FILE="$WORK/small_file.txt"
+seq 1 10 > "$SMALL_FILE"
+MISSING_FILE="$WORK/does_not_exist.txt"
+
+# hook_run_read <path> <file> <offset> <limit> [cwd]
+# offset/limit empty string means "absent from tool_input" (not merely null).
+hook_run_read() {
+  local path="$1" file="$2" offset="$3" limit="$4" cwd="${5:-/repo}"
+  rm -rf "$FAKE_HOME"
+  mkdir -p "$FAKE_HOME/.claude"
+  hook_run_read_keep_home "$path" "$file" "$offset" "$limit" "$cwd"
+}
+
+# hook_run_read_keep_home <path> <file> <offset> <limit> [cwd]
+# Same as hook_run_read but does not reset FAKE_HOME first, so the nudge-read throttle
+# (which reads the previous "nudge-read" decision-log timestamp) can be exercised across
+# invocations, mirroring hook_run_keep_home for the symbol-grep nudge.
+hook_run_read_keep_home() {
+  local path="$1" file="$2" offset="$3" limit="$4" cwd="${5:-/repo}"
+  mkdir -p "$FAKE_HOME/.claude"
+
+  local input
+  input=$(jq -n --arg f "$file" --arg cwd "$cwd" --arg o "$offset" --arg l "$limit" '
+    {tool_name:"Read", cwd:$cwd,
+     tool_input: ({file_path:$f}
+       + (if $o == "" then {} else {offset:($o|tonumber)} end)
+       + (if $l == "" then {} else {limit:($l|tonumber)} end))}')
+
+  OUT="$(PATH="$path" HOME="$FAKE_HOME" bash "$HOOK" <<<"$input" 2>"$WORK/stderr")"
+  RC=$?
+  ERR="$(cat "$WORK/stderr")"
+  if [[ -f "$(today_log_file)" ]]; then
+    LOG_CONTENT="$(cat "$(today_log_file)")"
+  else
+    LOG_CONTENT=""
+  fi
+}
+
+# expect_read_nudge <desc> <file> <offset> <limit> [cwd]
+expect_read_nudge() {
+  local desc="$1" file="$2" offset="$3" limit="$4" cwd="${5:-/repo}"
+  hook_run_read_keep_home "$FAKE_BIN" "$file" "$offset" "$limit" "$cwd"
+
+  assert_eq "$desc: exit 0" "0" "$RC"
+  local got_ctx
+  got_ctx="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty')"
+  assert_true "$desc: additionalContext present" "$([[ -n "$got_ctx" ]] && echo 1 || echo 0)"
+  local got_updated
+  got_updated="$(printf '%s' "$OUT" | jq -r 'if (.hookSpecificOutput | has("updatedInput")) then "present" else "" end')"
+  assert_eq "$desc: no updatedInput (Read input unchanged)" "" "$got_updated"
+  assert_true "$desc: decision-log line present (nudge-read)" \
+    "$([[ "$LOG_CONTENT" == *$'\t'"nudge-read"$'\t'* ]] && echo 1 || echo 0)"
+  assert_true "$desc: decision-log carries file path" \
+    "$([[ "$LOG_CONTENT" == *"$file"* ]] && echo 1 || echo 0)"
+}
+
+# expect_no_read_nudge <desc> <file> <offset> <limit> [cwd]
+expect_no_read_nudge() {
+  local desc="$1" file="$2" offset="$3" limit="$4" cwd="${5:-/repo}"
+  local before_log="$LOG_CONTENT"
+  hook_run_read_keep_home "$FAKE_BIN" "$file" "$offset" "$limit" "$cwd"
+
+  assert_eq "$desc: exit 0" "0" "$RC"
+  assert_eq "$desc: no stdout" "" "$OUT"
+  assert_eq "$desc: no new decision-log entry" "$before_log" "$LOG_CONTENT"
+}
+
+# Group 1: fires on a big file with no offset/limit, then throttled on an immediate repeat.
+rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
+expect_read_nudge "big file, no offset/limit -> nudge" "$BIG_FILE" "" ""
+expect_no_read_nudge "big file again immediately after -> throttled, not nudged" "$BIG_FILE" "" ""
+
+# Group 2: silent cases, all on a fresh home so none are throttled by a prior nudge.
+rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
+expect_no_read_nudge "big file with offset given -> no nudge" "$BIG_FILE" "100" ""
+expect_no_read_nudge "big file with limit given -> no nudge" "$BIG_FILE" "" "50"
+expect_no_read_nudge "big file with offset and limit given -> no nudge" "$BIG_FILE" "10" "50"
+expect_no_read_nudge "small file (<=400 lines), no offset/limit -> no nudge" "$SMALL_FILE" "" ""
+expect_no_read_nudge "missing file -> no nudge" "$MISSING_FILE" "" ""
+
+# Group 3: the read-nudge throttle is independent of the symbol-grep nudge throttle in both
+# directions -- neither one's recent firing suppresses the other.
+rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
+expect_nudge 'symbol grep -> nudge (before independence check)' \
+  'grep -rn "class Nine\|class Ten" other_src'
+expect_read_nudge "big file read right after a symbol-grep nudge -> still nudges (independent throttle)" \
+  "$BIG_FILE" "" ""
+
+rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
+expect_read_nudge "big file read -> nudge (before independence check, reverse direction)" \
+  "$BIG_FILE" "" ""
+expect_nudge 'symbol grep right after a read nudge -> still nudges (independent throttle)' \
+  'grep -rn "class Eleven\|class Twelve" other_src'
 
 echo "# --- $PASS passed, $FAIL failed ---"
 [[ "$FAIL" -eq 0 ]]
