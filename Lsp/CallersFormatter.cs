@@ -6,11 +6,12 @@ namespace Tk.Lsp;
 public static class CallersFormatter
 {
     /// <summary>
-    /// Formats incoming callers into a compact multi-line string.
-    /// Header: callers &lt;symbol&gt; n=&lt;totalCallSites&gt; f=&lt;distinctFiles&gt;
+    /// Formats incoming callers (or, via <paramref name="command"/> = "calls", outgoing
+    /// callees — same shape, opposite direction) into a compact multi-line string.
+    /// Header: &lt;command&gt; &lt;symbol&gt; n=&lt;totalCallSites&gt; f=&lt;distinctFiles&gt;
     /// Then grouped by call-site file, sorted by file then line.
     /// </summary>
-    public static string Format(string symbol, IReadOnlyList<CallerInfo> callers)
+    public static string Format(string symbol, IReadOnlyList<CallerInfo> callers, string command = "callers")
     {
         // Collect all call sites: (file, line, char, callerName)
         var sites = new List<(string File, int Line, int Char, string CallerName)>();
@@ -24,7 +25,7 @@ public static class CallersFormatter
         }
 
         if (sites.Count == 0)
-            return $"callers {symbol} n=0 f=0";
+            return $"{command} {symbol} n=0 f=0";
 
         var byFile = sites
             .GroupBy(s => s.File)
@@ -35,7 +36,7 @@ public static class CallersFormatter
         var fileCount = byFile.Count;
 
         var sb = new System.Text.StringBuilder();
-        sb.Append($"callers {symbol} n={totalCount} f={fileCount}");
+        sb.Append($"{command} {symbol} n={totalCount} f={fileCount}");
 
         foreach (var group in byFile)
         {

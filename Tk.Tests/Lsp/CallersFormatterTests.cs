@@ -119,6 +119,21 @@ public class CallersFormatterTests
     }
 
     [Fact]
+    public void Command_label_defaults_to_callers_but_can_be_overridden_for_calls()
+    {
+        var callers = new[]
+        {
+            new CallerInfo("Process", "OrderService", "method",
+                Loc("file:///proj/OrderService.cs", 5, 0),
+                [Loc("file:///proj/OrderService.cs", 12, 4)]),
+        };
+
+        Assert.StartsWith("callers Hold", CallersFormatter.Format("Hold", callers));
+        Assert.StartsWith("calls Hold", CallersFormatter.Format("Hold", callers, "calls"));
+        Assert.Equal("calls Hold n=0 f=0", CallersFormatter.Format("Hold", [], "calls"));
+    }
+
+    [Fact]
     public void Caller_with_multiple_sites_in_same_file_all_listed()
     {
         var callers = new[]

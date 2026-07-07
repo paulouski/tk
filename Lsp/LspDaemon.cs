@@ -229,12 +229,28 @@ public sealed class LspDaemon
                         rename = new { dynamicRegistration = false, prepareSupport = true },
                         synchronization = new { dynamicRegistration = false, didSave = false },
                         publishDiagnostics = new { relatedInformation = true },
+                        // callHierarchy backs both `tk callers` (incomingCalls) and `tk calls`
+                        // (outgoingCalls) — one capability, one prepareCallHierarchy call, two
+                        // different follow-up requests.
                         callHierarchy = new { dynamicRegistration = false },
                         // Enables textDocument/diagnostic (LSP 3.17 pull diagnostics) — the
                         // mechanism `tk diag` relies on. See docs/lsp-daemon-architecture.md
                         // for why pull (not publishDiagnostics push) was chosen.
                         diagnostic = new { dynamicRegistration = false },
                         implementation = new { dynamicRegistration = false },
+                        // Backs `tk sig` (hover signature/doc lookup).
+                        hover = new { dynamicRegistration = false },
+                        // Backs `tk fix`: request quickfix-kind code actions and, when the
+                        // server only returns a partial action (edit resolved lazily), follow
+                        // up with codeAction/resolve rather than a workspace/executeCommand
+                        // roundtrip we do not implement.
+                        codeAction = new
+                        {
+                            dynamicRegistration = false,
+                            codeActionLiteralSupport = new { codeActionKind = new { valueSet = new[] { "quickfix" } } },
+                            resolveSupport = new { properties = new[] { "edit" } },
+                            isPreferredSupport = true,
+                        },
                     },
                     window = new
                     {
@@ -416,10 +432,14 @@ public sealed class LspDaemon
 
     /// <summary>
     /// Resolves a symbol name (or qualified name like Namespace.Class.Method) to a list of
-    /// matching workspace symbols via workspace/symbol. Returns only results whose 'name'
-    /// field exactly matches the simple name (the substring after the last '.').
+    /// matching workspace symbols via workspace/symbol. By default (<paramref
+    /// name="exactMatchOnly"/> true — used by def/refs/callers/impl/rename's name resolution)
+    /// only results whose 'name' field exactly matches the simple name (the substring after
+    /// the last '.') are kept. `tk sym`'s fuzzy workspace-wide search passes false to keep
+    /// every match the server itself considers relevant to the query.
     /// </summary>
-    private async Task<List<SymbolMatch>> ResolveSymbolAsync(MessageLoop loop, string symbol, CancellationToken ct)
+    private async Task<List<SymbolMatch>> ResolveSymbolAsync(
+        MessageLoop loop, string symbol, CancellationToken ct, bool exactMatchOnly = true)
     {
         // Use the simple name (after last '.') as the query — servers match on it.
         var simpleName = symbol.Contains('.') ? symbol[(symbol.LastIndexOf('.') + 1)..] : symbol;
@@ -434,7 +454,7 @@ public sealed class LspDaemon
         {
             if (!item.TryGetProperty("name", out var nameProp)) continue;
             var name = nameProp.GetString() ?? "";
-            if (name != simpleName) continue;
+            if (exactMatchOnly && name != simpleName) continue;
 
             // location is required; skip items without it or without a range
             if (!item.TryGetProperty("location", out var locationEl)) continue;
@@ -499,6 +519,57 @@ public sealed class LspDaemon
 
         var result = await loop.SendRequestAsync("textDocument/implementation", implParams, ct).ConfigureAwait(false);
         return ParseLocationOrLinkResult(result);
+    }
+
+    /// <summary>
+    /// Finds hover contents (signature/doc-comment) for the symbol at the given position via
+    /// textDocument/hover. Returns the raw hover text (markdown, exactly as the server sent
+    /// it) or null when the server has no hover info for that position. Backs `tk sig`.
+    /// </summary>
+    private async Task<string?> FindHoverAsync(
+        MessageLoop loop, string filePath, int line, int character, CancellationToken ct)
+    {
+        var fileUri = new Uri(filePath).ToString();
+        await EnsureFileOpenAsync(loop, filePath, fileUri, ct).ConfigureAwait(false);
+
+        var hoverParams = new
+        {
+            textDocument = new { uri = fileUri },
+            position = new { line, character }
+        };
+
+        var result = await loop.SendRequestAsync("textDocument/hover", hoverParams, ct).ConfigureAwait(false);
+        if (result.ValueKind == JsonValueKind.Null || result.ValueKind == JsonValueKind.Undefined)
+            return null;
+
+        return result.TryGetProperty("contents", out var contents) ? ExtractHoverText(contents) : null;
+    }
+
+    /// <summary>
+    /// Extracts plain text out of an LSP hover "contents" value, which may be a bare string, a
+    /// MarkupContent/MarkedString object ({ value } or { language, value }), or an array of
+    /// either (joined with a blank line between entries).
+    /// </summary>
+    private static string? ExtractHoverText(JsonElement contents)
+    {
+        switch (contents.ValueKind)
+        {
+            case JsonValueKind.String:
+                return contents.GetString();
+            case JsonValueKind.Object:
+                return contents.TryGetProperty("value", out var valueProp) ? valueProp.GetString() : null;
+            case JsonValueKind.Array:
+                var parts = new List<string>();
+                foreach (var item in contents.EnumerateArray())
+                {
+                    var text = ExtractHoverText(item);
+                    if (!string.IsNullOrWhiteSpace(text))
+                        parts.Add(text);
+                }
+                return parts.Count == 0 ? null : string.Join("\n\n", parts);
+            default:
+                return null;
+        }
     }
 
     /// <summary>
@@ -614,13 +685,218 @@ public sealed class LspDaemon
         _ => "info",
     };
 
-    /// <summary>
-    /// Finds incoming callers of the symbol at the given position using the LSP call hierarchy.
-    /// Sends textDocument/prepareCallHierarchy then callHierarchy/incomingCalls.
-    /// </summary>
-    private async Task<CallerInfo[]> FindIncomingCallsAsync(
-        MessageLoop loop, string filePath, int line, int character, CancellationToken ct)
+    private static int DiagnosticSeverityNumber(string severity) => severity switch
     {
+        "error" => 1,
+        "warning" => 2,
+        "info" => 3,
+        "hint" => 4,
+        _ => 3,
+    };
+
+    /// <summary>
+    /// The two diagnostic families `tk fix` is allowed to act on: CS0246 ("type or namespace
+    /// could not be found", a missing-using candidate) and CS8019/IDE0005 ("unnecessary using
+    /// directive", a remove-using candidate). Nothing else is ever sent to codeAction — the
+    /// safe subset is enforced here, before any protocol round-trip.
+    /// </summary>
+    private static readonly HashSet<string> FixableDiagnosticCodes = new(StringComparer.Ordinal)
+    {
+        "CS0246", "CS8019", "IDE0005",
+    };
+
+    private enum UsingFixKind { Add, Remove }
+
+    // Roslyn's own quickfix title for an add-using action is literally the using directive
+    // text it would insert (e.g. "using System.Text.RegularExpressions;").
+    private static readonly System.Text.RegularExpressions.Regex UsingDirectiveTitleRegex =
+        new(@"^using\s+[A-Za-z_][\w.]*;$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
+    /// Computes the restricted "add missing using / remove unnecessary using" fix for a single
+    /// file: pulls diagnostics, keeps only <see cref="FixableDiagnosticCodes"/>, requests a
+    /// textDocument/codeAction per diagnostic, and keeps only actions whose title matches the
+    /// safe subset (<see cref="IsSafeFixTitle"/>) — never anything else, and never partially
+    /// applies an action that would require a workspace/executeCommand round-trip this daemon
+    /// does not implement (see <see cref="RequestUsingCodeActionAsync"/>). Backs `tk fix`.
+    /// </summary>
+    private async Task<(FileEdits[] Edits, FixSummary Summary)> ComputeUsingFixesAsync(
+        MessageLoop loop, string filePath, CancellationToken ct)
+    {
+        var fileUri = new Uri(filePath).ToString();
+        await EnsureFileOpenAsync(loop, filePath, fileUri, ct).ConfigureAwait(false);
+
+        var diagnostics = await FindFileDiagnosticsAsync(loop, filePath, ct).ConfigureAwait(false);
+        var relevant = diagnostics.Where(d => d.Code is not null && FixableDiagnosticCodes.Contains(d.Code)).ToList();
+
+        if (relevant.Count == 0)
+            return ([], new FixSummary(true, 0, 0, null));
+
+        var collectedEdits = new List<RenameTextEdit>();
+        var added = 0;
+        var removed = 0;
+        var sawUnresolvable = false;
+
+        foreach (var diag in relevant)
+        {
+            var action = await RequestUsingCodeActionAsync(loop, fileUri, diag, ct).ConfigureAwait(false);
+            if (action is null)
+            {
+                sawUnresolvable = true;
+                continue;
+            }
+
+            var (kind, edits) = action.Value;
+            collectedEdits.AddRange(edits);
+            if (kind == UsingFixKind.Add) added++;
+            else removed++;
+        }
+
+        if (collectedEdits.Count == 0)
+        {
+            var note = sawUnresolvable
+                ? "server offered no matching add/remove-using quick fix for the detected diagnostics (or it would require an unsupported workspace/executeCommand round-trip)"
+                : null;
+            return ([], new FixSummary(!sawUnresolvable, 0, 0, note));
+        }
+
+        return ([new FileEdits(fileUri, [.. collectedEdits])], new FixSummary(true, added, removed, null));
+    }
+
+    /// <summary>
+    /// Requests textDocument/codeAction for one diagnostic and returns the edits of the first
+    /// action whose title is in the safe add/remove-using subset — resolving it via
+    /// codeAction/resolve first if the server didn't include an "edit" inline. Returns null if
+    /// no safe action was offered, or the only safe-titled action never yields a concrete edit
+    /// (e.g. it only carries a "command" — that would need workspace/executeCommand, which this
+    /// daemon does not implement; skipped rather than half-applied).
+    /// </summary>
+    private async Task<(UsingFixKind Kind, List<RenameTextEdit> Edits)?> RequestUsingCodeActionAsync(
+        MessageLoop loop, string fileUri, LspDiagnostic diag, CancellationToken ct)
+    {
+        var range = new
+        {
+            start = new { line = diag.Line, character = diag.Character },
+            end = new { line = diag.EndLine, character = diag.EndChar }
+        };
+        var wireDiag = new { range, severity = DiagnosticSeverityNumber(diag.Severity), code = diag.Code, message = diag.Message };
+
+        var codeActionParams = new
+        {
+            textDocument = new { uri = fileUri },
+            range,
+            context = new { diagnostics = new[] { wireDiag }, only = new[] { "quickfix" } }
+        };
+
+        var result = await loop.SendRequestAsync("textDocument/codeAction", codeActionParams, ct).ConfigureAwait(false);
+        if (result.ValueKind != JsonValueKind.Array)
+            return null;
+
+        foreach (var item in result.EnumerateArray())
+        {
+            if (!item.TryGetProperty("title", out var titleProp))
+                continue;
+            var title = titleProp.GetString() ?? "";
+
+            UsingFixKind kind;
+            if (UsingDirectiveTitleRegex.IsMatch(title))
+                kind = UsingFixKind.Add;
+            else if (title.Equals("Remove Unnecessary Usings", StringComparison.OrdinalIgnoreCase))
+                kind = UsingFixKind.Remove;
+            else
+                continue; // outside the safe subset — never requested to resolve, never applied
+
+            JsonElement? edit = item.TryGetProperty("edit", out var editProp) ? editProp : null;
+            if (edit is null && item.TryGetProperty("data", out _))
+            {
+                var resolved = await loop.SendRequestAsync("codeAction/resolve", item, ct).ConfigureAwait(false);
+                if (resolved.TryGetProperty("edit", out var resolvedEdit))
+                    edit = resolvedEdit;
+            }
+
+            if (edit is null)
+                continue; // no concrete edit available without workspace/executeCommand — skip
+
+            var edits = ExtractEditsForFile(edit.Value, fileUri);
+            if (edits.Count == 0)
+                continue;
+
+            return (kind, edits);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Extracts the TextEdits targeting <paramref name="fileUri"/> out of a WorkspaceEdit,
+    /// handling both the "changes" (uri -> TextEdit[] map) and "documentChanges" (array of
+    /// {textDocument:{uri}, edits}) shapes — same two shapes <see cref="RenameAsync"/> parses.
+    /// Edits for any other file are dropped: `tk fix` is single-file by design.
+    /// </summary>
+    private static List<RenameTextEdit> ExtractEditsForFile(JsonElement edit, string fileUri)
+    {
+        var result = new List<RenameTextEdit>();
+
+        if (edit.TryGetProperty("changes", out var changes) && changes.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in changes.EnumerateObject())
+            {
+                if (!string.Equals(prop.Name, fileUri, StringComparison.Ordinal)) continue;
+                result.AddRange(ParseTextEdits(prop.Value));
+            }
+        }
+
+        if (edit.TryGetProperty("documentChanges", out var docChanges) && docChanges.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in docChanges.EnumerateArray())
+            {
+                if (!item.TryGetProperty("textDocument", out var td)) continue;
+                if (!td.TryGetProperty("uri", out var uriProp)) continue;
+                if (!string.Equals(uriProp.GetString(), fileUri, StringComparison.Ordinal)) continue;
+                if (!item.TryGetProperty("edits", out var editsProp)) continue;
+                result.AddRange(ParseTextEdits(editsProp));
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Finds incoming callers of the symbol at the given position using the LSP call hierarchy
+    /// (textDocument/prepareCallHierarchy then callHierarchy/incomingCalls).
+    /// </summary>
+    private Task<CallerInfo[]> FindIncomingCallsAsync(
+        MessageLoop loop, string filePath, int line, int character, CancellationToken ct) =>
+        FindCallHierarchyAsync(loop, filePath, line, character, "callHierarchy/incomingCalls", "from", ct);
+
+    /// <summary>
+    /// Finds outgoing callees of the symbol at the given position using the LSP call hierarchy
+    /// (textDocument/prepareCallHierarchy then callHierarchy/outgoingCalls). Backs `tk calls`.
+    /// KNOWN RISK: some Roslyn language-server builds do not implement outgoingCalls and
+    /// answer with an empty array even for a method that provably calls others — the caller
+    /// (CallsCommand) surfaces that ambiguity rather than reporting a false "no outgoing calls".
+    /// </summary>
+    private Task<CallerInfo[]> FindOutgoingCallsAsync(
+        MessageLoop loop, string filePath, int line, int character, CancellationToken ct) =>
+        FindCallHierarchyAsync(loop, filePath, line, character, "callHierarchy/outgoingCalls", "to", ct);
+
+    /// <summary>
+    /// Shared implementation for both call-hierarchy directions: prepares the hierarchy item at
+    /// the given position, then sends <paramref name="callMethod"/> ("callHierarchy/incomingCalls"
+    /// or "callHierarchy/outgoingCalls") and reads the target item under <paramref
+    /// name="itemField"/> ("from" for incoming, "to" for outgoing).
+    ///
+    /// Call-site ("fromRanges") URI differs by direction per the LSP spec: for incoming calls
+    /// the ranges live inside the *caller's* own file (the "from" item), but for outgoing calls
+    /// they live inside the *original* file at (filePath,line,character) — the item we started
+    /// prepareCallHierarchy on, not the "to" item's file. <paramref name="callSitesInSourceFile"/>
+    /// selects which URI the call sites are stamped with.
+    /// </summary>
+    private async Task<CallerInfo[]> FindCallHierarchyAsync(
+        MessageLoop loop, string filePath, int line, int character,
+        string callMethod, string itemField, CancellationToken ct)
+    {
+        var callSitesInSourceFile = itemField == "to";
         var fileUri = new Uri(filePath).ToString();
         await EnsureFileOpenAsync(loop, filePath, fileUri, ct).ConfigureAwait(false);
 
@@ -648,44 +924,45 @@ public sealed class LspDaemon
             itemEl = prepareResult.Clone();
         }
 
-        var incomingParams = new { item = itemEl };
-        var incomingResult = await loop.SendRequestAsync("callHierarchy/incomingCalls", incomingParams, ct).ConfigureAwait(false);
+        var callParams = new { item = itemEl };
+        var callResult = await loop.SendRequestAsync(callMethod, callParams, ct).ConfigureAwait(false);
 
-        if (incomingResult.ValueKind == JsonValueKind.Null || incomingResult.ValueKind == JsonValueKind.Undefined)
+        if (callResult.ValueKind == JsonValueKind.Null || callResult.ValueKind == JsonValueKind.Undefined)
             return [];
 
-        var callers = new List<CallerInfo>();
-        foreach (var call in incomingResult.EnumerateArray())
+        var results = new List<CallerInfo>();
+        foreach (var call in callResult.EnumerateArray())
         {
-            if (!call.TryGetProperty("from", out var from)) continue;
+            if (!call.TryGetProperty(itemField, out var target)) continue;
 
-            var callerName = from.TryGetProperty("name", out var np) ? np.GetString() ?? "" : "";
-            var callerKind = from.TryGetProperty("kind", out var kp) ? kp.GetInt32() : 0;
-            var callerDetail = from.TryGetProperty("detail", out var dp) ? dp.GetString() ?? "" : "";
+            var targetName = target.TryGetProperty("name", out var np) ? np.GetString() ?? "" : "";
+            var targetKind = target.TryGetProperty("kind", out var kp) ? kp.GetInt32() : 0;
+            var targetDetail = target.TryGetProperty("detail", out var dp) ? dp.GetString() ?? "" : "";
 
             // selectionRange preferred over range for the symbol name position
             JsonElement selRange;
-            if (!from.TryGetProperty("selectionRange", out selRange))
-                if (!from.TryGetProperty("range", out selRange))
+            if (!target.TryGetProperty("selectionRange", out selRange))
+                if (!target.TryGetProperty("range", out selRange))
                     continue;
 
-            if (!from.TryGetProperty("uri", out var callerUriProp)) continue;
-            var callerUri = callerUriProp.GetString() ?? "";
+            if (!target.TryGetProperty("uri", out var targetUriProp)) continue;
+            var targetUri = targetUriProp.GetString() ?? "";
 
-            var callerLoc = ParseRangeToLocation(callerUri, selRange);
+            var targetLoc = ParseRangeToLocation(targetUri, selRange);
+            var callSiteUri = callSitesInSourceFile ? fileUri : targetUri;
 
-            // Parse fromRanges (the actual call sites inside the caller)
+            // Parse fromRanges (the actual call sites)
             var callSites = new List<LspLocation>();
             if (call.TryGetProperty("fromRanges", out var fromRanges) && fromRanges.ValueKind == JsonValueKind.Array)
             {
                 foreach (var r in fromRanges.EnumerateArray())
-                    callSites.Add(ParseRangeToLocation(callerUri, r));
+                    callSites.Add(ParseRangeToLocation(callSiteUri, r));
             }
 
-            callers.Add(new CallerInfo(callerName, callerDetail, SymbolKindName(callerKind), callerLoc, [.. callSites]));
+            results.Add(new CallerInfo(targetName, targetDetail, SymbolKindName(targetKind), targetLoc, [.. callSites]));
         }
 
-        return [.. callers];
+        return [.. results];
     }
 
     private static LspLocation ParseRangeToLocation(string uri, JsonElement range)
@@ -821,6 +1098,36 @@ public sealed class LspDaemon
         {
             _openLock.Release();
         }
+    }
+
+    private readonly record struct ResolvedTarget(string Path, int Line, int Character);
+
+    /// <summary>
+    /// Shared "file position, or resolve a symbol name via workspace/symbol" resolution used
+    /// by the newer position-or-symbol request kinds (sig, calls) — the same resolution
+    /// def/impl/callers/rename already do inline. Returns exactly one of: a resolved position,
+    /// a list of ambiguous candidates (more than one match), or an error message (no match, or
+    /// neither a position nor a symbol was given).
+    /// </summary>
+    private async Task<(ResolvedTarget? Position, SymbolMatch[]? Candidates, string? Error)> ResolveTargetAsync(
+        MessageLoop loop, string? filePath, int line, int character, string? symbol, string what, CancellationToken ct)
+    {
+        if (filePath is not null)
+            return (new ResolvedTarget(filePath, line, character), null, null);
+
+        if (symbol is not null)
+        {
+            var matches = await ResolveSymbolAsync(loop, symbol, ct).ConfigureAwait(false);
+            if (matches.Count == 0)
+                return (null, null, $"symbol '{symbol}' not found");
+            if (matches.Count > 1)
+                return (null, matches.ToArray(), null);
+
+            var loc = matches[0].Location;
+            return (new ResolvedTarget(new Uri(loc.Uri).LocalPath, loc.StartLine, loc.StartChar), null, null);
+        }
+
+        return (null, null, $"{what} requires a file position or symbol name");
     }
 
     private async Task HandleClientAsync(Socket client, MessageLoop loop, CancellationToken ct)
@@ -1031,6 +1338,73 @@ public sealed class LspDaemon
                 var implLocs = await FindImplementationsAsync(loop, implPath, implLine, implChar, ct).ConfigureAwait(false);
                 Log($"impl query done, {implLocs.Length} locations");
                 response = new DaemonResponse(true, null, implLocs);
+            }
+            else if (request.Method == "sig")
+            {
+                await WaitForReadyAsync(ct).ConfigureAwait(false);
+
+                var (sigTarget, sigCandidates, sigError) = await ResolveTargetAsync(
+                    loop, request.FilePath, request.Line, request.Character, request.Symbol, "sig", ct).ConfigureAwait(false);
+                if (sigError is not null)
+                {
+                    response = new DaemonResponse(false, sigError, null);
+                    await writer.WriteLineAsync(JsonSerializer.Serialize(response, LspMessage.Options)).ConfigureAwait(false);
+                    return;
+                }
+                if (sigCandidates is not null)
+                {
+                    response = new DaemonResponse(true, null, null) with { Candidates = sigCandidates };
+                    await writer.WriteLineAsync(JsonSerializer.Serialize(response, LspMessage.Options)).ConfigureAwait(false);
+                    return;
+                }
+
+                var sig = sigTarget!.Value;
+                Log($"sig query: {sig.Path}:{sig.Line}:{sig.Character}");
+                var hoverText = await FindHoverAsync(loop, sig.Path, sig.Line, sig.Character, ct).ConfigureAwait(false);
+                Log($"sig query done, hover {(hoverText is null ? "empty" : "present")}");
+                var hover = hoverText is null ? null : new HoverResult(new Uri(sig.Path).ToString(), sig.Line, sig.Character, hoverText);
+                response = new DaemonResponse(true, null, null) with { Hover = hover };
+            }
+            else if (request.Method == "calls")
+            {
+                await WaitForReadyAsync(ct).ConfigureAwait(false);
+
+                var (callsTarget, callsCandidates, callsError) = await ResolveTargetAsync(
+                    loop, request.FilePath, request.Line, request.Character, request.Symbol, "calls", ct).ConfigureAwait(false);
+                if (callsError is not null)
+                {
+                    response = new DaemonResponse(false, callsError, null);
+                    await writer.WriteLineAsync(JsonSerializer.Serialize(response, LspMessage.Options)).ConfigureAwait(false);
+                    return;
+                }
+                if (callsCandidates is not null)
+                {
+                    response = new DaemonResponse(true, null, null) with { Candidates = callsCandidates };
+                    await writer.WriteLineAsync(JsonSerializer.Serialize(response, LspMessage.Options)).ConfigureAwait(false);
+                    return;
+                }
+
+                var calls = callsTarget!.Value;
+                Log($"calls query: {calls.Path}:{calls.Line}:{calls.Character}");
+                var callees = await FindOutgoingCallsAsync(loop, calls.Path, calls.Line, calls.Character, ct).ConfigureAwait(false);
+                Log($"calls query done, {callees.Length} callees");
+                response = new DaemonResponse(true, null, null) with { Callees = callees };
+            }
+            else if (request.Method == "sym" && request.Symbol is not null)
+            {
+                await WaitForReadyAsync(ct).ConfigureAwait(false);
+                Log($"sym query: {request.Symbol}");
+                var symMatches = await ResolveSymbolAsync(loop, request.Symbol, ct, exactMatchOnly: false).ConfigureAwait(false);
+                Log($"sym query done, {symMatches.Count} matches");
+                response = new DaemonResponse(true, null, null) with { Candidates = symMatches.ToArray() };
+            }
+            else if (request.Method == "fix" && request.FilePath is not null)
+            {
+                await WaitForReadyAsync(ct).ConfigureAwait(false);
+                Log($"fix query: {request.FilePath}");
+                var (fixEdits, fixSummary) = await ComputeUsingFixesAsync(loop, request.FilePath, ct).ConfigureAwait(false);
+                Log($"fix query done, supported={fixSummary.Supported} added={fixSummary.UsingsAdded} removed={fixSummary.UsingsRemoved}");
+                response = new DaemonResponse(true, null, null) with { Edits = fixEdits, Fix = fixSummary };
             }
             else if (request.Method == "diag" && request.Paths is { Length: > 0 } diagPaths)
             {

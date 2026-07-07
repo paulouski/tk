@@ -18,30 +18,56 @@ public sealed class DiagCommand : ICommand
     public async Task<int> RunAsync(CommandContext ctx)
     {
         var errorsOnly = ctx.Args.Contains("--errors");
-        var positional = ctx.Args.Where(a => a != "--errors").ToArray();
+        var changed = ctx.Args.Contains("--changed");
+        var positional = ctx.Args.Where(a => a != "--errors" && a != "--changed").ToArray();
 
-        if (positional.Length == 0)
+        List<string> files;
+        int totalCount;
+
+        if (changed)
         {
-            ctx.Out.WriteLine("usage: tk diag <file|project|dir>");
-            ctx.Out.WriteLine("       tk diag <path> --errors   Errors only");
-            return 1;
+            var (exitCode, stdout, _) = await ctx.Process.RunAsync(["git", "status", "--porcelain=v1"]).ConfigureAwait(false);
+            if (exitCode != 0)
+            {
+                ctx.Err.WriteLine("tk diag --changed: not a git repository (or git status failed)");
+                return 1;
+            }
+
+            files = ParseChangedCsFiles(stdout);
+            totalCount = files.Count;
+
+            if (files.Count == 0)
+            {
+                ctx.Out.WriteLine("ok diag --changed: no changed .cs files");
+                return 0;
+            }
         }
-
-        var pathArg = positional[0];
-        var fullPath = Path.GetFullPath(pathArg);
-
-        if (!File.Exists(fullPath) && !Directory.Exists(fullPath))
+        else
         {
-            ctx.Err.WriteLine($"tk diag: {pathArg}: no such file or directory");
-            return 1;
-        }
+            if (positional.Length == 0)
+            {
+                ctx.Out.WriteLine("usage: tk diag <file|project|dir>");
+                ctx.Out.WriteLine("       tk diag <path> --errors   Errors only");
+                ctx.Out.WriteLine("       tk diag --changed         Diagnostics for changed .cs files (staged+modified+untracked)");
+                return 1;
+            }
 
-        var maxFiles = ctx.DetailLevel == DetailLevel.More ? MoreMaxFiles : DefaultMaxFiles;
-        var (files, totalCount) = ResolveScope(fullPath, maxFiles);
-        if (files.Count == 0)
-        {
-            ctx.Err.WriteLine($"tk diag: {pathArg}: no .cs files found in scope");
-            return 1;
+            var pathArg = positional[0];
+            var fullPath = Path.GetFullPath(pathArg);
+
+            if (!File.Exists(fullPath) && !Directory.Exists(fullPath))
+            {
+                ctx.Err.WriteLine($"tk diag: {pathArg}: no such file or directory");
+                return 1;
+            }
+
+            var maxFiles = ctx.DetailLevel == DetailLevel.More ? MoreMaxFiles : DefaultMaxFiles;
+            (files, totalCount) = ResolveScope(fullPath, maxFiles);
+            if (files.Count == 0)
+            {
+                ctx.Err.WriteLine($"tk diag: {pathArg}: no .cs files found in scope");
+                return 1;
+            }
         }
 
         var workspaceRoot = LspCommandHelpers.ResolveWorkspaceRoot();
@@ -111,5 +137,37 @@ public sealed class DiagCommand : ICommand
         var relative = Path.GetRelativePath(root, filePath);
         var parts = relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         return parts.Any(p => p is "bin" or "obj");
+    }
+
+    /// <summary>
+    /// Parses `git status --porcelain=v1` output into a de-duplicated, absolute-path list of
+    /// changed .cs files (staged + modified + untracked — the same set `tk changes` surfaces).
+    /// Each porcelain line is "XY path" (or "XY old -> new" for a rename/copy, in which case
+    /// the new path is kept); paths git quotes for special characters have that quoting stripped.
+    /// </summary>
+    internal static List<string> ParseChangedCsFiles(string porcelain)
+    {
+        var files = new List<string>();
+        foreach (var rawLine in porcelain.Split('\n'))
+        {
+            if (rawLine.Length < 4) continue;
+            var path = rawLine[3..].Trim();
+
+            var arrow = path.IndexOf(" -> ", StringComparison.Ordinal);
+            if (arrow >= 0) path = path[(arrow + 4)..];
+            path = path.Trim('"');
+
+            if (path.Length == 0 || !path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            files.Add(Path.GetFullPath(path));
+        }
+
+        // Skip deletions (git still reports them as a changed path, but there is no file left
+        // to pull diagnostics for).
+        return [.. files
+            .Where(File.Exists)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)];
     }
 }

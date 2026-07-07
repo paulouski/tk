@@ -43,6 +43,21 @@ public record LspDiagnostic(int Line, int Character, int EndLine, int EndChar, s
 public record FileDiagnostics(string Uri, LspDiagnostic[] Diagnostics);
 
 /// <summary>
+/// Hover contents for a symbol at a position, returned by textDocument/hover. Contents is
+/// the raw (markdown) hover text as the server returned it — markdown-fence/noise stripping
+/// is a formatter concern (see SigFormatter), not parsed here.
+/// </summary>
+public record HoverResult(string Uri, int Line, int Character, string Contents);
+
+/// <summary>
+/// Outcome of a `tk fix` request: whether the restricted add/remove-using code-action flow
+/// could be honored by the server at all (false when a fix would require a protocol
+/// interaction — e.g. a mandatory workspace/executeCommand roundtrip — this daemon does not
+/// implement), and how many using directives were added/removed when it was.
+/// </summary>
+public record FixSummary(bool Supported, int UsingsAdded, int UsingsRemoved, string? Note);
+
+/// <summary>
 /// Request sent to the LSP daemon over the unix socket. <see cref="Paths"/> is used only by
 /// "diag", which can query multiple files (a project/directory scope) in a single round trip.
 /// </summary>
@@ -51,7 +66,17 @@ public record DaemonRequest(string Method, string? FilePath, int Line, int Chara
 /// <summary>
 /// Response from the LSP daemon.
 /// </summary>
-public record DaemonResponse(bool Success, string? Error, LspLocation[]? Locations, FileEdits[]? Edits = null, SymbolMatch[]? Candidates = null, CallerInfo[]? Callers = null, FileDiagnostics[]? DiagnosticsByFile = null);
+public record DaemonResponse(
+    bool Success,
+    string? Error,
+    LspLocation[]? Locations,
+    FileEdits[]? Edits = null,
+    SymbolMatch[]? Candidates = null,
+    CallerInfo[]? Callers = null,
+    FileDiagnostics[]? DiagnosticsByFile = null,
+    HoverResult? Hover = null,
+    CallerInfo[]? Callees = null,
+    FixSummary? Fix = null);
 
 /// <summary>
 /// The daemon's own process identity, persisted next to its socket: the daemon process's

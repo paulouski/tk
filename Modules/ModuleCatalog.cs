@@ -143,14 +143,19 @@ public static class ModuleCatalog
     private const string LspSnippet = """
         Symbol lookup is ALWAYS these, NEVER `grep`/`rg` for `class X` / `record X` / `interface X` or a method name:
         - `tk diag <file|project|dir>` — compile diagnostics straight from the warm daemon, no build. To check for compile errors after an edit, prefer this over `dotnet build` — it's sub-second; `dotnet build` is still needed to produce binaries or run tests.
+        - `tk diag --changed` — diagnostics for every changed .cs file (staged+modified+untracked), no path needed
         - `tk refs <symbol>` — all references to a symbol by name (resolves name → position; lists candidates if ambiguous)
         - `tk refs <file:line:col>` — find references at position
         - `tk callers <symbol>` — who calls this symbol (incoming call hierarchy; crosses interface dispatch)
         - `tk callers <file:line:col>` — incoming callers at position
+        - `tk calls <symbol>` — outgoing calls made by this symbol (call hierarchy, opposite direction of `tk callers`); some Roslyn LS builds don't implement this direction and answer empty — treat n=0 as inconclusive, not proof of no calls
         - `tk def <symbol>` — show where a symbol is defined (jumps to source; lists candidates if ambiguous)
         - `tk def <file:line:col>` — go to definition at position
         - `tk impl <symbol>` — who implements this interface / overrides this abstract member (textDocument/implementation)
         - `tk impl <file:line:col>` — find implementations at position
+        - `tk sig <symbol|file:line:col>` — signature + doc-comment summary for a symbol (hover)
+        - `tk sym <query>` — fuzzy workspace-wide symbol search, grouped by file
+        - `tk fix <file>` — apply only safe quick-fixes: add a missing using / remove an unnecessary using; reports "unsupported by server" rather than applying anything wider
         - `tk rename <file:line:col> <newName>` — rename a symbol everywhere (for refactoring existing code, NOT for atomic single-file micro-edits)
         - `tk lsp status` — check LSP daemon status
         - `tk lsp stop` — stop LSP daemon
@@ -252,7 +257,11 @@ public static class ModuleCatalog
             [
                 CommandRow.Builtin(new DiagCommand(),
                     "tk diag <file|project|dir>", "Compile diagnostics from the warm LSP daemon (no build)",
-                    extraHelpLines: [("tk diag <path> --errors", "Errors only")]),
+                    extraHelpLines:
+                    [
+                        ("tk diag <path> --errors", "Errors only"),
+                        ("tk diag --changed", "Diagnostics for changed .cs files (staged+modified+untracked)"),
+                    ]),
                 CommandRow.Builtin(new RefsCommand(),
                     "tk refs <symbol>", "Find all references to a symbol (LSP-backed)",
                     extraHelpLines: [("tk refs <file:line:col>", "Find references at position")]),
@@ -265,6 +274,16 @@ public static class ModuleCatalog
                 CommandRow.Builtin(new CallersCommand(),
                     "tk callers <symbol>", "Find incoming callers of a symbol",
                     extraHelpLines: [("tk callers <file:line:col>", "Find incoming callers at position")]),
+                CommandRow.Builtin(new CallsCommand(),
+                    "tk calls <symbol>", "Find outgoing calls made by a symbol (call hierarchy); some servers don't implement this direction",
+                    extraHelpLines: [("tk calls <file:line:col>", "Find outgoing calls at position")]),
+                CommandRow.Builtin(new SigCommand(),
+                    "tk sig <symbol>", "Signature + doc-comment summary for a symbol (hover)",
+                    extraHelpLines: [("tk sig <file:line:col>", "Signature at position")]),
+                CommandRow.Builtin(new SymCommand(),
+                    "tk sym <query>", "Fuzzy workspace-wide symbol search, grouped by file"),
+                CommandRow.Builtin(new FixCommand(),
+                    "tk fix <file>", "Apply safe quick-fixes only: add missing using / remove unnecessary using"),
                 CommandRow.Builtin(new RenameCommand(),
                     "tk rename <file:line:col> <n>", "Rename a symbol everywhere"),
                 CommandRow.Builtin(new LspStatusCommand(),

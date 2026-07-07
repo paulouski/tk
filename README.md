@@ -115,6 +115,15 @@ tk mv src/OldName.cs src/            # moves into directory, destination = src/O
 
 # Semantic navigation (LSP-backed, opt-in module)
 tk refs src/Mediator.cs:7:18         # all references to the symbol at file:line:col
+tk def IBus                          # where a symbol is defined
+tk impl IBus                         # who implements/overrides it
+tk callers Send                      # who calls it (incoming call hierarchy)
+tk calls Send                        # what it calls (outgoing call hierarchy)
+tk sig Send                          # signature + doc-comment summary (hover)
+tk sym Media                         # fuzzy workspace-wide symbol search
+tk diag src/Mediator.cs              # compile diagnostics, no build
+tk diag --changed                    # diagnostics for every changed .cs file
+tk fix src/Mediator.cs               # add missing using / remove unnecessary using only
 tk rename src/Mediator.cs:7:18 IBus  # rename a symbol everywhere, editing files IN PLACE
 tk lsp status                        # warm-daemon status for the current workspace
 tk lsp stop                          # stop the workspace daemon
@@ -155,6 +164,12 @@ Filtered output is compact and outcome-first: a short summary line in stable `ke
 
 - `tk mv <old> <new>` — move a file **preserving git history** (`git mv` when tracked, filesystem move otherwise), so it shows up as a rename instead of a delete+add. Never delete and recreate a file to rename or relocate it — use this instead, then fix any namespace/reference fallout the compiler flags (a one-line edit, not a full-file rewrite).
 - `tk refs <file:line:col>` — exact references to a symbol (declaration + all usages), grouped by file. Accurate, instead of guessed from grep.
+- `tk def` / `tk impl` — where a symbol is defined, and who implements/overrides it.
+- `tk callers` / `tk calls` — incoming and outgoing call hierarchy. `tk calls` depends on the server implementing `callHierarchy/outgoingCalls`; some Roslyn builds don't, and answer with an empty result indistinguishable from "genuinely calls nothing" — `tk calls` prints a note when that happens rather than asserting either way.
+- `tk sig <symbol>` — signature and doc-comment summary for a symbol (hover), with markdown noise stripped.
+- `tk sym <query>` — fuzzy workspace-wide symbol search, grouped by file.
+- `tk diag <file|project|dir>` / `tk diag --changed` — compiler diagnostics straight from the warm daemon, no build; `--changed` scopes to every changed `.cs` file (staged + modified + untracked) with no path needed.
+- `tk fix <file>` — applies only the safe subset of `textDocument/codeAction`: add a missing `using` or remove an unnecessary one. Reports `unsupported by server` rather than applying anything wider (e.g. a fix that would need a `workspace/executeCommand` round-trip).
 - `tk rename <file:line:col> <newName>` — rename a symbol across the whole workspace, applying edits **in place** (files are modified, not recreated), so git history and unrelated lines are preserved. Intended for refactoring existing code, not atomic single-file micro-edits.
 
 A per-workspace daemon hosts the language server and stays warm across calls; the first call pays a cold load, later calls are fast. Edits made on disk between calls are picked up automatically. `tk lsp status` / `tk lsp stop` inspect and control it.
@@ -174,7 +189,7 @@ If none is found, `tk refs` / `tk rename` report that the server is unavailable 
 - `core` — always on (navigation, search, view, git, `init`, `module`, …)
 - `dotnet` — `tk quality`, `tk dotnet build|test|restore`
 - `unity` — `tk unity tree|files|status`
-- `lsp` — `tk refs`, `tk rename`, `tk lsp …`
+- `lsp` — `tk refs`, `tk def`, `tk impl`, `tk callers`, `tk calls`, `tk sig`, `tk sym`, `tk diag`, `tk fix`, `tk rename`, `tk lsp …`
 
 `tk module list|enable <name>|disable <name>` toggles a group. The set of enabled modules also determines which instruction snippets `tk init` writes into `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`, so disabling a module both removes its commands and stops advertising it to your agents. Config lives at `~/.local/state/tk/modules` (or `$XDG_STATE_HOME/tk/modules`); with no config file, all modules are enabled.
 
