@@ -10,7 +10,7 @@
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>false</SelfContained>
     <DefaultItemExcludes>$(DefaultItemExcludes);Tk.Tests/**</DefaultItemExcludes>
-    <Version>0.8.0</Version>
+    <Version>0.9.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
