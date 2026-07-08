@@ -39,17 +39,6 @@ public static class Analytics
         string Ws,
         string TkVersion);
 
-    /// <summary>
-    /// Output-contract adapter (Phase B): maps the pre-existing raw/filtered char+line counts to
-    /// the same <see cref="Record"/> fields it always took, so introducing <see cref="UnitLedger"/>
-    /// classification does not change what gets recorded. The ledger's Kept/Summarized/Hidden/
-    /// Unparsed categories are deliberately not fed into analytics this phase — this mapping is
-    /// the frozen boundary between the two.
-    /// </summary>
-    public static (long ShownChars, int ShownLines, long RawChars, int RawLines) FromRawAndFiltered(
-        string raw, string filtered) =>
-        (filtered.Length, HiddenLinesFooter.CountLines(filtered), raw.Length, HiddenLinesFooter.CountLines(raw));
-
     public static void Record(
         string[] commandArgs,
         int exitCode,

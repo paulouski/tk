@@ -27,10 +27,10 @@ var enabledModules = ModuleCatalog.All.Where(m => moduleConfig.IsEnabled(m)).ToL
 var registry = new BuiltinRegistry(enabledModules.SelectMany(m => m.Commands));
 
 var sw = Stopwatch.StartNew();
+var countingWriter = new CountingTextWriter(Console.Out);
 
 if (registry.TryResolve(commandArgs[0], out var builtin))
 {
-    var countingWriter = new CountingTextWriter(Console.Out);
     var ctx = CommandContext.FromCli(cliOptions, countingWriter, Console.Error);
     var exit = await builtin.RunAsync(ctx);
     sw.Stop();
@@ -45,34 +45,15 @@ if (GrepArgsHelper.WantsOwnHelp(commandArgs))
     return 0;
 }
 
+var extCtx = CommandContext.FromCli(cliOptions, countingWriter, Console.Error);
 var filter = cliOptions.Raw
     ? new PassthroughFilter()
     : FilterRegistry.Resolve(commandArgs, cliOptions.DetailLevel, enabledModules);
 var execArgs = GrepArgsHelper.EnsureRecursive(commandArgs, Directory.Exists);
-var (exitCode, stdout, stderr) = await ProcessRunner.Default.RunAsync(execArgs);
-var raw = string.IsNullOrWhiteSpace(stderr)
-    ? stdout
-    : $"{stdout.TrimEnd()}\n{stderr}";
-var ledger = new UnitLedger();
-var filtered = filter.Apply(raw, exitCode, ledger);
-if (!cliOptions.Raw)
-{
-    var rawPath = RawOutputStore.SaveIfNeeded(raw, filtered, commandArgs, exitCode, ledger.UnparsedCount);
-    var footer = OutputFooter.Format(
-        HiddenLinesFooter.CountLines(raw),
-        HiddenLinesFooter.CountLines(filtered),
-        ledger.UnparsedCount,
-        cliOptions.DetailLevel,
-        rawPath);
-    if (footer is not null)
-        filtered = filtered.EndsWith('\n') ? $"{filtered}{footer}\n" : $"{filtered}\n{footer}\n";
-}
-
-Console.Write(filtered);
+var exitCode = await OutputPipeline.RunAsync(execArgs, filter, extCtx);
 sw.Stop();
-var (shownChars, shownLines, rawChars, rawLines) = Analytics.FromRawAndFiltered(raw, filtered);
 Analytics.Record(commandArgs, exitCode, DetailString(cliOptions), sw.ElapsedMilliseconds,
-    shownChars, shownLines, rawChars, rawLines);
+    countingWriter.CharCount, countingWriter.Lines, extCtx.RawCharCount, extCtx.RawLineCount, extCtx.ResultCount);
 return exitCode;
 
 static void PrintHelp()

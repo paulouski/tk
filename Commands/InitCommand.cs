@@ -26,31 +26,18 @@ public sealed class InitCommand : ICommand
 
     private const string ClaudeMarker = "<!-- tk-global-claude -->";
     private const string AgentsMarker = "<!-- tk-global-agents -->";
+    private const string OpencodeMarker = "<!-- tk-global-opencode -->";
     private const string EndMarker = "<!-- /tk-global -->";
 
-    private string BuildClaudeInstructions()
+    private string BuildInstructions(string marker, Func<ModuleDescriptor, string?> snippetSelector)
     {
         var snippets = ResolveEnabledModules()
-            .Select(m => m.InitSnippet)
+            .Select(snippetSelector)
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .ToArray();
 
         return $"""
-            {ClaudeMarker}
-            {string.Join("\n\n", snippets)}
-            {EndMarker}
-            """;
-    }
-
-    private string BuildAgentsInstructions()
-    {
-        var snippets = ResolveEnabledModules()
-            .Select(m => ModuleCatalog.GetAgentsSnippet(m))
-            .Where(s => !string.IsNullOrWhiteSpace(s))
-            .ToArray();
-
-        return $"""
-            {AgentsMarker}
+            {marker}
             {string.Join("\n\n", snippets)}
             {EndMarker}
             """;
@@ -65,13 +52,18 @@ public sealed class InitCommand : ICommand
             new InstallTarget(
                 Path.Combine(home, ".claude", "CLAUDE.md"),
                 ClaudeMarker,
-                BuildClaudeInstructions(),
+                BuildInstructions(ClaudeMarker, m => m.InitSnippet),
                 "Claude global instructions"),
             new InstallTarget(
                 Path.Combine(home, ".codex", "AGENTS.md"),
                 AgentsMarker,
-                BuildAgentsInstructions(),
-                "global AGENTS instructions")
+                BuildInstructions(AgentsMarker, m => ModuleCatalog.GetAgentsSnippet(m)),
+                "global AGENTS instructions"),
+            new InstallTarget(
+                Path.Combine(home, ".config", "opencode", "AGENTS.md"),
+                OpencodeMarker,
+                BuildInstructions(OpencodeMarker, m => ModuleCatalog.GetAgentsSnippet(m)),
+                "opencode global instructions")
         };
 
         var failures = new List<string>();

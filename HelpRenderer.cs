@@ -19,7 +19,7 @@ internal static class HelpRenderer
         var enabled = enabledModules.Select(m => m.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var sb = new StringBuilder();
 
-        sb.AppendLine("tk - token killer for Claude Code");
+        sb.AppendLine("tk - token killer for AI coding agents");
         sb.AppendLine();
         sb.AppendLine("Usage:");
         sb.AppendLine("  tk <command> [args...]     Run command with filtered output");
@@ -32,7 +32,7 @@ internal static class HelpRenderer
         sb.AppendLine("  tk tree [path]             Compact repo tree for agents");
         sb.AppendLine("  tk files [path]            Compact file inventory");
         sb.AppendLine("  tk focus <word...> [-p path] OR-search words (ranked by coverage); quote for exact phrase; --files-only");
-        sb.AppendLine("  tk init                    Install global Claude + AGENTS instructions");
+        sb.AppendLine("  tk init                    Install global Claude + AGENTS + opencode instructions");
         sb.AppendLine("  tk switch                  Toggle between two Claude Code accounts");
         sb.AppendLine("  tk mv <old> <new>          Move file preserving git history (git mv when tracked)");
         sb.AppendLine();

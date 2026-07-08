@@ -20,12 +20,14 @@ import json
 import os
 import subprocess
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Allow running from the repo root without installing
 sys.path.insert(0, str(Path(__file__).parent))
+from config import MATCH_WINDOW
 from ingest import load_sessions, _parse_ts, _parse_cli_dt  # type: ignore[import]
+from ingest_opencode import load_sessions as _load_oc_sessions  # type: ignore[import]
 from pricing import cost_tokens_by_type, get_unknown_models, is_known_model  # type: ignore[import]
 
 
@@ -149,7 +151,7 @@ def _ws_for_cwd(cwd: str) -> str:
 # Joining logic
 # ---------------------------------------------------------------------------
 
-MATCH_WINDOW = timedelta(seconds=30)
+# MATCH_WINDOW is imported from config.py (single source of truth).
 
 
 def _build_own_log_index(own_log: list[dict]) -> dict[str, list[dict]]:
@@ -289,6 +291,35 @@ def _build_groups(session_models: list[dict]) -> list[dict]:
             not is_known_model((_cost(m).get("model") or "")) for m in members
         )
 
+        # B5: parent-sub tk operand overlap. When the main session and a sub
+        # both touch the same symbols, the sub is reinforcing the main's work
+        # rather than exploring something new. Count overlapping operands and
+        # keep a short examples list for debugging/dashboard use.
+        def _collect_ops(sm: dict | None) -> set[str]:
+            if not sm:
+                return set()
+            ops: set[str] = set()
+            for ev in sm.get("events") or []:
+                for op in (ev.get("tk_operand_values") or []):
+                    if op:
+                        ops.add(op)
+            return ops
+
+        if main_sm and subs:
+            parent_ops = _collect_ops(main_sm)
+            overlap_count = 0
+            overlap_examples: list[str] = []
+            for sub in subs:
+                sub_ops = _collect_ops(sub)
+                common = sub_ops & parent_ops
+                overlap_count += len(common)
+                for op in common:
+                    if op not in overlap_examples and len(overlap_examples) < 10:
+                        overlap_examples.append(op)
+        else:
+            overlap_count = 0
+            overlap_examples = []
+
         # Counterfactual inline estimate (upper-bound heuristic)
         inline_estimate_usd: float | None = None
         delegation_delta_usd: float | None = None
@@ -336,6 +367,8 @@ def _build_groups(session_models: list[dict]) -> list[dict]:
             "inline_estimate_lower_usd": inline_estimate_lower_usd,
             "delegation_delta_lower_usd": delegation_delta_lower_usd,
             "has_unknown_model": has_unknown_model,
+            "parent_sub_operand_overlap": overlap_count,
+            "parent_sub_operand_examples": overlap_examples,
             "assumptions": (
                 "Range estimate over the subs' unique token footprint (input + cache_write; "
                 "cache_read is excluded as a re-read artifact of turn count). Lower bound: "
@@ -357,11 +390,21 @@ def _build_groups(session_models: list[dict]) -> list[dict]:
 def run_join(
     from_dt: datetime | None = None,
     to_dt: datetime | None = None,
+    source: str = "claude",
 ) -> dict:
     """
     Load sessions + own-log, join, classify outcomes, return the full model dict.
+
+    source: "claude" (default), "opencode", or "both".
     """
-    sessions = load_sessions(from_dt, to_dt)
+    if source == "claude":
+        sessions = load_sessions(from_dt, to_dt)
+    elif source == "opencode":
+        sessions = _load_oc_sessions(from_dt, to_dt)
+    elif source == "both":
+        sessions = load_sessions(from_dt, to_dt) + _load_oc_sessions(from_dt, to_dt)
+    else:
+        raise ValueError(f"Unknown source: {source!r} (expected claude|opencode|both)")
     own_log = load_own_log()
     index = _build_own_log_index(own_log)
 
@@ -507,6 +550,149 @@ def run_join(
         "groups": groups,
     }
     return model
+
+
+# ---------------------------------------------------------------------------
+# Version filter (used by Stats/stats.sh before injecting into the HTML template)
+# ---------------------------------------------------------------------------
+
+def apply_version_filter(model: dict, target: str) -> dict:
+    """Filter a joined model to a single tk version, recomputing aggregates.
+
+    target: 'all' returns the model unchanged; 'latest' resolves to the
+    highest available non-unknown version; any other value filters sessions
+    and events to that tk_version. Raises ValueError on unknown version so the
+    caller can decide the exit code (stats.sh maps it to SystemExit(2)).
+    """
+    avail = [
+        row.get("version", "unknown")
+        for row in model.get("by_version", [])
+        if row.get("version")
+    ]
+    avail = [v for v in avail if v]
+
+    if target == "latest":
+        candidates = [v for v in avail if v != "unknown"]
+        target = max(candidates, key=_ver_key) if candidates else "unknown"
+
+    if target != "all" and target not in avail:
+        raise ValueError(
+            f"tk version {target!r} not found. Available: {', '.join(avail) or '(none)'}"
+        )
+
+    if target == "all":
+        return model
+
+    sessions = []
+    for session in model.get("sessions", []):
+        event_versions = {
+            ev.get("tk_version")
+            for ev in session.get("events", [])
+            if ev.get("is_tk") and ev.get("tk_version")
+        }
+        if session.get("tk_version") != target and target not in event_versions:
+            continue
+        copy = dict(session)
+        copy["events"] = [
+            ev for ev in session.get("events", [])
+            if not ev.get("is_tk") or ev.get("tk_version") == target
+        ]
+        copy["n_events"] = len(copy["events"])
+        copy["n_tk_events"] = sum(1 for ev in copy["events"] if ev.get("is_tk"))
+        sessions.append(copy)
+
+    tk_events = [
+        ev
+        for session in sessions
+        for ev in session.get("events", [])
+        if ev.get("is_tk")
+    ]
+    matched = sum(1 for ev in tk_events if ev.get("raw_chars") is not None)
+    outcomes = {"WIN": 0, "NEUTRAL": 0, "NET_NEGATIVE": 0, "UNKNOWN": 0}
+    win_raw = win_shown = neg_raw = neg_shown = 0
+    by_version: dict[str, dict] = {}
+
+    for ev in tk_events:
+        outcome = ev.get("outcome") or "UNKNOWN"
+        outcomes[outcome] = outcomes.get(outcome, 0) + 1
+        version = ev.get("tk_version") or "unknown"
+        row = by_version.setdefault(
+            version,
+            {
+                "version": version,
+                "n": 0,
+                "WIN": 0,
+                "NEUTRAL": 0,
+                "NET_NEGATIVE": 0,
+                "UNKNOWN": 0,
+                "saved_chars": 0,
+            },
+        )
+        row["n"] += 1
+        row[outcome] = row.get(outcome, 0) + 1
+        if outcome == "WIN":
+            raw = ev.get("raw_chars") or 0
+            shown = ev.get("shown_chars_ownlog") or 0
+            row["saved_chars"] += raw - shown
+            win_raw += raw
+            win_shown += shown
+        elif outcome == "NET_NEGATIVE":
+            neg_raw += ev.get("raw_chars") or 0
+            neg_shown += ev.get("shown_chars_ownlog") or 0
+
+    all_ts = [
+        ev.get("ts")
+        for session in sessions
+        for ev in session.get("events", [])
+        if ev.get("ts")
+    ]
+    group_ids = {session.get("group_id") for session in sessions}
+
+    filtered = dict(model)
+    filtered["version_filter"] = target
+    filtered["sessions"] = sessions
+    filtered["groups"] = [
+        group for group in model.get("groups", [])
+        if group.get("group_id") in group_ids
+    ]
+    filtered["match_stats"] = {
+        "total_tk_events": len(tk_events),
+        "matched": matched,
+        "unmatched": len(tk_events) - matched,
+        "match_rate": round(matched / len(tk_events), 4) if tk_events else 0.0,
+    }
+    filtered["outcome_counts"] = outcomes
+    filtered["aggregates"] = {
+        "win": {
+            "raw_chars": win_raw,
+            "shown_chars": win_shown,
+            "saved_chars": win_raw - win_shown,
+        },
+        "net_negative": {
+            "raw_chars": neg_raw,
+            "shown_chars": neg_shown,
+            "extra_chars": neg_shown - neg_raw,
+        },
+    }
+    filtered["generated_for_range"] = dict(model.get("generated_for_range", {}))
+    filtered["generated_for_range"]["actual_from"] = min(all_ts) if all_ts else None
+    filtered["generated_for_range"]["actual_to"] = max(all_ts) if all_ts else None
+    filtered["by_version"] = sorted(
+        by_version.values(),
+        key=lambda row: _ver_key(row["version"]),
+        reverse=True,
+    )
+
+    return filtered
+
+
+def _ver_key(version: str) -> tuple[int, ...]:
+    if version == "unknown":
+        return (-1,)
+    try:
+        return tuple(int(part) for part in version.split("."))
+    except ValueError:
+        return (-1,)
 
 
 # ---------------------------------------------------------------------------

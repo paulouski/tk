@@ -117,7 +117,7 @@ if [[ "$tool" == "Read" ]]; then
         # Deterministic — not throttled: a cap must fire on every qualifying Read, not
         # just the first one per 300s window (unlike the nudge below).
         _log_decision "cap-read" "$file_path"
-        _emit_read_cap "$READ_CAP_LINES" "Read capped at ${READ_CAP_LINES} lines by hook (file has ${_lines} lines). Continue with offset/limit for the rest, or locate the relevant slice first (\`tk def <Symbol>\` / \`tk view <file>\` / codebase-memory get_code_snippet). Re-run with explicit offset and limit to read more in one call."
+        _emit_read_cap "$READ_CAP_LINES" "Read capped at ${READ_CAP_LINES} lines by tk-route (file has ${_lines} lines). For C# files, run \`tk view <file>\` to get method ranges, then read the needed offset/limit slice. If you already know the symbol, use \`tk def|refs|callers|impl\`. Re-run with explicit limit=N only when reviewing the whole file."
       elif (( _lines > 400 )); then
         # Throttle: skip if this session was already nudged for a large read within
         # the last 300s. Independent of the symbol-grep "nudge" throttle below —

@@ -9,6 +9,11 @@ Two Claude Code `PreToolUse` hooks:
   subagent prompt, so freshly spawned subagents get the tooling guidance without
   relying on the main agent to paste it by hand.
 
+Plus one opencode plugin (TypeScript):
+
+- **`tk-route-opencode.ts`** ports the same bash-routing and read-cap rules to
+  opencode's `tool.execute.before` hook (see "opencode" section below).
+
 ## What tk-route does
 
 - **Rewrites to `tk`**: single `dotnet build|test|restore` and `git status|log`
@@ -233,3 +238,43 @@ exit as silent no-ops — same degrade-to-no-op philosophy as the router.
 - Standard POSIX utilities (`sed`, `grep`, `cut`, `tail`, `wc`) for the unsafe-detection
   stripping, the nudge throttles, and the large-file line count — present on any normal
   macOS/Linux install
+
+## opencode
+
+opencode (https://opencode.ai) has its own plugin system using `tool.execute.before`
+hooks. `hooks/tk-route-opencode.ts` ports the core routing rules:
+
+- **bash rewrite**: single and compound (`&&`/`||`/`;`/newline) `dotnet build|test|restore`
+  and `git status|log` → `tk ...`. `git diff|show` stays raw. Heredocs, `$()`, backticks,
+  and shell control keywords (`if`/`for`/`while`/...) are left untouched.
+- **read cap**: uncapped Reads of files >500 lines get `limit: 500`.
+
+Not ported (no equivalent in opencode's `tool.execute.before`):
+- the `additionalContext` nudges (symbol-grep, large-read) — opencode can mutate args but
+  has no side-channel context channel like Claude Code's `additionalContext`.
+- the `rtk` fallback rewrite (opencode plugin runs in-process, no shell-out to `rtk`).
+- the three-tier pipeline guard's Tier 2 (problem-shaped grep replacement) — simplified to
+  "rewrite LHS only when all downstream segments are display modifiers (head/tail/cat)".
+
+### How to activate (opencode)
+
+Copy the plugin into your global opencode plugins directory:
+
+```bash
+mkdir -p ~/.config/opencode/plugins
+cp hooks/tk-route-opencode.ts ~/.config/opencode/plugins/tk-route.ts
+```
+
+opencode auto-loads `.ts`/`.js` files from `~/.config/opencode/plugins/` at startup. The
+plugin needs `@opencode-ai/plugin` for the `Plugin` type; opencode resolves it from its
+own runtime — no separate install step. After copying, restart opencode.
+
+To verify it loaded, check that `dotnet build` output is compact after a bash call. The
+plugin degrades to a no-op on any error (file unreadable, no match, etc.) — it never
+blocks or breaks a command.
+
+### Subagent preamble (opencode)
+
+`hooks/tk-preamble-opencode.ts` ports `tk-agent-preamble.sh`: on the `task` tool, appends
+the `[tk cheat-sheet]` block to `args.prompt` (idempotent on the marker). Install the same
+way — copy into `~/.config/opencode/plugins/`. Both plugins can coexist as separate files.

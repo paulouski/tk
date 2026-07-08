@@ -51,7 +51,7 @@ public sealed class GitCommand : ICommand
         var ledger = new UnitLedger();
         var filtered = new GitStatusFilter(ctx.DetailLevel).Apply(raw, exitCode, plainRaw, ledger);
         if (!ctx.Raw)
-            filtered = AppendFooter(raw, filtered, ctx.DetailLevel, ledger, exitCode, ctx.OriginalCommandArgs);
+            filtered = OutputPipeline.AppendFooter(raw, filtered, ctx.DetailLevel, ledger, exitCode, ctx.OriginalCommandArgs);
         ctx.Out.Write(filtered);
         return exitCode;
     }
@@ -91,37 +91,8 @@ public sealed class GitCommand : ICommand
         return await RunFilteredAsync(args, new GitLogFilter(), ctx);
     }
 
-    private static async Task<int> RunFilteredAsync(string[] args, IOutputFilter filter, CommandContext ctx)
-    {
-        var (exitCode, stdout, stderr) = await ctx.Process.RunAsync(args);
-        var raw = ProcessOutput.Combine(stdout, stderr);
-        ctx.RawCharCount = raw.Length;
-        ctx.RawLineCount = HiddenLinesFooter.CountLines(raw);
-        var ledger = new UnitLedger();
-        var filtered = filter.Apply(raw, exitCode, ledger);
-        if (!ctx.Raw)
-            filtered = AppendFooter(raw, filtered, ctx.DetailLevel, ledger, exitCode, ctx.OriginalCommandArgs);
-        ctx.Out.Write(filtered);
-        return exitCode;
-    }
-
-    /// <summary>Shared footer renderer (docs/output-contract.md): hid=/unparsed=/raw= in that
-    /// order, then the escalation hint. raw= appears when the command failed or the filter
-    /// found unparsed (alien) content — either way there's a saved copy worth pointing at.</summary>
-    private static string AppendFooter(string raw, string filtered, DetailLevel level, UnitLedger ledger,
-        int exitCode, string[] commandArgs)
-    {
-        var rawPath = RawOutputStore.SaveIfNeeded(raw, filtered, commandArgs, exitCode, ledger.UnparsedCount);
-        var footer = OutputFooter.Format(
-            HiddenLinesFooter.CountLines(raw),
-            HiddenLinesFooter.CountLines(filtered),
-            ledger.UnparsedCount,
-            level,
-            rawPath);
-        if (footer is null)
-            return filtered;
-        return filtered.EndsWith('\n') ? $"{filtered}{footer}\n" : $"{filtered}\n{footer}\n";
-    }
+    private static Task<int> RunFilteredAsync(string[] args, IOutputFilter filter, CommandContext ctx)
+        => OutputPipeline.RunAsync(args, filter, ctx);
 
     private static string[] BuildGitArgs(IEnumerable<string> globalArgs, IEnumerable<string> args) =>
         ["git", .. globalArgs, .. args];

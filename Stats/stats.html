@@ -162,6 +162,7 @@
   .badge.b-unk { background: var(--s2); color: var(--muted); border: 1px solid var(--bd); }
   .badge.b-flag { background: #201808; color: var(--warn); border: 1px solid #382510; }
   .badge.b-sub { background: var(--s2); color: var(--muted); border: 1px solid var(--bd); font-size: 8px; }
+  .badge.b-src { background: #14202e; color: #4DA6FF; border: 1px solid #1e3a52; font-size: 8px; }
 
   /* legend */
   .legend { margin: 8px 0 4px; font-size: 12px; color: var(--muted); }
@@ -549,7 +550,7 @@ function sessRow(s, idx, rowType, groupId, groupMap) {
   var usd = cost.usd != null ? cost.usd : null;
   var modelShort = (cost.model || '').replace('claude-', '');
   var costCell = fmtUsd(usd);
-  if (usd && modelShort) costCell += ' <span style="color:var(--dim);font-size:10px;">' + h(modelShort) + '</span>';
+  if (modelShort) costCell += ' <span style="color:var(--dim);font-size:10px;">' + h(modelShort) + '</span>';
 
   var cwd = s.cwd || '';
   var proj = cwd ? cwd.split('/').filter(Boolean).pop() : '';
@@ -557,7 +558,8 @@ function sessRow(s, idx, rowType, groupId, groupMap) {
   var rowClass = 'sess-row';
   var indentStyle = (rowType === 'sub' || rowType === 'orphan') ? ' style="background:var(--s0);"' : '';
 
-  var sessionCell = agentCell + ' <span style="color:var(--dim);font-family:monospace;font-size:10px;" title="' + h(fullId(s)) + '">' + h(shortId(s)) + '</span>';
+  var srcBadge = (s.session_file || '').indexOf('opencode/') === 0 ? '<span class="badge b-src">router</span>' : '';
+  var sessionCell = agentCell + ' <span style="color:var(--dim);font-family:monospace;font-size:10px;" title="' + h(fullId(s)) + '">' + h(shortId(s)) + '</span>' + (srcBadge ? ' ' + srcBadge : '');
   var tkCount = s.n_tk_events || 0;
   var tkCell = (tkCount > 0 ? tkCount : '') + (outcomeStr ? (tkCount > 0 ? ' ' : '') + outcomeStr : '') + (flagStr ? ' ' + flagStr : '');
   var branch = s.git_branch || '';

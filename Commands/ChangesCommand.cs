@@ -68,7 +68,7 @@ public sealed class ChangesCommand : ICommand
 
         var originalLines = HiddenLinesFooter.CountLines(statusRaw) + HiddenLinesFooter.CountLines(diffRaw);
         var shownLines = HiddenLinesFooter.CountLines(sb.ToString());
-        var footer = HiddenLinesFooter.Format(originalLines, shownLines, ctx.DetailLevel);
+        var footer = OutputFooter.Format(originalLines, shownLines, unparsedCount: 0, ctx.DetailLevel);
         if (footer is not null)
             sb.AppendLine(footer);
 

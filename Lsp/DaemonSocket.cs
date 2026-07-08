@@ -50,6 +50,22 @@ public record FileDiagnostics(string Uri, LspDiagnostic[] Diagnostics);
 public record HoverResult(string Uri, int Line, int Character, string Contents);
 
 /// <summary>
+/// A single symbol in a textDocument/documentSymbol outline. Lines/chars are 0-based LSP
+/// coordinates (StartLine..EndLine inclusive, mirroring LspLocation's convention). <see
+/// cref="Children"/> carries the nested hierarchy the server returns (e.g. methods inside a
+/// class) and is null for leaves.
+/// </summary>
+public record DocumentSymbolInfo(
+    string Name,
+    string Kind,
+    int StartLine,
+    int StartChar,
+    int EndLine,
+    int EndChar,
+    string? Detail,
+    DocumentSymbolInfo[]? Children);
+
+/// <summary>
 /// Outcome of a `tk fix` request: whether the restricted add/remove-using code-action flow
 /// could be honored by the server at all (false when a fix would require a protocol
 /// interaction — e.g. a mandatory workspace/executeCommand roundtrip — this daemon does not
@@ -76,7 +92,8 @@ public record DaemonResponse(
     FileDiagnostics[]? DiagnosticsByFile = null,
     HoverResult? Hover = null,
     CallerInfo[]? Callees = null,
-    FixSummary? Fix = null);
+    FixSummary? Fix = null,
+    DocumentSymbolInfo[]? Outline = null);
 
 /// <summary>
 /// The daemon's own process identity, persisted next to its socket: the daemon process's

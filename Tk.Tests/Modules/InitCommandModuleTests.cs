@@ -11,7 +11,7 @@ namespace Tk.Tests.Modules;
 [Collection("HomeSensitive")]
 public class InitCommandModuleTests
 {
-    private static async Task<string> RunInitAndReadClaude(IReadOnlyList<ModuleDescriptor> enabledModules)
+    private static async Task<string> RunInitAndRead(IReadOnlyList<ModuleDescriptor> enabledModules, string relativePath)
     {
         var tempHome = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         Directory.CreateDirectory(tempHome);
@@ -28,8 +28,8 @@ public class InitCommandModuleTests
             var cmd = new InitCommand(enabledModules);
             await cmd.RunAsync(ctx);
 
-            var claudePath = Path.Combine(tempHome, ".claude", "CLAUDE.md");
-            return File.Exists(claudePath) ? File.ReadAllText(claudePath) : "";
+            var path = Path.Combine(tempHome, relativePath);
+            return File.Exists(path) ? File.ReadAllText(path) : "";
         }
         finally
         {
@@ -37,6 +37,12 @@ public class InitCommandModuleTests
             Directory.Delete(tempHome, recursive: true);
         }
     }
+
+    private static Task<string> RunInitAndReadClaude(IReadOnlyList<ModuleDescriptor> enabledModules) =>
+        RunInitAndRead(enabledModules, Path.Combine(".claude", "CLAUDE.md"));
+
+    private static Task<string> RunInitAndReadOpencode(IReadOnlyList<ModuleDescriptor> enabledModules) =>
+        RunInitAndRead(enabledModules, Path.Combine(".config", "opencode", "AGENTS.md"));
 
     [Fact]
     public async Task All_modules_enabled_includes_unity_snippet()
@@ -89,5 +95,23 @@ public class InitCommandModuleTests
 
         Assert.Contains("<!-- tk-global-claude -->", content);
         Assert.Contains("<!-- /tk-global -->", content);
+    }
+
+    [Fact]
+    public async Task Opencode_target_written_with_opencode_marker()
+    {
+        var content = await RunInitAndReadOpencode(ModuleCatalog.All);
+
+        Assert.Contains("<!-- tk-global-opencode -->", content);
+        Assert.Contains("<!-- /tk-global -->", content);
+    }
+
+    [Fact]
+    public async Task Opencode_target_includes_core_agents_snippet()
+    {
+        var content = await RunInitAndReadOpencode(ModuleCatalog.All);
+
+        Assert.Contains("tk Global Agent Preset", content);
+        Assert.Contains("tk changes", content);
     }
 }

@@ -83,7 +83,7 @@ public class BinarySmokeTests
         var (exitCode, stdout, _) = Run(_fixture.BinaryPath, Path.GetTempPath(), "--help");
 
         Assert.Equal(0, exitCode);
-        Assert.Contains("tk - token killer for Claude Code", stdout);
+        Assert.Contains("tk - token killer for AI coding agents", stdout);
         Assert.Contains("tk view", stdout);
         Assert.Contains("tk git", stdout);
     }

@@ -124,6 +124,10 @@ def _classify_tk(args: list[str]) -> tuple[str, str | None, list[str], int, list
         return ("", None, [], 0, [])
 
     command = args[0]
+    # F7: tk --version / -v / --help / -h / -V take no args, collapse to "meta".
+    if command in ("--version", "-v", "--help", "-h", "-V"):
+        return ("meta", None, [], 0, [])
+
     wants_sub = command in ("git", "dotnet")
 
     sub = None
@@ -267,6 +271,27 @@ def _tool_input_summary(tool_name: str, tool_input: dict) -> str:
         s = tool_input.get("file_path", "")
     elif tool_name == "Glob":
         s = tool_input.get("pattern", "")
+    elif tool_name in ("Edit", "MultiEdit"):
+        fp = tool_input.get("file_path", "")
+        old = tool_input.get("old_string", "") or ""
+        new = tool_input.get("new_string", "") or ""
+        s = f"{fp} old={len(old)} new={len(new)}"
+    elif tool_name == "Write":
+        fp = tool_input.get("file_path", "")
+        content = tool_input.get("content", "") or ""
+        s = f"{fp} content={len(content)}"
+    elif tool_name in ("Agent", "Task"):
+        s = tool_input.get("description", "") or ""
+    elif tool_name == "Skill":
+        s = tool_input.get("name", "") or ""
+    elif tool_name == "AskUserQuestion":
+        qs = tool_input.get("questions") or []
+        if isinstance(qs, list) and qs:
+            s = qs[0].get("question", "") or ""
+    elif tool_name == "ToolSearch":
+        s = tool_input.get("query", "") or ""
+    elif tool_name == "SendMessage":
+        s = tool_input.get("content", "") or tool_input.get("text", "") or ""
     return s[:300]
 
 

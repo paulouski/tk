@@ -20,6 +20,29 @@ _PRICES: dict[str, tuple[float, float, float, float, float]] = {
     "claude-sonnet-4-5": (3.00, 15.00, 0.30, 3.75,  6.00),
     # Fable
     "claude-fable-5":    (10.00, 50.00, 1.00, 12.50, 20.00),
+
+    # --- Open-model / opencode-router models (OpenCode Zen / Go rates) ---
+    # OpenCode Zen publishes no separate cache-write rate, and opencode's
+    # data shows ~0 cache-write tokens for these models; cache_write_5m and
+    # cache_write_1h are approximated as equal to the input rate.
+    "minimax-m3":        (0.30,  1.20, 0.06, 0.30,  0.30),
+    "minimax-m2.7":      (0.30,  1.20, 0.06, 0.30,  0.30),  # unverified id
+    "minimax-m2.5":      (0.30,  1.20, 0.06, 0.30,  0.30),  # unverified id
+    "glm-5.2":           (1.40,  4.40, 0.26, 1.40,  1.40),
+    "glm-5.1":           (1.40,  4.40, 0.26, 1.40,  1.40),  # unverified id
+    "glm-5":             (1.00,  3.20, 0.20, 1.00,  1.00),  # unverified id
+    "kimi-k2.7-code":    (0.95,  4.00, 0.19, 0.95,  0.95),  # unverified id
+    "kimi-k2.6":         (0.95,  4.00, 0.16, 0.95,  0.95),  # unverified id
+    "kimi-k2.5":         (0.60,  3.00, 0.10, 0.60,  0.60),  # unverified id
+    "qwen3.7-max":       (2.50,  7.50, 0.50, 2.50,  2.50),  # unverified id
+    "qwen3.7-plus":      (0.40,  1.60, 0.04, 0.40,  0.40),  # unverified id
+    "qwen3.6-plus":      (0.50,  3.00, 0.05, 0.50,  0.50),  # unverified id
+    # deepseek-v4-pro: source listed a 2nd cache-read value 0.145; using
+    # 0.0145 per the 1.74/3.48 tier below — ambiguous, unverified id.
+    "deepseek-v4-pro":   (1.74,  3.48, 0.0145, 1.74, 1.74),  # unverified id
+    "deepseek-v4-flash": (0.14,  0.28, 0.0028, 0.14, 0.14),  # unverified id
+    "mimo-v2.5":         (0.14,  0.28, 0.0028, 0.14, 0.14),  # unverified id
+    "mimo-v2.5-pro":     (1.74,  3.48, 0.0145, 1.74, 1.74),  # unverified id
 }
 
 _unknown_models: set[str] = set()
@@ -34,12 +57,20 @@ def _normalize_model(model: str) -> str:
 
     If the exact id is unknown, strip a trailing dated suffix (-YYYYMMDD) and
     try the base id (e.g. claude-haiku-4-5-20251001 -> claude-haiku-4-5).
+
+    If still unknown and the id contains a "/" (provider-prefixed, e.g.
+    opencode's "minimax/minimax-m3"), retry with the substring after the
+    last "/".
     """
     if model in _PRICES:
         return model
     base = _DATE_SUFFIX.sub("", model)
     if base in _PRICES:
         return base
+    if "/" in model:
+        suffix = model.rsplit("/", 1)[-1]
+        if suffix in _PRICES:
+            return suffix
     return model
 
 

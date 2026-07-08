@@ -1,6 +1,6 @@
 # tk — Token Killer
 
-A CLI proxy between AI coding agents (Claude Code, Codex, Cursor) and your dev tools. It runs your command, strips the noise from the output — build logs, git verbosity, NuGet warnings, startup spam — and hands the agent only what it needs to act.
+A CLI proxy between AI coding agents (Claude Code, Codex, opencode, Cursor) and your dev tools. It runs your command, strips the noise from the output — build logs, git verbosity, NuGet warnings, startup spam — and hands the agent only what it needs to act.
 
 Result: **60–99% fewer tokens** per command, which means faster responses, cheaper API calls, and more room in the context window for actual work.
 
@@ -191,9 +191,9 @@ If none is found, `tk refs` / `tk rename` report that the server is unavailable 
 - `unity` — `tk unity tree|files|status`
 - `lsp` — `tk refs`, `tk def`, `tk impl`, `tk callers`, `tk calls`, `tk sig`, `tk sym`, `tk diag`, `tk fix`, `tk rename`, `tk lsp …`
 
-`tk module list|enable <name>|disable <name>` toggles a group. The set of enabled modules also determines which instruction snippets `tk init` writes into `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`, so disabling a module both removes its commands and stops advertising it to your agents. Config lives at `~/.local/state/tk/modules` (or `$XDG_STATE_HOME/tk/modules`); with no config file, all modules are enabled.
+`tk module list|enable <name>|disable <name>` toggles a group. The set of enabled modules also determines which instruction snippets `tk init` writes into `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, and `~/.config/opencode/AGENTS.md`, so disabling a module both removes its commands and stops advertising it to your agents. Config lives at `~/.local/state/tk/modules` (or `$XDG_STATE_HOME/tk/modules`); with no config file, all modules are enabled.
 
-## Configuring with Claude Code
+## Configuring with your agent
 
 ```bash
 tk init
@@ -203,6 +203,7 @@ This installs or updates global tk instruction blocks in:
 
 - `~/.claude/CLAUDE.md`
 - `~/.codex/AGENTS.md`
+- `~/.config/opencode/AGENTS.md`
 
 The installer is marker-based and idempotent: rerunning `tk init` updates the tk block instead of duplicating it.
 

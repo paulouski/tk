@@ -481,13 +481,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Build annotated model + compact report")
     parser.add_argument("--from", dest="from_dt", metavar="ISO")
     parser.add_argument("--to", dest="to_dt", metavar="ISO")
+    parser.add_argument("--source", dest="source", choices=("claude", "opencode", "both"),
+                        default="claude",
+                        help="Data source: claude (default), opencode, or both")
     args = parser.parse_args()
 
     from_dt = _parse_cli_dt(args.from_dt) if args.from_dt else None
     to_dt = _parse_cli_dt(args.to_dt, end_of_day=True) if args.to_dt else None
 
     # Pipeline: join -> annotate -> report
-    model = run_join(from_dt, to_dt)
+    model = run_join(from_dt, to_dt, source=args.source)
     annotate(model)
 
     # Write model.json
