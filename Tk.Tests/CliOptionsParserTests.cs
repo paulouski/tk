@@ -42,13 +42,35 @@ public class CliOptionsParserTests
     }
 
     [Fact]
-    public void Parsing_stops_at_first_non_flag_token()
+    public void More_after_subcommand_is_recognized_and_stripped()
     {
-        // --more after the command is part of CommandArgs (parser stops at first non-flag)
+        // --more is tk-only, so it's recognized even after the subcommand/command args
+        // start, and removed from CommandArgs so it isn't forwarded to the tool.
         var opts = CliOptionsParser.Parse(["git", "--more", "status"]);
         Assert.False(opts.Raw);
+        Assert.Equal(DetailLevel.More, opts.DetailLevel);
+        Assert.Equal(new[] { "git", "status" }, opts.CommandArgs);
+    }
+
+    [Fact]
+    public void More_after_subcommand_with_other_flags_is_recognized_and_stripped()
+    {
+        var opts = CliOptionsParser.Parse(["dotnet", "test", "--more", "--filter", "X"]);
+        Assert.False(opts.Raw);
+        Assert.Equal(DetailLevel.More, opts.DetailLevel);
+        Assert.Equal(new[] { "dotnet", "test", "--filter", "X" }, opts.CommandArgs);
+    }
+
+    [Fact]
+    public void Raw_after_subcommand_is_left_untouched_for_the_underlying_tool()
+    {
+        // --raw collides with real git options (git diff/show/log --raw), so unlike
+        // --more it stays position-sensitive: only a leading --raw sets tk's Raw flag.
+        // A --raw appearing after the subcommand is left in CommandArgs and forwarded.
+        var opts = CliOptionsParser.Parse(["git", "diff", "--raw"]);
+        Assert.False(opts.Raw);
         Assert.Equal(DetailLevel.Default, opts.DetailLevel);
-        Assert.Equal(new[] { "git", "--more", "status" }, opts.CommandArgs);
+        Assert.Equal(new[] { "git", "diff", "--raw" }, opts.CommandArgs);
     }
 
     [Fact]

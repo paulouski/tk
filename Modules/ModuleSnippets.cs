@@ -22,6 +22,7 @@ internal static class ModuleSnippets
         - `tk log <file>` — compacted file history
         - `tk changes` — working-tree change summary
         - `tk mv <old> <new>` — move a file preserving git history (use instead of delete+recreate; keeps git blame and saves tokens). For a .cs file moved across folders, tk fixes the namespace to match the new path and patches referencing files automatically (needs the lsp module); if it can't (module off, unconventional namespace), it still moves the file and prints why the namespace wasn't touched. `--no-fix-ns` skips this; `--ns <namespace>` sets the target explicitly.
+        - `tk write <file> <start>-<end> --expect-first '<anchor>'` — line-range edit: new content on stdin, cheaper than re-pasting old/new strings. `end` omitted = single line; `end == start-1` inserts before `start`; requires one of `--expect-first`/`--expect-last`/`--expect-sha` to guard against stale line numbers.
 
         Orientation only — prefer native Grep/Read for real work:
         - `tk tree`, `tk files` — quick repo shape

@@ -3,10 +3,10 @@
 # proxies. `dotnet build|test|restore` and `git status|log` (optionally prefixed
 # by `-C <path>` / `-c <key=val>` global flags, or `VAR=val` env-var prefixes)
 # are routed to `tk`; any other recognized command falls back to `rtk rewrite`
-# (if `rtk` is installed). Also nudges symbol-grep toward `tk def|refs|callers`,
-# nudges large whole-file Reads (no offset/limit, >400 lines) toward a slice or
-# a symbol lookup, and deterministically caps whole-file Reads over
-# READ_CAP_LINES lines (no offset/limit) at that many lines via updatedInput.
+# (if `rtk` is installed). Also nudges symbol-grep and stealth cat/sed/head/tail reads of
+# .cs files toward `tk def|refs|callers`/`tk view`, and deterministically caps whole-file
+# Reads (no offset/limit) over READ_CAP_BYTES chars to however many leading lines fit that
+# budget (clamped to READ_CAP_LINES) via updatedInput.
 #
 # Compound commands (&&, ||, ;, |, and bare newlines used as statement
 # separators) get a conservative, quote-aware segment rewrite: each `&&`/`||`/
@@ -91,44 +91,40 @@ _emit_nudge() {
     '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"allow",additionalContext:$ctx}}'
 }
 
-# Read auto-cap threshold in lines. Chosen from Stats/bash_opportunities.py --read-cost
-# on tk 0.6.0 transcripts: of uncapped Read events over 400 lines, a 500-line cutoff
-# captures ~71% of their chars (36/60 events), well ahead of 600 (~44%) or 700-800
-# (~22%) — the sharpest bulk-capture point in the 400-800 range.
+# Read auto-cap thresholds. READ_CAP_BYTES is the primary, char-based trigger: a whole-file
+# Read (no offset/limit) over this many chars gets capped to however many leading lines fit
+# the budget. READ_CAP_LINES is a secondary line ceiling clamping that computed limit, so a
+# file with extremely short lines can't produce a limit larger than this. Chosen from
+# Stats/bash_opportunities.py --read-cost on tk 0.6.0 transcripts: of uncapped Read events
+# over 400 lines, a 500-line cutoff captures ~71% of their chars (36/60 events), well ahead
+# of 600 (~44%) or 700-800 (~22%) — the sharpest bulk-capture point in the 400-800 range.
+READ_CAP_BYTES=2000  # char budget for whole-file reads; user-chosen 2k.
 READ_CAP_LINES=500
 
 _emit_read_cap() {
-  local limit="$1" ctx="$2"
-  jq -n --argjson lim "$limit" --arg ctx "$ctx" \
-    '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"allow",updatedInput:{limit:$lim},additionalContext:$ctx}}'
+  local file_path="$1" limit="$2" ctx="$3"
+  jq -n --arg fp "$file_path" --argjson lim "$limit" --arg ctx "$ctx" \
+    '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"allow",updatedInput:{file_path:$fp,limit:$lim},additionalContext:$ctx}}'
 }
 
-# --- Read handling: cap large whole-file reads with no offset/limit; nudge smaller-but-
-# still-large ones. ---
+# --- Read handling: cap large whole-file reads with no offset/limit at a char budget. ---
 if [[ "$tool" == "Read" ]]; then
   file_path=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
   offset=$(printf '%s' "$INPUT" | jq -r '.tool_input.offset // empty' 2>/dev/null)
   limit=$(printf '%s' "$INPUT" | jq -r '.tool_input.limit // empty' 2>/dev/null)
 
   if [[ -z "$offset" && -z "$limit" && -n "$file_path" && -f "$file_path" ]]; then
-    _lines=$(wc -l < "$file_path" 2>/dev/null | tr -d '[:space:]')
-    if [[ "$_lines" =~ ^[0-9]+$ ]]; then
-      if (( _lines > READ_CAP_LINES )); then
+    bytes=$(wc -c < "$file_path" 2>/dev/null | tr -d '[:space:]')
+    lines=$(wc -l < "$file_path" 2>/dev/null | tr -d '[:space:]')
+    if [[ "$bytes" =~ ^[0-9]+$ && "$lines" =~ ^[0-9]+$ ]]; then
+      if (( bytes > READ_CAP_BYTES )); then
+        lim=$(awk -v cap="$READ_CAP_BYTES" '{b+=length($0)+1; c++; if(b>=cap){print c; exit}} END{if(b<cap)print c+0}' "$file_path")
+        [[ "$lim" =~ ^[0-9]+$ && "$lim" -ge 1 ]] || lim=1
+        (( lim > READ_CAP_LINES )) && lim=$READ_CAP_LINES
         # Deterministic — not throttled: a cap must fire on every qualifying Read, not
-        # just the first one per 300s window (unlike the nudge below).
+        # just the first one per 300s window (unlike the nudges elsewhere in this hook).
         _log_decision "cap-read" "$file_path"
-        _emit_read_cap "$READ_CAP_LINES" "Read capped at ${READ_CAP_LINES} lines by tk-route (file has ${_lines} lines). For C# files, run \`tk view <file>\` to get method ranges, then read the needed offset/limit slice. If you already know the symbol, use \`tk def|refs|callers|impl\`. Re-run with explicit limit=N only when reviewing the whole file."
-      elif (( _lines > 400 )); then
-        # Throttle: skip if this session was already nudged for a large read within
-        # the last 300s. Independent of the symbol-grep "nudge" throttle below —
-        # neither suppresses the other.
-        _nudge=1
-        _recently_nudged "nudge-read" && _nudge=0
-
-        if [[ "$_nudge" -eq 1 ]]; then
-          _log_decision "nudge-read" "$file_path"
-          _emit_nudge "Large file read without offset/limit detected. If you need one symbol or section, prefer codebase-memory MCP get_code_snippet / \`tk def <Symbol>\` to locate it, or \`tk view <file>\` for a structure map, then Read the relevant slice with offset/limit. Full reads are right when editing or reviewing the whole file."
-        fi
+        _emit_read_cap "$file_path" "$lim" "Read capped to ~2000 chars (${lim} lines) by tk-route (file is ${bytes} chars / ${lines} lines). For C# files run \`tk view <file>\` for a symbol map, then Read the needed offset/limit slice; use \`tk def|refs|callers|impl\` to jump to a symbol. Re-run with an explicit offset/limit to read more."
       fi
     fi
   fi
@@ -581,6 +577,30 @@ case "$stripped" in
   *'&&'*|*'||'*|*\|*|*\;*|*$'\n'*) compound=1 ;;
 esac
 
+# .cs stealth-read detection: cat/sed/head/tail reading a .cs file bypasses structure-aware
+# tools. Detected up front, before the rewrite path, so its nudge can be attached to a
+# `rtk read ...` rewrite (real rtk recognizes cat/head/tail, NOT sed) as well as fired
+# standalone (sed, or when rtk isn't available/declines) — the rtk rewrite below must never
+# silently swallow this nudge. Scoped to .cs only: cat/sed/head/tail on non-.cs files
+# (txt/json/logs/...) is common and not worth nudging.
+CS_STEALTH_READ_CMD_RE='(^|[|&;[:space:]])(cat|sed|head|tail)([[:space:]]|$)'
+CS_STEALTH_READ_FILE_RE="[^[:space:]]+\\.cs([[:space:]]|\$|['\"])"
+CS_STEALTH_READ_CTX="Reading a source file via cat/sed/head/tail bypasses structure-aware tools. Use \`tk view <file>\` for a symbol map, or \`tk def|refs|callers <Symbol>\` to jump, then Read the slice."
+_cs_stealth_hit=0
+[[ "$cmd" =~ $CS_STEALTH_READ_CMD_RE && "$cmd" =~ $CS_STEALTH_READ_FILE_RE ]] && _cs_stealth_hit=1
+
+# _cs_stealth_nudge_hint — sets _cs_stealth_hint to the nudge context (and logs the "nudge"
+# decision) iff this command is a .cs stealth read AND the shared "nudge" throttle (also
+# used by the symbol-grep nudge) hasn't fired recently; otherwise sets it empty. A throttled
+# repeat still lets a rewrite proceed, just without the nudge attached.
+_cs_stealth_nudge_hint() {
+  _cs_stealth_hint=""
+  [[ "$_cs_stealth_hit" -eq 1 ]] || return
+  _recently_nudged "nudge" && return
+  _log_decision "nudge" "$cmd"
+  _cs_stealth_hint="$CS_STEALTH_READ_CTX"
+}
+
 # REWRITE: safe single commands keep the existing tk/rtk behavior. Compound
 # commands get conservative segment-aware tk rewrites only; rtk fallback is left
 # to simple commands because many rtk file/stdin rewrites are not pipeline-safe.
@@ -595,7 +615,11 @@ if [[ "$hard_unsafe" -eq 0 ]]; then
     decision="route-tk"
     [[ "$_rewritten_segment" =~ ^[[:space:]]*rtk[[:space:]] ]] && decision="route-rtk"
     _log_decision "$decision" "$cmd"
-    _emit_rewrite "$_rewritten_segment"
+    # A cat/head/tail rewrite to `rtk read ...` still needs the stealth-read nudge attached
+    # (real rtk rewrites cat/head/tail before this point) — compute and attach it here rather
+    # than let the rewrite exit swallow it.
+    _cs_stealth_nudge_hint
+    _emit_rewrite "$_rewritten_segment" "$_cs_stealth_hint"
     exit 0
   fi
 fi
@@ -624,6 +648,15 @@ if [[ "$trimmed" =~ ^(grep|egrep|fgrep|rg)[[:space:]] ]] && \
     _emit_nudge "Symbol lookup via grep detected. Prefer codebase-memory MCP (search_graph/trace_path) for symbol definitions/references/callers; if MCP is unavailable or the repo is not indexed, use \`tk def|refs|callers <Symbol>\` (lsp module). Text grep for \`class X\` misses cross-file references and interface dispatch."
     exit 0
   fi
+fi
+
+# NUDGE: a .cs stealth read (cat/sed/head/tail) that wasn't rewritten above — sed (real rtk
+# doesn't recognize it), or rtk unavailable/declined. Fires standalone, same detection and
+# shared "nudge" throttle as the rewrite-path attachment above.
+_cs_stealth_nudge_hint
+if [[ -n "$_cs_stealth_hint" ]]; then
+  _emit_nudge "$_cs_stealth_hint"
+  exit 0
 fi
 
 exit 0

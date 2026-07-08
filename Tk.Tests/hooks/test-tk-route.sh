@@ -27,7 +27,7 @@ REAL_JQ="$(command -v jq || true)"
 FAKE_BIN="$WORK/bin"
 mkdir -p "$FAKE_BIN"
 ln -s "$REAL_JQ" "$FAKE_BIN/jq"
-for tool in cat date tr bash sh mkdir rm sed grep cut tail wc; do
+for tool in cat date tr bash sh mkdir rm sed grep cut tail wc awk; do
   p="$(command -v "$tool" || true)"
   [[ -n "$p" ]] && ln -sf "$p" "$FAKE_BIN/$tool"
 done
@@ -43,6 +43,13 @@ if [[ "$1" != "rewrite" ]]; then
   exit 1
 fi
 cmd="$2"
+# Mirrors real rtk: cat/head/tail <path>.cs -> "rtk read <path>.cs" (real rtk does NOT
+# recognize sed) -- needed so the .cs stealth-read nudge tests below reproduce the real
+# ordering, where the rewrite fires and the nudge must still be attached to it.
+if [[ "$cmd" =~ ^(cat|head|tail)[[:space:]]+([^[:space:]]+\.cs)$ ]]; then
+  printf 'rtk read %s' "${BASH_REMATCH[2]}"
+  exit 0
+fi
 case "$cmd" in
   "docker ps"|"docker ps -a"|"git commit"|"git commit -m test"| \
   'grep -rn "class Foo\|class Bar" src'|'grep -r class\|record src')
@@ -501,17 +508,38 @@ assert_true "log rotation: dated log file contains the route-tk line" \
 assert_true "log rotation: legacy flat tk-hook.log is NOT created" \
   "$([[ ! -f "$FAKE_HOME/.claude/tk-hook.log" ]] && echo 1 || echo 0)"
 
-# ── Read-tool nudge: large whole-file reads (no offset/limit, >400 lines) get an
-# additionalContext hint; silent for small files, missing files, or when offset/limit is
-# given; throttled like the symbol-grep nudge but independently (own "nudge-read" decision,
-# own 300s window, does not suppress or get suppressed by the symbol-grep "nudge"). ─────────
+# ── Read-tool cap: whole-file reads (no offset/limit) over a 2000-char budget are
+# character-capped (not line-capped) to however many leading lines fit that budget, clamped
+# to a 500-line ceiling; silent for files under the budget, missing files, or when
+# offset/limit is given; deterministic (not throttled). ────────────────────────────────────
 BIG_FILE="$WORK/big_file.txt"
 seq 1 500 > "$BIG_FILE"
 SMALL_FILE="$WORK/small_file.txt"
 seq 1 10 > "$SMALL_FILE"
 MISSING_FILE="$WORK/does_not_exist.txt"
-CAP_FILE="$WORK/cap_file.txt"
-seq 1 600 > "$CAP_FILE"
+# Char-dense but SHORT file: 50 lines of 800 chars each (40050 bytes) -- well over the 2000-
+# char budget despite having far fewer than 500 lines. This is exactly the case a line-only
+# cap misses.
+DENSE_FILE="$WORK/dense_file.txt"
+line800="$(printf 'x%.0s' $(seq 1 800))"
+yes "$line800" | head -50 > "$DENSE_FILE"
+# Large file with short, uniform lines (1500 lines x 2 bytes) so the computed limit exceeds
+# the 500-line ceiling and gets clamped.
+LARGE_FILE="$WORK/large_file.txt"
+yes a | head -1500 > "$LARGE_FILE"
+
+# compute_expected_cap_limit <file> — mirrors the hook's own awk formula (see
+# hooks/tk-route.sh, _emit_read_cap call site) plus the READ_CAP_LINES clamp, so expected
+# limits stay correct without hand-computing byte arithmetic per fixture.
+compute_expected_cap_limit() {
+  local file="$1"
+  local lim
+  lim=$(awk -v cap="2000" '{b+=length($0)+1; c++; if(b>=cap){print c; exit}} END{if(b<cap)print c+0}' "$file")
+  (( lim > 500 )) && lim=500
+  printf '%s' "$lim"
+}
+DENSE_EXPECTED_LIMIT="$(compute_expected_cap_limit "$DENSE_FILE")"
+LARGE_EXPECTED_LIMIT="$(compute_expected_cap_limit "$LARGE_FILE")"
 
 # hook_run_read <path> <file> <offset> <limit> [cwd]
 # offset/limit empty string means "absent from tool_input" (not merely null).
@@ -547,26 +575,10 @@ hook_run_read_keep_home() {
   fi
 }
 
-# expect_read_nudge <desc> <file> <offset> <limit> [cwd]
-expect_read_nudge() {
-  local desc="$1" file="$2" offset="$3" limit="$4" cwd="${5:-/repo}"
-  hook_run_read_keep_home "$FAKE_BIN" "$file" "$offset" "$limit" "$cwd"
-
-  assert_eq "$desc: exit 0" "0" "$RC"
-  local got_ctx
-  got_ctx="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty')"
-  assert_true "$desc: additionalContext present" "$([[ -n "$got_ctx" ]] && echo 1 || echo 0)"
-  local got_updated
-  got_updated="$(printf '%s' "$OUT" | jq -r 'if (.hookSpecificOutput | has("updatedInput")) then "present" else "" end')"
-  assert_eq "$desc: no updatedInput (Read input unchanged)" "" "$got_updated"
-  assert_true "$desc: decision-log line present (nudge-read)" \
-    "$([[ "$LOG_CONTENT" == *$'\t'"nudge-read"$'\t'* ]] && echo 1 || echo 0)"
-  assert_true "$desc: decision-log carries file path" \
-    "$([[ "$LOG_CONTENT" == *"$file"* ]] && echo 1 || echo 0)"
-}
-
-# expect_no_read_nudge <desc> <file> <offset> <limit> [cwd]
-expect_no_read_nudge() {
+# expect_no_read_cap <desc> <file> <offset> <limit> [cwd]
+# No cap and no other stdout at all: file under the byte budget, missing file, or offset/
+# limit already given.
+expect_no_read_cap() {
   local desc="$1" file="$2" offset="$3" limit="$4" cwd="${5:-/repo}"
   local before_log="$LOG_CONTENT"
   hook_run_read_keep_home "$FAKE_BIN" "$file" "$offset" "$limit" "$cwd"
@@ -576,18 +588,21 @@ expect_no_read_nudge() {
   assert_eq "$desc: no new decision-log entry" "$before_log" "$LOG_CONTENT"
 }
 
-# expect_read_cap <desc> <file> <offset> <limit> [cwd]
+# expect_read_cap <desc> <file> <offset> <limit> <expected_limit> [cwd]
 expect_read_cap() {
-  local desc="$1" file="$2" offset="$3" limit="$4" cwd="${5:-/repo}"
+  local desc="$1" file="$2" offset="$3" limit="$4" expected_limit="$5" cwd="${6:-/repo}"
   hook_run_read_keep_home "$FAKE_BIN" "$file" "$offset" "$limit" "$cwd"
 
   assert_eq "$desc: exit 0" "0" "$RC"
+  local got_fp
+  got_fp="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.updatedInput.file_path // empty')"
+  assert_eq "$desc: updatedInput.file_path" "$file" "$got_fp"
   local got_limit
   got_limit="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.updatedInput.limit // empty')"
-  assert_eq "$desc: updatedInput.limit == 500" "500" "$got_limit"
+  assert_eq "$desc: updatedInput.limit" "$expected_limit" "$got_limit"
   local got_keys
-  got_keys="$(printf '%s' "$OUT" | jq -c '.hookSpecificOutput.updatedInput | keys')"
-  assert_eq "$desc: updatedInput contains only the limit key" '["limit"]' "$got_keys"
+  got_keys="$(printf '%s' "$OUT" | jq -c '.hookSpecificOutput.updatedInput | keys | sort')"
+  assert_eq "$desc: updatedInput contains file_path and limit" '["file_path","limit"]' "$got_keys"
   local got_ctx
   got_ctx="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty')"
   assert_true "$desc: additionalContext present" "$([[ -n "$got_ctx" ]] && echo 1 || echo 0)"
@@ -595,48 +610,85 @@ expect_read_cap() {
     "$([[ "$LOG_CONTENT" == *$'\t'"cap-read"$'\t'* ]] && echo 1 || echo 0)"
 }
 
-# Group 1: fires on a big file with no offset/limit, then throttled on an immediate repeat.
+# Group 1: char-dense but short file (well over 2000 chars, far under 500 lines) caps -- the
+# case a line-only cap misses entirely. Deterministic: fires again on an immediate repeat.
 rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
-expect_read_nudge "big file, no offset/limit -> nudge" "$BIG_FILE" "" ""
-expect_no_read_nudge "big file again immediately after -> throttled, not nudged" "$BIG_FILE" "" ""
+expect_read_cap "char-dense short file, no offset/limit -> capped" "$DENSE_FILE" "" "" "$DENSE_EXPECTED_LIMIT"
+expect_read_cap "cap fires again immediately after -> still capped (no throttle)" "$DENSE_FILE" "" "" "$DENSE_EXPECTED_LIMIT"
 
-# Group 2: silent cases, all on a fresh home so none are throttled by a prior nudge.
+# Group 2: a large file with short lines still caps, and the computed limit is clamped to
+# the 500-line ceiling.
 rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
-expect_no_read_nudge "big file with offset given -> no nudge" "$BIG_FILE" "100" ""
-expect_no_read_nudge "big file with limit given -> no nudge" "$BIG_FILE" "" "50"
-expect_no_read_nudge "big file with offset and limit given -> no nudge" "$BIG_FILE" "10" "50"
-expect_no_read_nudge "small file (<=400 lines), no offset/limit -> no nudge" "$SMALL_FILE" "" ""
-expect_no_read_nudge "missing file -> no nudge" "$MISSING_FILE" "" ""
+expect_read_cap "large file, no offset/limit -> capped, limit clamped to 500" "$LARGE_FILE" "" "" "$LARGE_EXPECTED_LIMIT"
+assert_eq "large file expected limit is clamped to the 500-line ceiling" "500" "$LARGE_EXPECTED_LIMIT"
 
-# Group 3: the read-nudge throttle is independent of the symbol-grep nudge throttle in both
-# directions -- neither one's recent firing suppresses the other.
+# Group 3: silent cases -- no stdout at all.
 rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
-expect_nudge 'symbol grep -> nudge (before independence check)' \
-  'grep -rn "class Nine\|class Ten" other_src'
-expect_read_nudge "big file read right after a symbol-grep nudge -> still nudges (independent throttle)" \
-  "$BIG_FILE" "" ""
+expect_no_read_cap "small file (<2000 chars), no offset/limit -> no cap" "$SMALL_FILE" "" ""
+expect_no_read_cap "big file (500 lines, <2000 chars), no offset/limit -> no cap" "$BIG_FILE" "" ""
+expect_no_read_cap "missing file -> no cap" "$MISSING_FILE" "" ""
+expect_no_read_cap "dense file with offset given -> untouched (no cap)" "$DENSE_FILE" "100" ""
+expect_no_read_cap "dense file with limit given -> untouched (no cap)" "$DENSE_FILE" "" "10"
+expect_no_read_cap "dense file with offset and limit given -> untouched (no cap)" "$DENSE_FILE" "10" "10"
+
+# expect_stealth_rewrite_nudge <desc> <command> <expected_new_command>
+# .cs stealth read that the fake rtk DOES recognize (cat/head/tail, mirroring real rtk):
+# both the `rtk read ...` rewrite AND the tk-view nudge must be present together.
+expect_stealth_rewrite_nudge() {
+  local desc="$1" cmd="$2" expected_new="$3"
+  hook_run_keep_home "$FAKE_BIN" "$cmd"
+
+  assert_eq "$desc: exit 0" "0" "$RC"
+  local got_new
+  got_new="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.updatedInput.command // empty')"
+  assert_eq "$desc: updatedInput.command" "$expected_new" "$got_new"
+  local got_ctx
+  got_ctx="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty')"
+  assert_true "$desc: additionalContext (nudge) present" "$([[ -n "$got_ctx" ]] && echo 1 || echo 0)"
+  assert_true "$desc: decision-log line present (nudge)" \
+    "$([[ "$LOG_CONTENT" == *$'\t'"nudge"$'\t'* ]] && echo 1 || echo 0)"
+}
+
+# expect_stealth_rewrite_no_nudge <desc> <command> <expected_new_command>
+# Throttled repeat: the rewrite still fires every time (deterministic, not throttled), but
+# the nudge itself is suppressed (throttle only ever suppresses additionalContext, never
+# the rewrite).
+expect_stealth_rewrite_no_nudge() {
+  local desc="$1" cmd="$2" expected_new="$3"
+  hook_run_keep_home "$FAKE_BIN" "$cmd"
+
+  assert_eq "$desc: exit 0" "0" "$RC"
+  local got_new
+  got_new="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.updatedInput.command // empty')"
+  assert_eq "$desc: updatedInput.command (rewrite still happens)" "$expected_new" "$got_new"
+  local got_ctx
+  got_ctx="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty')"
+  assert_eq "$desc: no additionalContext (nudge throttled)" "" "$got_ctx"
+}
+
+# ── Bash: stealth .cs reads via cat/sed/head/tail nudge toward tk view / tk def|refs|callers.
+# Real rtk (and the fake rtk stub above) rewrites cat/head/tail of a .cs file to
+# `rtk read <file>` -- the nudge must be attached to that rewrite, not swallowed by it. sed
+# is NOT recognized by real rtk, so it nudges standalone with no rewrite. Scoped to .cs only;
+# shares the "nudge" throttle bucket with the symbol-grep nudge. ───────────────────────────
+rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
+expect_stealth_rewrite_nudge "cat a .cs file -> rewritten to rtk read AND nudged" \
+  "cat foo.cs" "rtk read foo.cs"
+expect_stealth_rewrite_no_nudge "second stealth .cs read immediately after -> still rewritten, nudge throttled" \
+  "head foo.cs" "rtk read foo.cs"
 
 rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
-expect_read_nudge "big file read -> nudge (before independence check, reverse direction)" \
-  "$BIG_FILE" "" ""
-expect_nudge 'symbol grep right after a read nudge -> still nudges (independent throttle)' \
-  'grep -rn "class Eleven\|class Twelve" other_src'
-
-# ── Read-tool cap: files over the 500-line cap threshold with no offset/limit get
-# updatedInput.limit=500 (deterministic, not throttled — fires on every qualifying call).
-# Files at-or-below the cap threshold but over 400 lines still just nudge (unchanged). ──────
-rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
-expect_read_cap "file over cap threshold, no offset/limit -> capped" "$CAP_FILE" "" ""
-expect_read_cap "cap fires again immediately after -> still capped (no throttle)" "$CAP_FILE" "" ""
+expect_nudge "sed -n on a .cs file -> nudge only (real rtk doesn't rewrite sed)" \
+  "sed -n '1,40p' foo.cs"
 
 rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
-expect_no_read_nudge "file over cap threshold with offset given -> untouched (no cap, no nudge)" \
-  "$CAP_FILE" "100" ""
-expect_no_read_nudge "file over cap threshold with limit given -> untouched (no cap, no nudge)" \
-  "$CAP_FILE" "" "50"
+expect_stealth_rewrite_nudge "tail a .cs file -> rewritten to rtk read AND nudged" \
+  "tail foo.cs" "rtk read foo.cs"
 
 rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
-expect_read_nudge "file at cap threshold exactly (500 lines) -> nudge, not cap" "$BIG_FILE" "" ""
+expect_no_nudge "cat a .txt file -> no nudge, and rtk doesn't recognize it either (scoped to .cs only)" \
+  "cat foo.txt"
+expect_no_nudge "unrelated passthrough command -> no stealth-read nudge" "kubectl get pods"
 
 echo "# --- $PASS passed, $FAIL failed ---"
 [[ "$FAIL" -eq 0 ]]

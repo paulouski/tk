@@ -51,6 +51,14 @@ public static class ModuleCatalog
                     "tk files [path]", "Key files and top directories; add --code"),
                 CommandRow.Builtin(new FocusCommand(),
                     "tk focus <word...> [-p path]", "Multi-word OR search ranked by coverage; quote for phrase; --code/--docs/--all/--files-only"),
+                CommandRow.Builtin(new WriteCommand(),
+                    "tk write <file> <range>", "Replace lines start-end with stdin content; end==start-1 inserts, (n+1)-(n) appends; requires an --expect-* anchor below",
+                    extraHelpLines:
+                    [
+                        ("tk write <file> <range> --expect-first <t>", "Require line `start` to currently start with <t>"),
+                        ("tk write <file> <range> --expect-last <t>", "Require line `end` to currently start with <t>"),
+                        ("tk write <file> <range> --expect-sha <hex>", "Require the file's current sha256 to start with <hex>"),
+                    ]),
                 CommandRow.Builtin(new MvCommand(),
                     "tk mv <old> <new>", "Move file; git mv when tracked (preserves history), else filesystem. For .cs files moved across folders, fixes the namespace and referencing files by default (needs lsp module)",
                     extraHelpLines:
