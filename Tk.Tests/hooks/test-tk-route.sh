@@ -219,6 +219,51 @@ expect_no_nudge() {
   assert_eq "$desc: no new decision-log entry" "$before_log" "$LOG_CONTENT"
 }
 
+# hook_run_keep_home_sid <path> <command> <session_id> [cwd]
+# Same as hook_run_keep_home, but stamps a session_id on the hook input — needed to prove
+# the nudge throttle is keyed by session_id (a nudge in one session must not throttle a
+# nudge in a different session).
+hook_run_keep_home_sid() {
+  local path="$1" cmd="$2" sid="$3" cwd="${4:-/repo}"
+  mkdir -p "$FAKE_HOME/.claude"
+
+  local input
+  input=$(jq -n --arg c "$cmd" --arg cwd "$cwd" --arg sid "$sid" \
+    '{tool_name:"Bash", tool_input:{command:$c}, cwd:$cwd, session_id:$sid}')
+
+  OUT="$(PATH="$path" HOME="$FAKE_HOME" bash "$HOOK" <<<"$input" 2>"$WORK/stderr")"
+  RC=$?
+  ERR="$(cat "$WORK/stderr")"
+  if [[ -f "$(today_log_file)" ]]; then
+    LOG_CONTENT="$(cat "$(today_log_file)")"
+  else
+    LOG_CONTENT=""
+  fi
+}
+
+# expect_nudge_sid <desc> <command> <session_id> [cwd]
+expect_nudge_sid() {
+  local desc="$1" cmd="$2" sid="$3" cwd="${4:-/repo}"
+  hook_run_keep_home_sid "$FAKE_BIN" "$cmd" "$sid" "$cwd"
+
+  assert_eq "$desc: exit 0" "0" "$RC"
+  local got_ctx
+  got_ctx="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty')"
+  assert_true "$desc: additionalContext present" "$([[ -n "$got_ctx" ]] && echo 1 || echo 0)"
+  assert_true "$desc: decision-log line present" "$([[ "$LOG_CONTENT" == *$'\t'"nudge"$'\t'* ]] && echo 1 || echo 0)"
+}
+
+# expect_no_nudge_sid <desc> <command> <session_id> [cwd]
+expect_no_nudge_sid() {
+  local desc="$1" cmd="$2" sid="$3" cwd="${4:-/repo}"
+  local before_log="$LOG_CONTENT"
+  hook_run_keep_home_sid "$FAKE_BIN" "$cmd" "$sid" "$cwd"
+
+  assert_eq "$desc: exit 0" "0" "$RC"
+  assert_eq "$desc: no stdout" "" "$OUT"
+  assert_eq "$desc: no new decision-log entry" "$before_log" "$LOG_CONTENT"
+}
+
 echo "# hooks/tk-route.sh case matrix"
 
 # ── tk-routed commands ──────────────────────────────────────────────────────
@@ -240,17 +285,31 @@ expect_passthrough "git show HEAD -> pass, no log" "git show HEAD"
 expect_passthrough "already tk -> pass, no log" "tk git status"
 expect_passthrough "already rtk -> pass, no log" "rtk rewrite git status"
 
-# ── compound commands: unsafe, left untouched ───────────────────────────────
-expect_passthrough "pipe -> pass (unsafe)" "dotnet build | cat"
-expect_passthrough "&& chain -> pass (unsafe)" "git status && echo done"
-expect_passthrough "; separator -> pass (unsafe)" "git status; echo done"
+# ── compound commands: quote-aware segment rewrites, native helpers preserved ─────────────
+expect_rewrite "pipe -> route supported left segment only" \
+  "dotnet build | cat" "tk dotnet build | cat" "route-tk"
+expect_rewrite "&& chain -> route supported segment only" \
+  "git status && echo done" "tk git status && echo done" "route-tk"
+expect_rewrite "; separator -> route supported segment only" \
+  "git status; echo done" "tk git status; echo done" "route-tk"
+expect_rewrite "cd chain and pipe -> preserve cd/head, route dotnet build" \
+  "cd x && dotnet build | head -50" "cd x && tk dotnet build | head -50" "route-tk"
+expect_rewrite "pipeline and later chain -> route both supported git segments" \
+  "git log | head -5 && git status" "tk git log | head -5 && tk git status" "route-tk"
+expect_rewrite "quoted operator text in compound -> do not split inside quotes" \
+  'echo "git status && no split" && git status' \
+  'echo "git status && no split" && tk git status' "route-tk"
+expect_rewrite "env prefix before supported command in compound -> route (tk inserted after prefix)" \
+  "FOO=bar dotnet build && echo done" "FOO=bar tk dotnet build && echo done" "route-tk"
+expect_rewrite "multiple env prefixes -> route (tk inserted after all prefixes)" \
+  "FOO=bar BAZ=qux dotnet build" "FOO=bar BAZ=qux tk dotnet build" "route-tk"
+expect_passthrough "git diff in compound -> pass (excluded, same as simple diff)" \
+  "git diff | head -20"
+expect_rewrite "already tk segment in compound -> do not double-wrap, route later segment" \
+  "tk git status && git status" "tk git status && tk git status" "route-tk"
 expect_passthrough 'subshell $(...) -> pass (unsafe)' 'echo $(git status)'
 expect_passthrough "backtick substitution -> pass (unsafe)" 'echo `git status`'
 expect_passthrough "trailing background & -> pass (unsafe)" "git status &"
-hook_run "$FAKE_BIN" "$(printf 'git status\necho done')"
-assert_eq "embedded newline -> pass (unsafe): exit 0" "0" "$RC"
-assert_eq "embedded newline -> pass (unsafe): no stdout" "" "$OUT"
-assert_eq "embedded newline -> pass (unsafe): no decision-log entry" "" "$LOG_CONTENT"
 
 # ── quoted / escaped metacharacters: the unsafe-detection runs against a copy with
 # backslash-escapes and quoted segments stripped, so metacharacters that are literal text
@@ -272,9 +331,10 @@ expect_rewrite 'quoted "&&" in git log --grep -> safe, routed to tk' \
 # (c) unbalanced quote: stripping can't reason past a lone survivor quote -> unsafe.
 expect_passthrough 'unbalanced quote -> pass (unsafe)' 'echo "a && b'
 
-# (d) a real, unquoted pipe is still unsafe -- even in front of an otherwise-routable
-# git command.
-expect_passthrough 'unquoted pipe -> pass (unsafe)' 'git status | head -5'
+# (d) a real, unquoted pipe is a compound operator. The supported git segment is routed
+# and the native head segment is preserved.
+expect_rewrite 'unquoted pipe -> route supported left segment only' \
+  'git status | head -5' 'tk git status | head -5' "route-tk"
 
 # (e) backslash-escaped pipe outside quotes: the shell sees a literal "|", so this is a
 # safe single command -> reaches the rtk fallback, same as (a).
@@ -306,6 +366,71 @@ expect_passthrough "git -C <dir> diff -> pass (excluded, same as bare diff)" \
   "git -C /some/other/repo diff"
 expect_passthrough "git -C <dir> show HEAD -> pass (excluded, same as bare show)" \
   "git -C /some/other/repo show HEAD"
+
+# ── || chains, mixed operators, quoted operator text as a literal string ────────────────────
+expect_rewrite "|| chain -> route supported segment only" \
+  "git status || echo failed" "tk git status || echo failed" "route-tk"
+expect_rewrite "git diff && git status -> diff stays raw, status routed" \
+  "git diff && git status" "git diff && tk git status" "route-tk"
+expect_rewrite 'quoted "&&" and "||" as a literal string argument -> not split, single command routed' \
+  'echo "a && b || c" && git status' \
+  'echo "a && b || c" && tk git status' "route-tk"
+
+# ── command substitution: both $(...) and backticks passthrough the WHOLE command ───────────
+expect_passthrough 'command substitution $(...) around a routable command -> pass (unsafe)' \
+  'git log && echo $(git status)'
+expect_passthrough "backtick substitution around a routable command -> pass (unsafe)" \
+  'git log && echo `git status`'
+
+# ── newline as a segment separator: bare unquoted newlines split like `;` ───────────────────
+hook_run "$FAKE_BIN" "$(printf 'git status\ndotnet build')"
+assert_eq "newline splitting -> exit 0" "0" "$RC"
+got_new="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.updatedInput.command // empty')"
+assert_eq "newline splitting -> both segments routed" "$(printf 'tk git status\ntk dotnet build')" "$got_new"
+assert_true "newline splitting -> decision-log line present" \
+  "$([[ "$LOG_CONTENT" == *$'\t'"route-tk"$'\t'* ]] && echo 1 || echo 0)"
+
+# ── heredoc / backslash-newline continuation / control-flow keywords: conservative full
+# passthrough, even though a routable command appears inside. ───────────────────────────────
+expect_passthrough "heredoc -> pass (unsafe)" "$(printf 'cat <<EOF\ngit status\nEOF')"
+expect_passthrough "backslash-newline continuation -> pass (unsafe)" "$(printf 'git status &&\\\n  echo done')"
+expect_passthrough "if/then/fi control flow -> pass (unsafe)" \
+  "$(printf 'if true; then git status; fi')"
+expect_passthrough "for loop control flow -> pass (unsafe)" \
+  "$(printf 'for f in a b; do git status; done')"
+
+# ── three-tier downstream guard for pipelines ────────────────────────────────────────────────
+# Tier 1: every downstream consumer is a display modifier (head/tail/cat) -> LHS routed, rest
+# of the pipeline preserved verbatim. (dotnet build | cat and git status | head -5 above already
+# cover this; one more shape here for a routed dotnet test.)
+expect_rewrite "tier 1: dotnet test | head -> route LHS only" \
+  "dotnet test | head -50" "tk dotnet test | head -50" "route-tk"
+
+# Tier 2: dotnet test filtered by a problem-shaped grep, then head -> WHOLE pipeline replaced
+# with `tk dotnet test ...`, filters dropped, additionalContext hint attached.
+hook_run "$FAKE_BIN" 'dotnet test 2>&1 | grep -E "Passed|Failed" | head -20'
+assert_eq "tier 2: dotnet test | grep problem-pattern | head -> exit 0" "0" "$RC"
+got_new="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.updatedInput.command // empty')"
+assert_eq "tier 2: whole pipeline replaced with tk dotnet test" "tk dotnet test 2>&1" "$got_new"
+got_ctx="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty')"
+assert_true "tier 2: additionalContext hint present" "$([[ -n "$got_ctx" ]] && echo 1 || echo 0)"
+assert_true "tier 2: decision-log line present" \
+  "$([[ "$LOG_CONTENT" == *$'\t'"route-tk"$'\t'* ]] && echo 1 || echo 0)"
+
+# Tier 2 rejection: grep has -v (inverted match, changes output shape) -> whole pipeline
+# passthrough, not even the LHS gets routed.
+expect_passthrough "tier 2 rejection: grep -v on dotnet test -> pass (whole pipeline untouched)" \
+  'dotnet test | grep -v FAIL'
+# Tier 2 rejection: grep pattern is not problem-shaped -> whole pipeline passthrough.
+expect_passthrough "tier 2 rejection: non-problem grep pattern -> pass (whole pipeline untouched)" \
+  'dotnet test | grep TODO'
+
+# Tier 3: any other content filter downstream -> whole pipeline passthrough, including the
+# routable LHS.
+expect_passthrough "tier 3: dotnet test | wc -l -> pass (whole pipeline untouched)" \
+  "dotnet test | wc -l"
+expect_passthrough "tier 3: git log | grep fix -> pass (whole pipeline untouched)" \
+  "git log | grep fix"
 
 # ── rtk unavailable ──────────────────────────────────────────────────────────
 expect_passthrough "rtk missing from PATH -> pass" "docker ps" "/repo" "$FAKE_BIN_NO_RTK"
@@ -350,6 +475,18 @@ expect_nudge 'symbol grep (quoted alternation) -> nudge' \
 
 # Plain free-text grep, no symbol shape -> no nudge (and no rewrite either).
 expect_no_nudge 'plain free-text grep -> no nudge' 'grep -rn "TODO" src'
+
+# Group 3: the nudge throttle is keyed by session_id -- a nudge in one session must not
+# throttle a nudge in a DIFFERENT session (e.g. a freshly spawned subagent), but a second
+# nudge in the SAME session right after is still throttled.
+rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
+
+expect_nudge_sid 'session A: symbol grep -> nudge' \
+  'grep -rn "class Session\|class Alpha" other_src' "session-A"
+expect_nudge_sid 'session B (different session_id): symbol grep right after session A -> still nudges (not throttled by session A)' \
+  'grep -rn "class Session\|class Beta" other_src' "session-B"
+expect_no_nudge_sid 'session A again immediately after -> throttled within its own session' \
+  'grep -rn "class Session\|class Gamma" other_src' "session-A"
 
 # ── daily log rotation: decisions land in a dated file (tk-hook-YYYYMMDD.log), never the
 # old flat tk-hook.log. ──────────────────────────────────────────────────────────────────────

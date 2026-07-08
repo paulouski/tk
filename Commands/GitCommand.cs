@@ -31,7 +31,7 @@ public sealed class GitCommand : ICommand
     {
         var userArgs = ctx.Args[(subcommandIndex + 1)..];
         if (userArgs.Length > 0)
-            return await RunFilteredAsync(ctx.Args, new GitStatusFilter(ctx.DetailLevel), ctx);
+            return await RunFilteredAsync(ctx.OriginalCommandArgs, new GitStatusFilter(ctx.DetailLevel), ctx);
 
         var globalArgs = ctx.Args[..subcommandIndex];
         var plainArgs = BuildGitArgs(globalArgs, ["status"]);

@@ -1,19 +1,52 @@
-# tk-route hook
+# tk hooks
 
-A Claude Code `PreToolUse` hook that routes single-command Bash calls through `tk`
-(or, as a fallback, `rtk`) for compact output, and nudges grep-for-symbol toward
-semantic navigation.
+Two Claude Code `PreToolUse` hooks:
 
-## What it does
+- **`tk-route.sh`** (matcher `Bash|Read`) routes Bash calls through `tk` (or, as a
+  fallback, `rtk`) for compact output — both single commands and, conservatively,
+  compound commands — and nudges grep-for-symbol toward semantic navigation.
+- **`tk-agent-preamble.sh`** (matcher `Task`) appends a short tk cheat-sheet to every
+  subagent prompt, so freshly spawned subagents get the tooling guidance without
+  relying on the main agent to paste it by hand.
+
+## What tk-route does
 
 - **Rewrites to `tk`**: single `dotnet build|test|restore` and `git status|log`
   commands become their `tk` equivalents before execution, so Claude gets compact,
   token-efficient output instead of raw verbose output. A leading run of `-C <path>` /
   `-c <key=val>` global git flags before the subcommand is allowed and preserved
-  (e.g. `git -C ../svc-a status`, `git -c core.pager=cat -C /x/y log --oneline`).
+  (e.g. `git -C ../svc-a status`, `git -c core.pager=cat -C /x/y log --oneline`), as
+  is a leading run of `VAR=val` environment prefixes (`FOO=bar dotnet build` →
+  `FOO=bar tk dotnet build`).
   `git diff`/`git show` (with or without the same `-C`/`-c` prefix) are intentionally
   NOT routed (to either `tk` or `rtk`) — the agent often needs the full patch, and
   compaction can drop added/changed lines and mislead it.
+- **Rewrites inside compound commands**: commands joined by `&&`, `||`, `;`, `|`, or
+  bare newlines used as statement separators get a quote-aware segment rewrite for
+  the conservative built-in set above (`tk` only — no `rtk` fallback inside
+  compounds). Each pipeline is rewritten as a unit under a **three-tier downstream
+  guard**, so a routed left-hand side never silently starves a downstream content
+  filter:
+  - **Tier 1 — display modifiers only** (`head`, `tail`, `cat` downstream): the
+    left-hand side is routed, the pipeline is kept.
+    `cd x && dotnet build | head -50` → `cd x && tk dotnet build | head -50`
+  - **Tier 2 — problem-shaped grep over dotnet**: when the left-hand side is
+    `dotnet build|test|restore` and every downstream consumer is a
+    `grep`/`egrep`/`rg` whose pattern is clearly hunting problems
+    (`fail|error|warn|CS####|expected|received|assert|passed`, case-insensitive,
+    with none of `-v -c -o -l -L`), the **entire pipeline is replaced** by the bare
+    `tk` command — compact output already keeps every error/warning/failure, so the
+    filter is dropped and an `additionalContext` hint tells the agent why and how to
+    get the raw stream back (`tk --raw dotnet ...`).
+    `dotnet test 2>&1 | grep -E "Passed|Failed" | head -20` → `tk dotnet test 2>&1`
+  - **Tier 3 — anything else downstream** (`grep` with any other pattern or with
+    `-v`/`-c`/`-o`, `awk`, `sed`, `cut`, `wc`, `sort`, ...): the whole pipeline is
+    left untouched. The agent's own filter already limits the output, and rewriting
+    the producer would silently change what the filter sees.
+  Shell glue (`cd`, `echo`, ...) is preserved as-is. Heredocs, backslash-newline
+  continuations, command substitutions, and shell control-flow keywords
+  (`if`/`for`/`while`/...) mark the whole command as a real script and leave it
+  completely untouched.
 - **Falls back to `rtk`**: any other safe, single command not covered above is offered
   to `rtk rewrite <cmd>` (if `rtk` is installed on PATH). If `rtk` recognizes it, the
   rewritten command replaces the original; if `rtk` doesn't recognize it (exit 1) or
@@ -31,21 +64,26 @@ semantic navigation.
 
 ## Safety
 
-- **Quote/escape-aware unsafe detection**: the rewrite paths (`tk`/`rtk`) only apply to
-  safe, single commands. "Safe" is judged against a copy of the command with
-  backslash-escapes and quoted (`'...'`/`"..."`) segments stripped out via `sed` —
-  metacharacters inside quotes or escaped with `\` are literal text to the shell, not
-  operators, so e.g. `grep "class A\|class B"` or `git log --grep="fix && cleanup"` are
-  correctly treated as single safe commands instead of false-flagged as compound. A
-  quote left unbalanced after stripping means the rest can't be reasoned about, so it's
-  treated as unsafe. Real, unquoted/unescaped `|`, `&&`, `;`, `` ` ``, `$(`, a trailing
-  background `&`, or an embedded newline still mark a command unsafe and leave it
-  completely untouched (the nudge check is the one exception — see above).
-- **Never double-wraps**: if the command already starts with `tk ` or `rtk `, it is not
-  touched.
-- **Nudge throttle**: at most one nudge per 300 seconds, judged by the timestamp of the
-  last `nudge` line in the decision log — so a grep-heavy loop doesn't get re-nudged on
-  every call. If the log is missing or unreadable, the throttle is skipped (just nudge).
+- **Quote/escape-aware detection**: operator detection is judged against a copy of the
+  command with backslash-escapes and quoted (`'...'`/`"..."`) segments stripped out via
+  `sed` — metacharacters inside quotes or escaped with `\` are literal text to the
+  shell, not operators, so e.g. `grep "class A\|class B"` or
+  `git log --grep="fix && cleanup"` are correctly treated as single safe commands
+  instead of false-flagged as compound. A quote left unbalanced after stripping means
+  the rest can't be reasoned about, so it's treated as unsafe. Unquoted/unescaped
+  `&&`/`||`/`;`/`|`/newlines make a command *compound* (segment rewrite applies);
+  `` ` ``, `$(`, a trailing background `&`, a backslash-newline continuation, a
+  heredoc, or a control-flow keyword make it *hard-unsafe* and leave it completely
+  untouched (the nudge check is the one exception — see above).
+- **Never double-wraps**: if the command (or a compound segment) already starts with
+  `tk ` or `rtk `, it is not touched.
+- **Nudge throttle, keyed per session**: at most one nudge per 300 seconds *per
+  `session_id`*, judged by the timestamp of the last matching `nudge` line in the
+  decision log — so a grep-heavy loop doesn't get re-nudged on every call, but a nudge
+  in the main agent's session never suppresses the first nudge for a freshly spawned
+  subagent (each subagent has its own `session_id`, and they are the agents that need
+  the nudge most). If the log is missing or unreadable, the throttle is skipped (just
+  nudge).
 - **Degrades to a no-op** (design philosophy): every failure mode here — `jq` missing,
   `rtk` missing, `rtk` not recognizing a command, the log being unwritable — is handled
   by silently doing nothing and letting the original command run unchanged. The hook
@@ -60,15 +98,16 @@ semantic navigation.
 
 ## How to activate
 
-`tk` is a global tool (its guidance lives in `~/.claude/CLAUDE.md`), so the hook
-that enforces that guidance belongs in your **global** settings too. Install it
-once, in one place — do not enable both, or it fires twice per command. The
-matcher must be `Bash|Read` — a matcher of just `Bash` will silently skip the
-large-file-read nudge below.
+`tk` is a global tool (its guidance lives in `~/.claude/CLAUDE.md`), so the hooks
+that enforce that guidance belong in your **global** settings too. Install each
+once, in one place — do not enable a hook both globally and per-project, or it
+fires twice per command. The tk-route matcher must be `Bash|Read` — a matcher of
+just `Bash` will silently skip the large-file-read nudge below. The agent-preamble
+hook uses its own entry with matcher `Task`.
 
 ### Recommended — Global (all repos)
 
-Add to `~/.claude/settings.json`, using the absolute path to the script:
+Add to `~/.claude/settings.json`, using absolute paths to the scripts:
 
 ```json
 "hooks": {
@@ -79,6 +118,16 @@ Add to `~/.claude/settings.json`, using the absolute path to the script:
         {
           "type": "command",
           "command": "/Users/artsiom/Developer/other/tk/hooks/tk-route.sh",
+          "timeout": 5
+        }
+      ]
+    },
+    {
+      "matcher": "Task",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "/Users/artsiom/Developer/other/tk/hooks/tk-agent-preamble.sh",
           "timeout": 5
         }
       ]
@@ -99,17 +148,19 @@ install.
 Every time the hook takes an action it appends one tab-separated line to a global,
 per-day file, `~/.claude/tk-hook-YYYYMMDD.log` (one file per day, not per-repo, so a
 globally installed hook never litters working trees and the nudge throttle below only
-ever greps a single day's lines instead of an ever-growing file). Each line carries the
-`cwd` column to attribute the action to a repo:
+ever greps a single day's lines instead of an ever-growing file). Each line carries a
+`session_id` column (keys the per-session nudge throttle) and a `cwd` column to
+attribute the action to a repo:
 
 ```
-<epoch_seconds>\t<decision>\t<cwd>\t<command>
+<epoch_seconds>\t<decision>\t<session_id>\t<cwd>\t<command>
 ```
 
 `<decision>` is one of:
 
 - `route-tk` — command was rewritten to its `tk` equivalent (e.g. `dotnet build` →
-  `tk dotnet build`)
+  `tk dotnet build`), including compound/pipeline rewrites (embedded newlines are
+  collapsed to spaces so the entry stays one line)
 - `route-rtk` — command was rewritten by the `rtk` fallback (e.g. `docker ps` →
   `rtk docker ps`)
 - `nudge` — symbol-grep was detected and the hint was emitted (additionalContext only;
@@ -139,6 +190,17 @@ and nothing deletes it; any tooling that mines hook-log history across days need
   <file>` for a structure map) and then re-reading just that range with
   `offset`/`limit`. A full read is still correct when editing or reviewing the whole
   file; this only nudges, it never blocks or rewrites the `Read` input.
+
+## The agent preamble (tk-agent-preamble.sh)
+
+For every `Task` tool call (spawning a subagent), the hook appends a five-line
+`[tk cheat-sheet]` block to the subagent's prompt via `updatedInput`: symbol lookup
+with `tk def|refs|callers|impl` (never grep for symbols), `tk diag` after `.cs`
+edits, run noisy commands bare (no defensive piping — the router compacts them),
+escalate with `tk --more`/`--raw`, and `tk mv` for file moves. Idempotent: a prompt
+already containing the `[tk cheat-sheet]` marker is left untouched, so nothing
+double-appends. Non-`Task` tools, missing/empty prompts, and unparsable input all
+exit as silent no-ops — same degrade-to-no-op philosophy as the router.
 
 ## Requirements
 
