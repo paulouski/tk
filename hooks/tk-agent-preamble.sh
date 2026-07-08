@@ -27,7 +27,8 @@ BLOCK='[tk cheat-sheet] Mandatory tooling in this environment:
 - After editing a .cs file: `tk diag <file>` (sub-second compile check) instead of `dotnet build`.
 - Run noisy commands BARE: `dotnet build`, `dotnet test`, `git status`, `git log` — a hook auto-compacts them. Do not pipe them into head/tail/grep; that defeats compaction.
 - Compact output is complete for errors/failures. Need more detail: rerun as `tk --more ...` or `tk --raw ...`.
-- Move files with `tk mv <old> <new>` (preserves git history, auto-fixes C# namespaces).'
+- Move files with `tk mv <old> <new>` (preserves git history, auto-fixes C# namespaces).
+- Read big files in slices: pass offset/limit (a hook caps uncapped Reads of files over 500 lines); locate the slice first via `tk def`/`tk view`.'
 
 new_prompt="${prompt}"$'\n\n'"${BLOCK}"
 

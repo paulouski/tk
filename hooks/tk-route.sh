@@ -4,8 +4,9 @@
 # by `-C <path>` / `-c <key=val>` global flags, or `VAR=val` env-var prefixes)
 # are routed to `tk`; any other recognized command falls back to `rtk rewrite`
 # (if `rtk` is installed). Also nudges symbol-grep toward `tk def|refs|callers`,
-# and nudges large whole-file Reads (no offset/limit) toward a slice or a
-# symbol lookup.
+# nudges large whole-file Reads (no offset/limit, >400 lines) toward a slice or
+# a symbol lookup, and deterministically caps whole-file Reads over
+# READ_CAP_LINES lines (no offset/limit) at that many lines via updatedInput.
 #
 # Compound commands (&&, ||, ;, |, and bare newlines used as statement
 # separators) get a conservative, quote-aware segment rewrite: each `&&`/`||`/
@@ -90,7 +91,20 @@ _emit_nudge() {
     '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"allow",additionalContext:$ctx}}'
 }
 
-# --- Read handling: nudge away from large whole-file reads with no offset/limit. ---
+# Read auto-cap threshold in lines. Chosen from Stats/bash_opportunities.py --read-cost
+# on tk 0.6.0 transcripts: of uncapped Read events over 400 lines, a 500-line cutoff
+# captures ~71% of their chars (36/60 events), well ahead of 600 (~44%) or 700-800
+# (~22%) — the sharpest bulk-capture point in the 400-800 range.
+READ_CAP_LINES=500
+
+_emit_read_cap() {
+  local limit="$1" ctx="$2"
+  jq -n --argjson lim "$limit" --arg ctx "$ctx" \
+    '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"allow",updatedInput:{limit:$lim},additionalContext:$ctx}}'
+}
+
+# --- Read handling: cap large whole-file reads with no offset/limit; nudge smaller-but-
+# still-large ones. ---
 if [[ "$tool" == "Read" ]]; then
   file_path=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
   offset=$(printf '%s' "$INPUT" | jq -r '.tool_input.offset // empty' 2>/dev/null)
@@ -98,16 +112,23 @@ if [[ "$tool" == "Read" ]]; then
 
   if [[ -z "$offset" && -z "$limit" && -n "$file_path" && -f "$file_path" ]]; then
     _lines=$(wc -l < "$file_path" 2>/dev/null | tr -d '[:space:]')
-    if [[ "$_lines" =~ ^[0-9]+$ ]] && (( _lines > 400 )); then
-      # Throttle: skip if this session was already nudged for a large read within
-      # the last 300s. Independent of the symbol-grep "nudge" throttle below —
-      # neither suppresses the other.
-      _nudge=1
-      _recently_nudged "nudge-read" && _nudge=0
+    if [[ "$_lines" =~ ^[0-9]+$ ]]; then
+      if (( _lines > READ_CAP_LINES )); then
+        # Deterministic — not throttled: a cap must fire on every qualifying Read, not
+        # just the first one per 300s window (unlike the nudge below).
+        _log_decision "cap-read" "$file_path"
+        _emit_read_cap "$READ_CAP_LINES" "Read capped at ${READ_CAP_LINES} lines by hook (file has ${_lines} lines). Continue with offset/limit for the rest, or locate the relevant slice first (\`tk def <Symbol>\` / \`tk view <file>\` / codebase-memory get_code_snippet). Re-run with explicit offset and limit to read more in one call."
+      elif (( _lines > 400 )); then
+        # Throttle: skip if this session was already nudged for a large read within
+        # the last 300s. Independent of the symbol-grep "nudge" throttle below —
+        # neither suppresses the other.
+        _nudge=1
+        _recently_nudged "nudge-read" && _nudge=0
 
-      if [[ "$_nudge" -eq 1 ]]; then
-        _log_decision "nudge-read" "$file_path"
-        _emit_nudge "Large file read without offset/limit detected. If you need one symbol or section, prefer codebase-memory MCP get_code_snippet / \`tk def <Symbol>\` to locate it, or \`tk view <file>\` for a structure map, then Read the relevant slice with offset/limit. Full reads are right when editing or reviewing the whole file."
+        if [[ "$_nudge" -eq 1 ]]; then
+          _log_decision "nudge-read" "$file_path"
+          _emit_nudge "Large file read without offset/limit detected. If you need one symbol or section, prefer codebase-memory MCP get_code_snippet / \`tk def <Symbol>\` to locate it, or \`tk view <file>\` for a structure map, then Read the relevant slice with offset/limit. Full reads are right when editing or reviewing the whole file."
+        fi
       fi
     fi
   fi

@@ -58,9 +58,21 @@ Two Claude Code `PreToolUse` hooks:
   does not modify the command (`additionalContext` only), so it fires even for
   compound/unsafe commands that are never rewritten.
 - **Nudges large whole-file `Read`s**: a `Read` with no `offset`/`limit` on a regular
-  file over 400 lines gets an `additionalContext` hint to locate the relevant slice
-  first (codebase-memory `get_code_snippet`, `tk def <Symbol>`, or `tk view <file>`)
-  and then re-read just that range. The command/input is never modified.
+  file over 400 lines (but at or under the 500-line cap below) gets an
+  `additionalContext` hint to locate the relevant slice first (codebase-memory
+  `get_code_snippet`, `tk def <Symbol>`, or `tk view <file>`) and then re-read just
+  that range. The command/input is never modified. Throttled (see below).
+- **Caps large whole-file `Read`s over 500 lines**: a `Read` with no `offset`/`limit`
+  on a regular file over 500 lines gets `updatedInput.limit` set to 500, so the call
+  actually returns only the first 500 lines instead of the whole file, plus an
+  `additionalContext` hint to continue with explicit `offset`/`limit` or to locate the
+  relevant slice first. Unlike the nudge above, this is deterministic — it fires on
+  every qualifying call, not throttled — and it's the one case where `tk-route.sh`
+  rewrites a `Read`'s input rather than only attaching a hint. 500 lines was chosen
+  from `Stats/bash_opportunities.py --read-cost` data on real transcripts: of uncapped
+  `Read`s over 400 lines, a 500-line cutoff captures the bulk (~71%) of their chars.
+  Any `Read` with an explicit `offset` or `limit` is left completely untouched by
+  both the nudge and the cap.
 
 ## Safety
 
@@ -102,8 +114,8 @@ Two Claude Code `PreToolUse` hooks:
 that enforce that guidance belong in your **global** settings too. Install each
 once, in one place — do not enable a hook both globally and per-project, or it
 fires twice per command. The tk-route matcher must be `Bash|Read` — a matcher of
-just `Bash` will silently skip the large-file-read nudge below. The agent-preamble
-hook uses its own entry with matcher `Task`.
+just `Bash` will silently skip the large-file-read nudge and cap below. The
+agent-preamble hook uses its own entry with matcher `Task`.
 
 ### Recommended — Global (all repos)
 
@@ -165,9 +177,13 @@ attribute the action to a repo:
   `rtk docker ps`)
 - `nudge` — symbol-grep was detected and the hint was emitted (additionalContext only;
   the command itself is not changed, and this can fire on unsafe/compound commands too)
-- `nudge-read` — a large whole-file `Read` (no `offset`/`limit`, file over 400 lines)
-  was detected and the hint was emitted (additionalContext only; the `command` column
-  holds the file path instead of a shell command). Throttled independently of `nudge`.
+- `nudge-read` — a large whole-file `Read` (no `offset`/`limit`, file over 400 lines,
+  at or under the 500-line cap) was detected and the hint was emitted (additionalContext
+  only; the `command` column holds the file path instead of a shell command). Throttled
+  independently of `nudge`.
+- `cap-read` — a whole-file `Read` (no `offset`/`limit`, file over 500 lines) was
+  capped: `updatedInput.limit` was set to 500 and the hint was emitted (the `command`
+  column holds the file path). Not throttled — logged on every qualifying call.
 
 Skip-throughs (no match, compound/unsafe commands, `rtk` declining a command, etc.) are
 not logged; only the active cases above are recorded. The log is append-only and safe to
@@ -185,19 +201,27 @@ and nothing deletes it; any tooling that mines hook-log history across days need
   isn't indexed — since either one resolves cross-file and crosses interface dispatch,
   unlike a text grep for `class X`.
 - **Large-read nudge**: when a `Read` has no `offset`/`limit` and the target file is a
-  regular file over 400 lines, the `additionalContext` suggests locating the relevant
-  slice first (codebase-memory `get_code_snippet`, `tk def <Symbol>`, or `tk view
-  <file>` for a structure map) and then re-reading just that range with
-  `offset`/`limit`. A full read is still correct when editing or reviewing the whole
-  file; this only nudges, it never blocks or rewrites the `Read` input.
+  regular file over 400 lines (and at or under the 500-line cap), the
+  `additionalContext` suggests locating the relevant slice first (codebase-memory
+  `get_code_snippet`, `tk def <Symbol>`, or `tk view <file>` for a structure map) and
+  then re-reading just that range with `offset`/`limit`. A full read is still correct
+  when editing or reviewing the whole file; this only nudges, it never blocks or
+  rewrites the `Read` input.
+- **Large-read cap**: when a `Read` has no `offset`/`limit` and the target file is a
+  regular file over 500 lines, `updatedInput.limit` is set to 500 so the call actually
+  returns only the first 500 lines, and the `additionalContext` explains the file was
+  capped and how to continue (explicit `offset`/`limit`, or locate the slice first).
+  Escape hatch: pass an explicit `offset` or `limit` on the `Read` call and it is left
+  completely untouched by both the nudge and the cap.
 
 ## The agent preamble (tk-agent-preamble.sh)
 
-For every `Task` tool call (spawning a subagent), the hook appends a five-line
+For every `Task` tool call (spawning a subagent), the hook appends a six-line
 `[tk cheat-sheet]` block to the subagent's prompt via `updatedInput`: symbol lookup
 with `tk def|refs|callers|impl` (never grep for symbols), `tk diag` after `.cs`
 edits, run noisy commands bare (no defensive piping — the router compacts them),
-escalate with `tk --more`/`--raw`, and `tk mv` for file moves. Idempotent: a prompt
+escalate with `tk --more`/`--raw`, `tk mv` for file moves, and reading big files in
+offset/limit slices (the tk-route.sh 500-line Read cap above). Idempotent: a prompt
 already containing the `[tk cheat-sheet]` marker is left untouched, so nothing
 double-appends. Non-`Task` tools, missing/empty prompts, and unparsable input all
 exit as silent no-ops — same degrade-to-no-op philosophy as the router.

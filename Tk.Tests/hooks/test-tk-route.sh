@@ -510,6 +510,8 @@ seq 1 500 > "$BIG_FILE"
 SMALL_FILE="$WORK/small_file.txt"
 seq 1 10 > "$SMALL_FILE"
 MISSING_FILE="$WORK/does_not_exist.txt"
+CAP_FILE="$WORK/cap_file.txt"
+seq 1 600 > "$CAP_FILE"
 
 # hook_run_read <path> <file> <offset> <limit> [cwd]
 # offset/limit empty string means "absent from tool_input" (not merely null).
@@ -574,6 +576,25 @@ expect_no_read_nudge() {
   assert_eq "$desc: no new decision-log entry" "$before_log" "$LOG_CONTENT"
 }
 
+# expect_read_cap <desc> <file> <offset> <limit> [cwd]
+expect_read_cap() {
+  local desc="$1" file="$2" offset="$3" limit="$4" cwd="${5:-/repo}"
+  hook_run_read_keep_home "$FAKE_BIN" "$file" "$offset" "$limit" "$cwd"
+
+  assert_eq "$desc: exit 0" "0" "$RC"
+  local got_limit
+  got_limit="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.updatedInput.limit // empty')"
+  assert_eq "$desc: updatedInput.limit == 500" "500" "$got_limit"
+  local got_keys
+  got_keys="$(printf '%s' "$OUT" | jq -c '.hookSpecificOutput.updatedInput | keys')"
+  assert_eq "$desc: updatedInput contains only the limit key" '["limit"]' "$got_keys"
+  local got_ctx
+  got_ctx="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty')"
+  assert_true "$desc: additionalContext present" "$([[ -n "$got_ctx" ]] && echo 1 || echo 0)"
+  assert_true "$desc: decision-log line present (cap-read)" \
+    "$([[ "$LOG_CONTENT" == *$'\t'"cap-read"$'\t'* ]] && echo 1 || echo 0)"
+}
+
 # Group 1: fires on a big file with no offset/limit, then throttled on an immediate repeat.
 rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
 expect_read_nudge "big file, no offset/limit -> nudge" "$BIG_FILE" "" ""
@@ -600,6 +621,22 @@ expect_read_nudge "big file read -> nudge (before independence check, reverse di
   "$BIG_FILE" "" ""
 expect_nudge 'symbol grep right after a read nudge -> still nudges (independent throttle)' \
   'grep -rn "class Eleven\|class Twelve" other_src'
+
+# ── Read-tool cap: files over the 500-line cap threshold with no offset/limit get
+# updatedInput.limit=500 (deterministic, not throttled — fires on every qualifying call).
+# Files at-or-below the cap threshold but over 400 lines still just nudge (unchanged). ──────
+rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
+expect_read_cap "file over cap threshold, no offset/limit -> capped" "$CAP_FILE" "" ""
+expect_read_cap "cap fires again immediately after -> still capped (no throttle)" "$CAP_FILE" "" ""
+
+rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
+expect_no_read_nudge "file over cap threshold with offset given -> untouched (no cap, no nudge)" \
+  "$CAP_FILE" "100" ""
+expect_no_read_nudge "file over cap threshold with limit given -> untouched (no cap, no nudge)" \
+  "$CAP_FILE" "" "50"
+
+rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
+expect_read_nudge "file at cap threshold exactly (500 lines) -> nudge, not cap" "$BIG_FILE" "" ""
 
 echo "# --- $PASS passed, $FAIL failed ---"
 [[ "$FAIL" -eq 0 ]]

@@ -68,6 +68,7 @@ GREP_SCOPE_SUBAGENTS = "subagents"
 GREP_SCOPE_OVERALL = "overall"
 
 EDIT_TOOL_NAMES = {"Edit", "MultiEdit", "Write"}
+READ_TOOL_NAMES = {"Read"}
 
 
 # ---------------------------------------------------------------------------
@@ -111,6 +112,71 @@ def _iter_transcript_tool_uses(path: Path, tool_names: set[str]) -> Iterable[dic
                 for block in content:
                     if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") in tool_names:
                         yield block
+    except OSError:
+        return
+
+
+def _tool_result_text(content) -> str:
+    """Flatten a tool_result content field (string, or list of content blocks) to text."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "text":
+                parts.append(item.get("text", "") or "")
+        return "".join(parts)
+    return ""
+
+
+def _iter_transcript_tool_use_results(path: Path, tool_names: set[str]) -> Iterable[dict]:
+    """Yield {tool_input, result_chars, num_lines, total_lines, is_error} for each tool_use
+    of the given names paired with its tool_result from one .jsonl transcript file.
+
+    num_lines/total_lines come from the sidecar `toolUseResult.file` block Claude Code
+    attaches to Read results (cheap: already parsed, no extra `wc -l`); None if absent.
+    """
+    pending: dict[str, dict] = {}
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            for raw_line in f:
+                raw_line = raw_line.strip()
+                if not raw_line:
+                    continue
+                try:
+                    line = json.loads(raw_line)
+                except json.JSONDecodeError:
+                    continue
+                msg = line.get("message")
+                content = msg.get("content") if isinstance(msg, dict) else None
+                if not isinstance(content, list):
+                    continue
+                for block in content:
+                    if not isinstance(block, dict):
+                        continue
+                    if block.get("type") == "tool_use" and block.get("name") in tool_names:
+                        pending[block.get("id")] = block.get("input") or {}
+                    elif block.get("type") == "tool_result":
+                        tool_use_id = block.get("tool_use_id")
+                        if tool_use_id not in pending:
+                            continue
+                        tool_input = pending.pop(tool_use_id)
+                        result_text = _tool_result_text(block.get("content"))
+                        num_lines = None
+                        total_lines = None
+                        tur = line.get("toolUseResult")
+                        if isinstance(tur, dict):
+                            file_info = tur.get("file")
+                            if isinstance(file_info, dict):
+                                num_lines = file_info.get("numLines")
+                                total_lines = file_info.get("totalLines")
+                        yield {
+                            "tool_input": tool_input,
+                            "result_chars": len(result_text),
+                            "num_lines": num_lines,
+                            "total_lines": total_lines,
+                            "is_error": bool(block.get("is_error")),
+                        }
     except OSError:
         return
 
@@ -1131,6 +1197,168 @@ def build_edit_cost_report(model: dict, version: str, scope: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Aggregation: read-cost report (Read tool_use vs tool_result sizes, offset/limit use)
+# ---------------------------------------------------------------------------
+
+CHARS_BUCKETS = ("<5k", "5-15k", "15-40k", ">40k")
+LINE_BUCKETS = ("<=400", "401-500", "501-600", "601-700", "701-800", "801-1500", ">1500")
+
+
+def _chars_bucket(chars: int) -> str:
+    if chars < 5000:
+        return "<5k"
+    if chars < 15000:
+        return "5-15k"
+    if chars < 40000:
+        return "15-40k"
+    return ">40k"
+
+
+def _lines_bucket(lines: int) -> str:
+    if lines <= 400:
+        return "<=400"
+    if lines <= 500:
+        return "401-500"
+    if lines <= 600:
+        return "501-600"
+    if lines <= 700:
+        return "601-700"
+    if lines <= 800:
+        return "701-800"
+    if lines <= 1500:
+        return "801-1500"
+    return ">1500"
+
+
+@dataclass
+class ReadCostBucket:
+    read_events: int = 0
+    uncapped_events: int = 0
+    total_chars: int = 0
+    uncapped_chars: int = 0
+    repeat_pairs: int = 0  # distinct (session, file) pairs read 2+ times
+    repeat_excess_events: int = 0  # reads beyond the first, for those pairs
+    uncapped_chars_buckets: Counter = field(default_factory=Counter)
+    uncapped_line_buckets: Counter = field(default_factory=Counter)
+
+    def add(self, other: "ReadCostBucket") -> None:
+        self.read_events += other.read_events
+        self.uncapped_events += other.uncapped_events
+        self.total_chars += other.total_chars
+        self.uncapped_chars += other.uncapped_chars
+        self.repeat_pairs += other.repeat_pairs
+        self.repeat_excess_events += other.repeat_excess_events
+        self.uncapped_chars_buckets.update(other.uncapped_chars_buckets)
+        self.uncapped_line_buckets.update(other.uncapped_line_buckets)
+
+    def to_dict(self) -> dict:
+        share = self.uncapped_events / self.read_events if self.read_events else 0.0
+        return {
+            "read_events": self.read_events,
+            "uncapped_events": self.uncapped_events,
+            "uncapped_share": share,
+            "total_chars": self.total_chars,
+            "uncapped_chars": self.uncapped_chars,
+            "repeat_pairs": self.repeat_pairs,
+            "repeat_excess_events": self.repeat_excess_events,
+            "uncapped_chars_buckets": {k: self.uncapped_chars_buckets.get(k, 0) for k in CHARS_BUCKETS},
+            "uncapped_line_buckets": {k: self.uncapped_line_buckets.get(k, 0) for k in LINE_BUCKETS},
+        }
+
+
+def build_read_cost_report(model: dict, version: str, scope: str) -> dict:
+    """Sum Read tool_use/tool_result sizes from raw transcripts, split main vs subagent,
+    for sessions matching `version` and `scope`. Tracks offset/limit use (uncapped =
+    neither given), the char/line size of uncapped reads, and same-session repeat reads
+    of the same file_path (2+ times)."""
+    projects_dir = _projects_dir()
+    main_bucket = ReadCostBucket()
+    sub_bucket = ReadCostBucket()
+    top_reads: list[dict] = []
+    repeat_offenders: list[dict] = []
+    sessions_with_reads = 0
+
+    for session in model.get("sessions", []):
+        if session.get("tk_version", "unknown") != version:
+            continue
+        if not _event_in_scope(session, scope):
+            continue
+        session_file = session.get("session_file")
+        if not session_file:
+            continue
+
+        is_subagent = bool(session.get("is_subagent"))
+        bucket = sub_bucket if is_subagent else main_bucket
+        path = projects_dir / session_file
+        found_any = False
+        file_counts: Counter[str] = Counter()
+
+        for rec in _iter_transcript_tool_use_results(path, READ_TOOL_NAMES):
+            if rec["is_error"]:
+                continue
+            found_any = True
+            tool_input = rec["tool_input"]
+            file_path = tool_input.get("file_path", "") or ""
+            offset = tool_input.get("offset")
+            limit = tool_input.get("limit")
+            uncapped = offset is None and limit is None
+            chars = rec["result_chars"]
+            lines = rec["total_lines"] if rec["total_lines"] is not None else rec["num_lines"]
+
+            bucket.read_events += 1
+            bucket.total_chars += chars
+            if uncapped:
+                bucket.uncapped_events += 1
+                bucket.uncapped_chars += chars
+                bucket.uncapped_chars_buckets[_chars_bucket(chars)] += 1
+                if lines is not None:
+                    bucket.uncapped_line_buckets[_lines_bucket(lines)] += 1
+
+            top_reads.append({
+                "file": file_path,
+                "chars": chars,
+                "lines": lines,
+                "uncapped": uncapped,
+                "subagent": is_subagent,
+            })
+            if file_path:
+                file_counts[file_path] += 1
+
+        if found_any:
+            sessions_with_reads += 1
+
+        for file_path, count in file_counts.items():
+            if count < 2:
+                continue
+            bucket.repeat_pairs += 1
+            bucket.repeat_excess_events += count - 1
+            repeat_offenders.append({
+                "file": file_path,
+                "count": count,
+                "session_file": session_file,
+                "subagent": is_subagent,
+            })
+
+    top_reads.sort(key=lambda r: r["chars"], reverse=True)
+    repeat_offenders.sort(key=lambda r: r["count"], reverse=True)
+
+    total_bucket = ReadCostBucket()
+    total_bucket.add(main_bucket)
+    total_bucket.add(sub_bucket)
+
+    return {
+        "version": version,
+        "scope": scope,
+        "sessions_with_reads": sessions_with_reads,
+        "main": main_bucket.to_dict(),
+        "subagents": sub_bucket.to_dict(),
+        "total": total_bucket.to_dict(),
+        "top_reads": top_reads[:10],
+        "repeat_offenders": repeat_offenders[:5],
+    }
+
+
+# ---------------------------------------------------------------------------
 # Reporting: text output
 # ---------------------------------------------------------------------------
 
@@ -1245,6 +1473,38 @@ def print_edit_cost_text(report: dict) -> None:
         )
 
 
+def print_read_cost_text(report: dict) -> None:
+    print(
+        f"version={report['version']} scope={report['scope']} "
+        f"sessions_with_reads={report['sessions_with_reads']}"
+    )
+    print()
+    for name in ("main", "subagents", "total"):
+        b = report[name]
+        print(
+            f"  {name:<10} reads={b['read_events']:>5} "
+            f"uncapped={b['uncapped_events']:>5}({b['uncapped_share']:.0%}) "
+            f"total_chars={b['total_chars']:>10} uncapped_chars={b['uncapped_chars']:>10} "
+            f"repeat_pairs={b['repeat_pairs']:>4} repeat_excess={b['repeat_excess_events']:>5}"
+        )
+        chars_line = " ".join(f"{k}={b['uncapped_chars_buckets'][k]}" for k in CHARS_BUCKETS)
+        print(f"             uncapped chars dist: {chars_line}")
+        lines_line = " ".join(f"{k}={b['uncapped_line_buckets'][k]}" for k in LINE_BUCKETS)
+        print(f"             uncapped lines dist: {lines_line}")
+    print()
+    print("Top 10 largest single reads:")
+    for r in report["top_reads"]:
+        where = "sub" if r["subagent"] else "main"
+        cap = "uncapped" if r["uncapped"] else "capped"
+        lines = r["lines"] if r["lines"] is not None else "?"
+        print(f"  {where} {cap:<8} chars={r['chars']:>8} lines={lines!s:>6} {r['file']}")
+    print()
+    print("Top 5 repeat-read offenders (same file read 2+ times in one session):")
+    for r in report["repeat_offenders"]:
+        where = "sub" if r["subagent"] else "main"
+        print(f"  {where} count={r['count']:>3} {r['file']} ({r['session_file']})")
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -1265,6 +1525,10 @@ def main() -> int:
         "--edit-cost", action="store_true",
         help="Report Edit/MultiEdit/Write old_string/new_string/content char costs instead of the Bash report",
     )
+    parser.add_argument(
+        "--read-cost", action="store_true",
+        help="Report Read tool_use/tool_result sizes and offset/limit use instead of the Bash report",
+    )
     parser.add_argument("--json", action="store_true", help="Print JSON instead of text")
     args = parser.parse_args()
 
@@ -1280,6 +1544,14 @@ def main() -> int:
                 print(json.dumps(edit_report, indent=2))
             else:
                 print_edit_cost_text(edit_report)
+            return 0
+
+        if args.read_cost:
+            read_report = build_read_cost_report(model, version, scope)
+            if args.json:
+                print(json.dumps(read_report, indent=2))
+            else:
+                print_read_cost_text(read_report)
             return 0
 
         level = LEVEL_EVENT if args.event_level else LEVEL_SEGMENT

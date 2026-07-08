@@ -94,6 +94,8 @@ assert_true "append: new prompt contains the cheat-sheet marker" \
   "$([[ "$got_prompt" == *"[tk cheat-sheet]"* ]] && echo 1 || echo 0)"
 assert_true "append: new prompt mentions tk def/refs/callers" \
   "$([[ "$got_prompt" == *"tk def"* && "$got_prompt" == *"tk refs"* && "$got_prompt" == *"tk callers"* ]] && echo 1 || echo 0)"
+assert_true "append: new prompt mentions the Read auto-cap threshold" \
+  "$([[ "$got_prompt" == *"caps uncapped Reads of files over 500 lines"* ]] && echo 1 || echo 0)"
 got_decision="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecision // empty')"
 assert_eq "append: permissionDecision" "allow" "$got_decision"
 
