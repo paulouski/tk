@@ -18,13 +18,16 @@ public static class OutputPipeline
     /// and writes to <see cref="CommandContext.Out"/>. Records raw size on ctx for analytics.
     /// Pass <paramref name="rawStoreArgs"/> when the args used to spawn the process differ from
     /// the args that should identify the raw-copy (e.g. <c>tk grep</c> auto-<c>-r</c>); defaults
-    /// to <see cref="CommandContext.OriginalCommandArgs"/>.
+    /// to <see cref="CommandContext.OriginalCommandArgs"/>. Pass <paramref name="extraHiddenCount"/>
+    /// when the caller already knows about hidden content the raw/filtered line diff can't see
+    /// (e.g. a fetch-time cap) — see <see cref="OutputFooter.Format"/>.
     /// </summary>
     public static async Task<int> RunAsync(
         string[] args,
         IOutputFilter filter,
         CommandContext ctx,
-        string[]? rawStoreArgs = null)
+        string[]? rawStoreArgs = null,
+        int extraHiddenCount = 0)
     {
         var (exitCode, stdout, stderr) = await ctx.Process.RunAsync(args);
         var raw = ProcessOutput.Combine(stdout, stderr);
@@ -35,7 +38,7 @@ public static class OutputPipeline
         var filtered = filter.Apply(raw, exitCode, ledger);
 
         if (!ctx.Raw)
-            filtered = AppendFooter(raw, filtered, ctx.DetailLevel, ledger, exitCode, rawStoreArgs ?? ctx.OriginalCommandArgs);
+            filtered = AppendFooter(raw, filtered, ctx.DetailLevel, ledger, exitCode, rawStoreArgs ?? ctx.OriginalCommandArgs, extraHiddenCount);
 
         ctx.Out.Write(filtered);
         return exitCode;
@@ -49,7 +52,7 @@ public static class OutputPipeline
     /// </summary>
     public static string AppendFooter(
         string raw, string filtered, DetailLevel level, UnitLedger ledger,
-        int exitCode, string[] commandArgs)
+        int exitCode, string[] commandArgs, int extraHiddenCount = 0)
     {
         var rawPath = RawOutputStore.SaveIfNeeded(raw, filtered, commandArgs, exitCode, ledger.UnparsedCount);
         var footer = OutputFooter.Format(
@@ -57,7 +60,8 @@ public static class OutputPipeline
             HiddenLinesFooter.CountLines(filtered),
             ledger.UnparsedCount,
             level,
-            rawPath);
+            rawPath,
+            extraHiddenCount);
         if (footer is null)
             return filtered;
         return filtered.EndsWith('\n') ? $"{filtered}{footer}\n" : $"{filtered}\n{footer}\n";

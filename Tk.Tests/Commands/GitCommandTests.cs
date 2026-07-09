@@ -73,13 +73,18 @@ public class GitCommandTests
     [Fact]
     public async Task Log_adds_agent_friendly_defaults_when_user_does_not_set_them()
     {
-        var runner = new FakeProcessRunner().Returns(stdout: "abc1234 message (1 hour ago) <A>\n");
+        // No explicit limit -> tk also probes `rev-list --count` (call 0) before the real
+        // `git log` fetch (call 1) to know whether the injected cap hid anything.
+        var runner = new FakeProcessRunner()
+            .Returns(stdout: "3\n")
+            .Returns(stdout: "abc1234 message (1 hour ago) <A>\n");
 
         await RunAsync(["log"], runner);
 
-        Assert.Contains("-10", runner.Calls[0]);
-        Assert.Contains("--no-merges", runner.Calls[0]);
-        Assert.Contains(runner.Calls[0], arg => arg.StartsWith("--pretty=format:", StringComparison.Ordinal));
+        Assert.Equal(["git", "rev-list", "--count", "--no-merges", "HEAD"], runner.Calls[0]);
+        Assert.Contains("-10", runner.Calls[1]);
+        Assert.Contains("--no-merges", runner.Calls[1]);
+        Assert.Contains(runner.Calls[1], arg => arg.StartsWith("--pretty=format:", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -89,9 +94,51 @@ public class GitCommandTests
 
         await RunAsync(["log", "--oneline", "-3"], runner);
 
+        // An explicit user limit skips tk's own cap injection entirely, so no `rev-list --count`
+        // probe is needed either -> exactly one process call.
+        Assert.Single(runner.Calls);
         Assert.DoesNotContain("-10", runner.Calls[0]);
         Assert.DoesNotContain("--no-merges", runner.Calls[0]);
         Assert.DoesNotContain(runner.Calls[0], arg => arg.StartsWith("--pretty=format:", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Log_without_limit_reports_truncated_history_beyond_cap()
+    {
+        var runner = new FakeProcessRunner()
+            .Returns(stdout: "51\n") // rev-list --count: true history size
+            .Returns(stdout: string.Join('\n', Enumerable.Range(1, 10).Select(i => $"abc{i:D4} message {i}")) + "\n");
+
+        var (_, output, _) = await RunAsync(["log"], runner);
+
+        // 10 shown out of a real history of 51 -> 41 hidden, reported exactly (not the intra-fetch
+        // line delta, which would be 0 since the fetch itself only ever returned 10 lines).
+        Assert.Contains("hid=41/51", output);
+    }
+
+    [Fact]
+    public async Task Log_without_limit_emits_no_signal_when_history_fits_cap()
+    {
+        var runner = new FakeProcessRunner()
+            .Returns(stdout: "7\n") // history smaller than the display cap
+            .Returns(stdout: string.Join('\n', Enumerable.Range(1, 7).Select(i => $"abc{i:D4} message {i}")) + "\n");
+
+        var (_, output, _) = await RunAsync(["log"], runner);
+
+        Assert.DoesNotContain("hid=", output);
+    }
+
+    [Fact]
+    public async Task Log_without_limit_falls_back_gracefully_when_count_call_fails()
+    {
+        var runner = new FakeProcessRunner()
+            .Returns(exitCode: 128, stderr: "fatal: bad revision 'HEAD'\n")
+            .Returns(stdout: "abc1234 message (1 hour ago) <A>\n");
+
+        var (exit, output, _) = await RunAsync(["log"], runner);
+
+        Assert.Equal(0, exit);
+        Assert.DoesNotContain("hid=", output);
     }
 
     [Fact]

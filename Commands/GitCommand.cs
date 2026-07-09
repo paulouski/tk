@@ -70,6 +70,9 @@ public sealed class GitCommand : ICommand
         return await RunFilteredAsync(args, passthrough ? new PassthroughFilter() : new GitDiffFilter(ctx.DetailLevel, summary: summary, isShow: show), ctx);
     }
 
+    // The cap tk injects into `git log` when the user gave no limit of their own.
+    private const int LogDisplayCap = 10;
+
     private static async Task<int> RunLogAsync(CommandContext ctx, int subcommandIndex)
     {
         var globalArgs = ctx.Args[..subcommandIndex];
@@ -78,17 +81,67 @@ public sealed class GitCommand : ICommand
         var hasFormat = userArgs.Any(a => a == "--oneline" || a.StartsWith("--pretty", StringComparison.Ordinal) || a.StartsWith("--format", StringComparison.Ordinal));
         var hasLimit = HasUserLimit(userArgs);
         var wantsMerges = userArgs.Any(a => a == "--merges" || a == "--min-parents=2");
+        var addedNoMerges = !wantsMerges && !hasFormat && !hasLimit;
 
         if (!hasFormat)
             effective.Add("--pretty=format:%h %s (%ar) <%an>");
         if (!hasLimit)
-            effective.Add("-10");
-        if (!wantsMerges && !hasFormat && !hasLimit)
+            effective.Add($"-{LogDisplayCap}");
+        if (addedNoMerges)
             effective.Add("--no-merges");
         effective.AddRange(userArgs);
 
         var args = BuildGitArgs(globalArgs, effective);
-        return await RunFilteredAsync(args, new GitLogFilter(), ctx);
+
+        // tk injected the display cap above (no user limit) — figure out, cheaply, whether the
+        // real history is longer than what we're about to show, so the footer can say so instead
+        // of silently truncating. Never fetches the whole history: just an exact `rev-list --count`
+        // with the same effective filters (no format, no injected cap). Any failure here falls
+        // back to no signal — it must never break `git log` itself.
+        var extraHidden = hasLimit
+            ? 0
+            : await CountHiddenBeyondCapAsync(ctx, globalArgs, userArgs, addedNoMerges);
+
+        return await OutputPipeline.RunAsync(args, new GitLogFilter(), ctx, extraHiddenCount: extraHidden);
+    }
+
+    private static async Task<int> CountHiddenBeyondCapAsync(
+        CommandContext ctx, string[] globalArgs, string[] userArgs, bool noMerges)
+    {
+        try
+        {
+            var countArgs = new List<string> { "rev-list", "--count" };
+            if (noMerges)
+                countArgs.Add("--no-merges");
+            if (!HasRevisionArg(userArgs))
+                countArgs.Add("HEAD");
+            countArgs.AddRange(userArgs);
+
+            var (exitCode, stdout, _) = await ctx.Process.RunAsync(BuildGitArgs(globalArgs, countArgs));
+            if (exitCode != 0 || !int.TryParse(stdout.Trim(), out var total))
+                return 0;
+
+            return total > LogDisplayCap ? total - LogDisplayCap : 0;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    // Whether userArgs already pins a revision (branch, ref, range) ahead of any `--` path
+    // separator — if so, `git rev-list --count` doesn't need an explicit `HEAD` appended.
+    private static bool HasRevisionArg(string[] args)
+    {
+        foreach (var arg in args)
+        {
+            if (arg == "--")
+                break;
+            if (arg.Length > 0 && arg[0] != '-')
+                return true;
+        }
+
+        return false;
     }
 
     private static Task<int> RunFilteredAsync(string[] args, IOutputFilter filter, CommandContext ctx)

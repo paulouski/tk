@@ -9,16 +9,23 @@ namespace Tk.Common;
 /// </summary>
 public static class OutputFooter
 {
+    /// <param name="extraHiddenCount">
+    /// Additional hidden count known to the caller from outside the raw/filtered line diff
+    /// (e.g. a fetch-time cap like <c>tk git log</c>'s injected <c>-10</c>, where the raw output
+    /// never contained the rest of the history to begin with). Added to both the shown hidden
+    /// count and the reported total so the footer stays truthful about what's missing.
+    /// </param>
     public static string? Format(int originalLines, int shownLines, int unparsedCount,
-        DetailLevel level, string? rawPath = null)
+        DetailLevel level, string? rawPath = null, int extraHiddenCount = 0)
     {
-        var hidden = originalLines > shownLines ? originalLines - shownLines : 0;
+        var hidden = (originalLines > shownLines ? originalLines - shownLines : 0) + extraHiddenCount;
+        var total = originalLines + extraHiddenCount;
         if (hidden <= 0 && unparsedCount <= 0 && rawPath is null)
             return null;
 
         var parts = new List<string>();
         if (hidden > 0)
-            parts.Add($"hid={hidden}/{originalLines}");
+            parts.Add($"hid={hidden}/{total}");
         if (unparsedCount > 0)
             parts.Add($"unparsed={unparsedCount}");
         if (rawPath is not null)
