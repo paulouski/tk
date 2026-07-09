@@ -28,9 +28,9 @@ public sealed class SwitchCommand : ICommand
         return state switch
         {
             "setup" => await FinishSetupAsync(ctx),
-            "1"     => await ToggleAsync(ctx, from: "1", fromSlot: Slot1Service, toSlot: Slot2Service, toName: "2"),
-            "2"     => await ToggleAsync(ctx, from: "2", fromSlot: Slot2Service, toSlot: Slot1Service, toName: "1"),
-            _       => await StartSetupAsync(ctx),
+            "1" => await ToggleAsync(ctx, from: "1", fromSlot: Slot1Service, toSlot: Slot2Service, toName: "2"),
+            "2" => await ToggleAsync(ctx, from: "2", fromSlot: Slot2Service, toSlot: Slot1Service, toName: "1"),
+            _ => await StartSetupAsync(ctx),
         };
     }
 

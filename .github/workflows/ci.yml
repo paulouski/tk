@@ -13,4 +13,5 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
+      - run: dotnet format Tk.csproj --verify-no-changes
       - run: dotnet test Tk.Tests/Tk.Tests.csproj -c Release --nologo

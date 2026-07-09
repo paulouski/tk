@@ -14,6 +14,7 @@ namespace Tk.Tests.Filters;
 /// <c>GitCommandTests.Log_without_limit_reports_truncated_history_beyond_cap</c> for that) — it
 /// only guards that no filter can silently drop content it received without saying so.
 /// </summary>
+[Collection("RawOutputStoreEnv")]
 public class OutputContractFooterInvariantTests
 {
     private static string AppendedFooter(string raw, string filtered, UnitLedger ledger, int exitCode, string[] commandArgs) =>

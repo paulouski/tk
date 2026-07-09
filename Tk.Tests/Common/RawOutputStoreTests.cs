@@ -9,6 +9,7 @@ namespace Tk.Tests.Common;
 /// store at a throwaway temp directory per test instead of the real <c>&lt;temp&gt;/tk-raw</c>,
 /// so tests never interact with (or get polluted by) real raw copies from other tk runs.
 /// </summary>
+[Collection("RawOutputStoreEnv")]
 public class RawOutputStoreTests : IDisposable
 {
     private readonly string _dir;
