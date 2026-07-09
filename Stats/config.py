@@ -18,6 +18,9 @@ Importable API
   LSP_NAV_COMMANDS                 bash_opp_classify.py  (reserved)
   CHARS_BUCKETS                    bash_opp_reports.py   (read-cost)
   LINE_BUCKETS                     bash_opp_reports.py   (read-cost)
+  ADOPTION_LOOKAHEAD               detect.py  (S4 / hook adoption)
+  ADOPTION_NAV_COMMANDS            detect.py  (S4 / hook adoption)
+  ADOPTION_SYMBOL_COMMANDS         detect.py  (S4 / hook adoption)
 """
 
 from __future__ import annotations
@@ -88,3 +91,19 @@ LSP_NAV_COMMANDS: frozenset[str] = frozenset()
 
 CHARS_BUCKETS = ("<5k", "5-15k", "15-40k", ">40k")
 LINE_BUCKETS = ("<=400", "401-500", "501-600", "601-700", "701-800", "801-1500", ">1500")
+
+
+# ---------------------------------------------------------------------------
+# Post-hook adoption stats (detect.py S4)
+# ---------------------------------------------------------------------------
+
+# How many following events (per session, forward-scanned) to check for an
+# adoption signal after a cap-read/nudge intervention.
+ADOPTION_LOOKAHEAD = 5
+
+# tk commands that count as adoption of a cap-read or stealth-read nudge
+# (structure-aware nav after a raw/stealth file read was capped or flagged).
+ADOPTION_NAV_COMMANDS = frozenset({"view", "def", "refs", "callers", "impl"})
+
+# tk commands that count as adoption of a symbol-grep nudge.
+ADOPTION_SYMBOL_COMMANDS = frozenset({"def", "refs", "callers", "sym"})

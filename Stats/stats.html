@@ -365,6 +365,45 @@ function render(m) {
     out += '</div>';
   }
 
+  // ── Hook adoption panel (S4: does the agent obey route-hook interventions?)
+  var adoption = m.adoption || {};
+  var bySub = adoption.by_subtype || {};
+  var subKeys = Object.keys(bySub);
+  var autoRouted = (adoption.auto_routed || {}).n || 0;
+  if (subKeys.length > 0 || autoRouted > 0) {
+    out += '<div class="sec">Hook adoption</div>';
+    out += '<div class="ver-panel"><table class="ver-table">';
+    out += '<thead><tr>'
+      + '<th>Subtype</th>'
+      + '<th class="num">Interventions</th>'
+      + '<th class="num">Adopted</th>'
+      + '<th class="num">Rate</th>'
+      + '</tr></thead><tbody>';
+    for (var ai = 0; ai < subKeys.length; ai++) {
+      var subKey = subKeys[ai];
+      var st = bySub[subKey];
+      var rate = Math.round((st.rate || 0) * 100);
+      out += '<tr>'
+        + '<td>' + h(subKey) + '</td>'
+        + '<td class="num">' + fmt(st.n_interventions) + '</td>'
+        + '<td class="num" style="color:var(--ok)">' + fmt(st.n_adopted) + '</td>'
+        + '<td class="num">' + rate + '%</td>'
+        + '</tr>';
+    }
+    if (autoRouted > 0) {
+      out += '<tr>'
+        + '<td class="dim">auto_routed</td>'
+        + '<td class="num">' + fmt(autoRouted) + '</td>'
+        + '<td class="num dim">—</td>'
+        + '<td class="num dim">—</td>'
+        + '</tr>';
+    }
+    out += '</tbody></table>';
+    out += '<div class="gp-note" style="margin-top:4px;">nudge/cap-read: voluntary — did a tk-nav command or sliced Read follow within '
+      + 'the lookahead window? route-tk/route-rtk are auto-applied rewrites, not voluntary adoption.</div>';
+    out += '</div>';
+  }
+
   // Build sorted unique version list for the picker (from by_version, already sorted)
   var bvVersions = [];
   for (var vi = 0; vi < (m.by_version || []).length; vi++) {

@@ -242,39 +242,60 @@ exit as silent no-ops — same degrade-to-no-op philosophy as the router.
 ## opencode
 
 opencode (https://opencode.ai) has its own plugin system using `tool.execute.before`
-hooks. `hooks/tk-route-opencode.ts` ports the core routing rules:
+hooks. Three plugin files, each installed as a separate file:
+
+- **`hooks/tk-route-opencode.ts`** — bash routing + read cap (ports `tk-route.sh`'s core
+  rules).
+- **`hooks/tk-preamble-opencode.ts`** — subagent cheat-sheet preamble (ports
+  `tk-agent-preamble.sh`).
+- **`hooks/tk-slim-opencode.ts`** — trims tool-description and `read`-output token
+  overhead that's unrelated to routing (opencode-only, no Claude Code equivalent).
+
+All three degrade to a no-op on any error and can coexist as independent files.
+
+### tk-route-opencode.ts
 
 - **bash rewrite**: single and compound (`&&`/`||`/`;`/newline) `dotnet build|test|restore`
   and `git status|log` → `tk ...`. `git diff|show` stays raw. Heredocs, `$()`, backticks,
-  and shell control keywords (`if`/`for`/`while`/...) are left untouched.
+  and shell control keywords (`if`/`for`/`while`/...) are left untouched. A single
+  (non-compound) command not recognized by the rules above is offered to `rtk rewrite`
+  as a fallback (if `rtk` is on PATH) — mirrors `tk-route.sh`'s `rtk` fallback, but only
+  for non-compound commands; compound/piped commands are handled exclusively by the
+  quote-aware tokenizer and never reach the fallback.
 - **read cap**: uncapped Reads of files >500 lines get `limit: 500`.
 
 Not ported (no equivalent in opencode's `tool.execute.before`):
 - the `additionalContext` nudges (symbol-grep, large-read) — opencode can mutate args but
   has no side-channel context channel like Claude Code's `additionalContext`.
-- the `rtk` fallback rewrite (opencode plugin runs in-process, no shell-out to `rtk`).
 - the three-tier pipeline guard's Tier 2 (problem-shaped grep replacement) — simplified to
   "rewrite LHS only when all downstream segments are display modifiers (head/tail/cat)".
 
+### tk-preamble-opencode.ts
+
+Ports `tk-agent-preamble.sh`: on the `task` tool, appends the `[tk cheat-sheet]` block to
+`args.prompt` (idempotent on the marker).
+
+### tk-slim-opencode.ts
+
+opencode-only (no `tk-route.sh` equivalent): shortens the built-in tool descriptions sent
+to the model, and compacts the `read` tool's output (relative `<path>`, drops the
+`<type>file</type>` tag and the "(End of file - total N lines)" footer).
+
 ### How to activate (opencode)
 
-Copy the plugin into your global opencode plugins directory:
+Copy the plugins into your global opencode plugins directory:
 
 ```bash
 mkdir -p ~/.config/opencode/plugins
 cp hooks/tk-route-opencode.ts ~/.config/opencode/plugins/tk-route.ts
+cp hooks/tk-preamble-opencode.ts ~/.config/opencode/plugins/tk-preamble.ts
+cp hooks/tk-slim-opencode.ts ~/.config/opencode/plugins/tk-slim.ts
 ```
 
-opencode auto-loads `.ts`/`.js` files from `~/.config/opencode/plugins/` at startup. The
+opencode auto-loads `.ts`/`.js` files from `~/.config/opencode/plugins/` at startup. Each
 plugin needs `@opencode-ai/plugin` for the `Plugin` type; opencode resolves it from its
 own runtime — no separate install step. After copying, restart opencode.
 
-To verify it loaded, check that `dotnet build` output is compact after a bash call. The
-plugin degrades to a no-op on any error (file unreadable, no match, etc.) — it never
-blocks or breaks a command.
-
-### Subagent preamble (opencode)
-
-`hooks/tk-preamble-opencode.ts` ports `tk-agent-preamble.sh`: on the `task` tool, appends
-the `[tk cheat-sheet]` block to `args.prompt` (idempotent on the marker). Install the same
-way — copy into `~/.config/opencode/plugins/`. Both plugins can coexist as separate files.
+To verify `tk-route.ts` loaded, check that `dotnet build` output is compact after a bash
+call. All plugins degrade to a no-op on any error (file unreadable, no match, etc.) — none
+of them ever blocks or breaks a command.

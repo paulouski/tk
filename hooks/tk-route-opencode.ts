@@ -6,7 +6,10 @@
 //      `git status|log` (single or in compound `&&`/`||`/`;`/newline chains) to
 //      `tk ...`. `git diff|show` is deliberately NOT routed (diffs must stay raw).
 //      Heredocs, $(), backticks, and shell control keywords (if/for/while/...) are
-//      left untouched — conservative passthrough.
+//      left untouched — conservative passthrough. A single (non-compound) command
+//      that isn't recognized by the tk rules above is offered to `rtk rewrite` as a
+//      fallback (if `rtk` is on PATH); compound/piped commands never reach the
+//      fallback — only the built-in tokenizer rewrites those segments.
 //   2. read tool.execute.before: caps uncapped Reads of files >500 lines at 500.
 //
 // opencode's tool.execute.before can mutate args but has no additionalContext channel,
@@ -172,7 +175,10 @@ function rewriteCompoundCommand(input: string): string | null {
   return changed ? result : null
 }
 
-function rewriteBashCommand(cmd: string): string | null {
+async function rewriteBashCommand(
+  cmd: string,
+  $: Parameters<Plugin>[0]["$"],
+): Promise<string | null> {
   const stripped = stripShellLiterals(cmd)
 
   // Hard-unsafe: leave untouched.
@@ -190,7 +196,51 @@ function rewriteBashCommand(cmd: string): string | null {
     return rewriteCompoundCommand(cmd)
   }
 
-  return rewriteSegment(cmd)
+  const rewritten = rewriteSegment(cmd)
+  if (rewritten !== null) return rewritten
+
+  return rtkFallback(cmd, $)
+}
+
+// --- rtk fallback ------------------------------------------------------
+
+let rtkAvailableCache: boolean | null = null
+
+async function isRtkAvailable($: Parameters<Plugin>[0]["$"]): Promise<boolean> {
+  if (rtkAvailableCache !== null) return rtkAvailableCache
+  const out = await $`command -v rtk`.quiet().nothrow()
+  rtkAvailableCache = out.exitCode === 0
+  return rtkAvailableCache
+}
+
+// Single (non-compound) commands only — compound/piped commands are handled
+// exclusively by the quote-aware tokenizer above and never reach this fallback.
+async function rtkFallback(
+  cmd: string,
+  $: Parameters<Plugin>[0]["$"],
+): Promise<string | null> {
+  const trimmed = cmd.trim()
+  if (!trimmed) return null
+
+  let envPrefix = ""
+  let rest = trimmed
+  const envMatch = rest.match(ENV_PREFIX_RE)
+  if (envMatch) {
+    envPrefix = envMatch[0]
+    rest = trimmed.slice(envPrefix.length)
+  }
+  if (!rest) return null
+
+  // Never double-wrap tk or rtk.
+  if (rest === "tk" || rest.startsWith("tk ")) return null
+  if (rest === "rtk" || rest.startsWith("rtk ")) return null
+
+  if (!(await isRtkAvailable($))) return null
+  const out = await $`rtk rewrite ${rest}`.quiet().nothrow()
+  if (out.exitCode !== 0) return null
+  const rewrittenRest = out.text().trim()
+  if (!rewrittenRest) return null
+  return `${envPrefix}${rewrittenRest}`
 }
 
 // --- read cap --------------------------------------------------------------
@@ -217,7 +267,7 @@ export const TkRoutePlugin: Plugin = async ({ $ }) => {
       if (input.tool === "bash") {
         const cmd: string = output.args.command
         if (typeof cmd !== "string" || !cmd) return
-        const rewritten = rewriteBashCommand(cmd)
+        const rewritten = await rewriteBashCommand(cmd, $)
         if (rewritten !== null && rewritten !== cmd) {
           output.args.command = rewritten
         }

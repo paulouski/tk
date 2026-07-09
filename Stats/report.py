@@ -56,12 +56,35 @@ def _build_report(model: dict) -> dict:
     sg_by_cmd: dict[str, int] = defaultdict(int)        # tool+pattern key -> count
     sg_total = 0
 
+    # native_grep_retry / reread tracking: per session, from rollup fields
+    ngr_by_session: dict[str, int] = defaultdict(int)
+    ngr_total = 0
+    reread_by_session: dict[str, int] = defaultdict(int)
+    reread_chars_by_session: dict[str, int] = defaultdict(int)
+    reread_total = 0
+    reread_chars_total = 0
+
     for session in sessions:
         at = session.get("agent_type", "unknown")
         sid = session.get("session_id", "")
         if sid not in seen_sessions[at]:
             seen_sessions[at].add(sid)
             agent_stats[at]["n_sessions"] += 1
+
+        # native_grep_retry / reread: session-level rollup fields set by
+        # detect._rollup_session (n_native_grep_retry, n_reread, reread_chars_total).
+        ngr = session.get("n_native_grep_retry", 0) or 0
+        ngr_total += ngr
+        if ngr:
+            ngr_by_session[sid] += ngr
+
+        rr = session.get("n_reread", 0) or 0
+        rr_chars = session.get("reread_chars_total", 0) or 0
+        reread_total += rr
+        reread_chars_total += rr_chars
+        if rr:
+            reread_by_session[sid] += rr
+            reread_chars_by_session[sid] += rr_chars
 
         for ev in session.get("events", []):
             # symbol_grep is on ALL events (tk and native)
@@ -230,6 +253,27 @@ def _build_report(model: dict) -> dict:
         "top_commands": [{"label": label, "n": n} for label, n in top_sg_cmds],
     }
 
+    # -- native_grep_retry summary --------------------------------------------
+    top_ngr_sessions = sorted(ngr_by_session.items(), key=lambda x: x[1], reverse=True)[:5]
+    native_grep_retry_block = {
+        "total": ngr_total,
+        "top_sessions": [{"session_id": sid, "n": n} for sid, n in top_ngr_sessions],
+    }
+
+    # -- reread summary --------------------------------------------------------
+    top_reread_sessions = sorted(reread_by_session.items(), key=lambda x: x[1], reverse=True)[:5]
+    top_reread_chars_sessions = sorted(
+        reread_chars_by_session.items(), key=lambda x: x[1], reverse=True
+    )[:5]
+    reread_block = {
+        "total": reread_total,
+        "chars_total": reread_chars_total,
+        "top_sessions": [{"session_id": sid, "n": n} for sid, n in top_reread_sessions],
+        "top_sessions_by_chars": [
+            {"session_id": sid, "chars": c} for sid, c in top_reread_chars_sessions
+        ],
+    }
+
     # -- cost summary --------------------------------------------------------
     total_usd = sum((s.get("cost") or {}).get("usd", 0.0) for s in sessions)
     main_usd  = sum(
@@ -304,6 +348,37 @@ def _build_report(model: dict) -> dict:
     by_version.sort(key=lambda x: _ver_sort_key(x["version"]))
     by_version.reverse()
 
+    # -- adoption (S4: post-hook adoption stats) ------------------------------
+    # Interventions live in a flat, model-level list (see detect.py
+    # _detect_adoption for why: session dicts are one-per-transcript-file and
+    # can repeat a session_id, so per-session iteration would double-count).
+    adoption_stats: dict[str, dict] = defaultdict(lambda: {"n_interventions": 0, "n_adopted": 0})
+    auto_routed_n = 0
+    for iv in model.get("interventions") or []:
+        decision = iv.get("decision")
+        if decision in ("route-tk", "route-rtk"):
+            auto_routed_n += 1
+            continue
+        if decision not in ("cap-read", "nudge"):
+            continue
+        subtype = iv.get("nudge_subtype") or decision
+        st = adoption_stats[subtype]
+        st["n_interventions"] += 1
+        if iv.get("adopted"):
+            st["n_adopted"] += 1
+
+    adoption_block = {
+        "by_subtype": {
+            subtype: {
+                "n_interventions": st["n_interventions"],
+                "n_adopted": st["n_adopted"],
+                "rate": round(st["n_adopted"] / st["n_interventions"], 4) if st["n_interventions"] else 0.0,
+            }
+            for subtype, st in sorted(adoption_stats.items())
+        },
+        "auto_routed": {"n": auto_routed_n},
+    }
+
     return {
         "range": {
             "from": rng.get("from"),
@@ -318,6 +393,8 @@ def _build_report(model: dict) -> dict:
             "match_rate": ms["match_rate"],
             "retry_total": retry_total,
             "symbol_grep_total": sg_total,
+            "native_grep_retry_total": ngr_total,
+            "reread_total": reread_total,
         },
         "outcomes": oc,
         "savings": {
@@ -326,10 +403,13 @@ def _build_report(model: dict) -> dict:
             "net_chars": net_saved,
         },
         "symbol_grep": symbol_grep_block,
+        "native_grep_retry": native_grep_retry_block,
+        "reread": reread_block,
         "cost": cost_summary,
         "by_command": by_command,
         "by_agent_type": by_agent_type,
         "by_version": by_version,
+        "adoption": adoption_block,
         "findings": findings,
     }
 
@@ -414,6 +494,20 @@ def _print_summary(report: dict) -> None:
             print(f"  session {item['session_id'][:8]}  n={item['n']}")
     print()
 
+    ngr = report.get("native_grep_retry") or {}
+    if ngr.get("total"):
+        print(f"Grep retries:  {ngr['total']} total (native grep repeated within lookback)")
+        for item in (ngr.get("top_sessions") or [])[:3]:
+            print(f"  session {item['session_id'][:8]}  n={item['n']}")
+    print()
+
+    rr = report.get("reread") or {}
+    if rr.get("total"):
+        print(f"Rereads:       {rr['total']} total, {rr['chars_total']:,} chars")
+        for item in (rr.get("top_sessions") or [])[:3]:
+            print(f"  session {item['session_id'][:8]}  n={item['n']}")
+    print()
+
     if report["findings"]:
         print("Findings:")
         for f in report["findings"]:
@@ -472,6 +566,20 @@ def _print_summary(report: dict) -> None:
             print()
             print(f"  WARNING: unknown models (cost not calculated): {', '.join(unknown)}")
 
+    ad = report.get("adoption") or {}
+    by_sub = ad.get("by_subtype") or {}
+    auto_routed = ad.get("auto_routed") or {}
+    if by_sub or auto_routed.get("n"):
+        print()
+        print("Hook adoption:")
+        for subtype, st in by_sub.items():
+            print(
+                f"  {subtype:16s} n={st['n_interventions']:4d}  "
+                f"adopted={st['n_adopted']:4d}  rate={st['rate']*100:.0f}%"
+            )
+        if auto_routed.get("n"):
+            print(f"  {'auto_routed':16s} n={auto_routed['n']:4d}  (route-tk/route-rtk, no adoption rate)")
+
 
 # ---------------------------------------------------------------------------
 # CLI entry point
@@ -503,8 +611,9 @@ def main() -> None:
     # Build and write report.json
     report = _build_report(model)
 
-    # Expose by_version in model.json so the dashboard can render it
+    # Expose by_version and adoption in model.json so the dashboard can render them
     model["by_version"] = report["by_version"]
+    model["adoption"] = report["adoption"]
 
     # Re-write model.json with by_version included
     with open(model_path, "w", encoding="utf-8") as f:

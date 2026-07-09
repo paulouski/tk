@@ -520,6 +520,12 @@ def _parse_session(jsonl_path: Path, projects_dir: Path) -> dict | None:
                             tk_info = _extract_tk_info(cmd, session_cwd=cwd)
                             if tk_info:
                                 event.update(tk_info)
+                        elif tool_name == "Read":
+                            # S4 adoption detection needs to tell a sliced Read
+                            # (offset/limit given — a nudge/cap-read was heeded)
+                            # from a whole-file Read.
+                            event["read_offset"] = tool_input.get("offset")
+                            event["read_limit"] = tool_input.get("limit")
                         tool_uses[tool_id] = event
 
                     elif btype == "tool_result":

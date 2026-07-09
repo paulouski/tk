@@ -27,6 +27,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from config import MATCH_WINDOW
 from ingest import load_sessions, _parse_ts, _parse_cli_dt  # type: ignore[import]
+from ingest_hooklog import load_interventions  # type: ignore[import]
 from ingest_opencode import load_sessions as _load_oc_sessions  # type: ignore[import]
 from pricing import cost_tokens_by_type, get_unknown_models, is_known_model  # type: ignore[import]
 
@@ -408,6 +409,17 @@ def run_join(
     own_log = load_own_log()
     index = _build_own_log_index(own_log)
 
+    # S4: load hook-log interventions (cap-read/nudge/route-tk/route-rtk) as a
+    # flat, model-level list (each record already carries session_id). Kept
+    # flat rather than attached per session dict: a resumed session can span
+    # multiple transcript files that all share the same session_id (one
+    # session dict per file), so per-session attachment would duplicate each
+    # intervention once per file. detect.py's adoption pass groups these by
+    # session_id itself, against that session_id's events merged across every
+    # file that shares it. Sessions from a non-Claude source (opencode)
+    # simply get no matches (different session_id namespace).
+    interventions = load_interventions(from_dt, to_dt)
+
     total_tk = 0
     matched = 0
     outcome_counts: dict[str, int] = {"WIN": 0, "NEUTRAL": 0, "NET_NEGATIVE": 0, "UNKNOWN": 0}
@@ -548,6 +560,7 @@ def run_join(
         },
         "sessions": session_models,
         "groups": groups,
+        "interventions": interventions,
     }
     return model
 
