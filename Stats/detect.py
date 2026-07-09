@@ -15,6 +15,7 @@ import re as _re
 import shlex
 
 from config import (
+    ADOPTION_EDIT_WRITE_COMMANDS,
     ADOPTION_LOOKAHEAD,
     ADOPTION_NAV_COMMANDS,
     ADOPTION_SYMBOL_COMMANDS,
@@ -415,10 +416,11 @@ def _detect_stealth_read(events: list[dict]) -> None:
 # ---------------------------------------------------------------------------
 # S4 — post-hook adoption stats
 # ---------------------------------------------------------------------------
-# Measures whether the agent obeys tk-route.sh hook interventions ("cap-read"
-# and "nudge" — additionalContext-only hints it complies with voluntarily).
-# "route-tk"/"route-rtk" are auto-applied rewrites, not voluntary adoption,
-# and are left unannotated here (report.py tallies them separately).
+# Measures whether the agent obeys tk-route.sh hook interventions ("cap-read",
+# "nudge", and "nudge-edit-write" — additionalContext-only hints it complies
+# with voluntarily). "route-tk"/"route-rtk" are auto-applied rewrites, not
+# voluntary adoption, and are left unannotated here (report.py tallies them
+# separately).
 
 # Stealth-read nudge binaries (mirrors CS_STEALTH_READ_CMD_RE in tk-route.sh).
 _NUDGE_STEALTH_CMDS = frozenset({"cat", "sed", "head", "tail"})
@@ -472,6 +474,16 @@ def _adoption_signal_commands(subtype: str) -> frozenset[str]:
 
 def _is_adoption_signal(ev: dict, subtype: str, target_file: str) -> bool:
     """True if ev is an adoption signal for the given intervention subtype."""
+    if subtype == "edit_write":
+        # Unlike the other subtypes, adoption requires `tk write` on the SAME
+        # file the nudge fired for — any `tk write` would over-count, since the
+        # nudge is per-file and the agent may be mid-edit on unrelated files.
+        if not (target_file and ev.get("is_tk")):
+            return False
+        if ev.get("tk_command") not in ADOPTION_EDIT_WRITE_COMMANDS:
+            return False
+        operands = ev.get("tk_operand_values") or []
+        return bool(operands) and operands[0] == target_file
     if ev.get("is_tk") and ev.get("tk_command") in _adoption_signal_commands(subtype):
         return True
     # A sliced Read (non-empty offset/limit) of the same file that was
@@ -500,12 +512,17 @@ def _annotate_intervention(iv: dict, events: list[dict], event_epochs: list[floa
     iv["adopted"] = None
     iv["nudge_subtype"] = None
     decision = iv.get("decision")
-    if decision not in ("cap-read", "nudge"):
+    if decision not in ("cap-read", "nudge", "nudge-edit-write"):
         return
 
     command = iv.get("command") or ""
     if decision == "cap-read":
         subtype = "cap_read"
+        target_file = command
+    elif decision == "nudge-edit-write":
+        # tk-route.sh logs the edited file path (not a shell command) as the
+        # command column for this decision — see _log_decision call site.
+        subtype = "edit_write"
         target_file = command
     else:
         subtype = _classify_nudge_subtype(command)

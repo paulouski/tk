@@ -24,7 +24,7 @@
 INPUT=$(cat)
 
 tool=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
-[[ "$tool" != "Bash" && "$tool" != "Read" ]] && exit 0
+[[ "$tool" != "Bash" && "$tool" != "Read" && "$tool" != "Edit" ]] && exit 0
 
 # Capture cwd and session_id to tag/key log entries. Log to a single global
 # directory (~/.claude/) rather than per-repo, so a globally installed hook never
@@ -127,6 +127,26 @@ if [[ "$tool" == "Read" ]]; then
         _emit_read_cap "$file_path" "$lim" "Read capped to ~2000 chars (${lim} lines) by tk-route (file is ${bytes} chars / ${lines} lines). For C# files run \`tk view <file>\` for a symbol map, then Read the needed offset/limit slice; use \`tk def|refs|callers|impl\` to jump to a symbol. Re-run with an explicit offset/limit to read more."
       fi
     fi
+  fi
+  exit 0
+fi
+
+# --- Edit handling: nudge (never block/rewrite) a LARGE native Edit toward `tk write`. ---
+# EDIT_WRITE_NUDGE_CHARS: old_string char-length threshold. Real-transcript baseline: native
+# Edit median old+new is ~640 chars; a `tk write <file> <start>-<end> --expect-first/-last ...`
+# range-replace only pays off once old_string is clearly large enough that its own quoting cost
+# dwarfs `tk write`'s range+anchor+heredoc overhead — below this, quoting old_string in place is
+# simpler. 500 targets that clearly-large tier without firing on typical small/medium edits.
+EDIT_WRITE_NUDGE_CHARS=500
+
+if [[ "$tool" == "Edit" ]]; then
+  file_path=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
+  old_string=$(printf '%s' "$INPUT" | jq -r '.tool_input.old_string // empty' 2>/dev/null)
+  old_len=${#old_string}
+
+  if (( old_len >= EDIT_WRITE_NUDGE_CHARS )) && ! _recently_nudged "nudge-edit-write"; then
+    _log_decision "nudge-edit-write" "$file_path"
+    _emit_nudge "Large Edit replacement (${old_len} chars old_string). For a big range-replace, \`tk write <file> <start>-<end> --expect-first '<first old line>' --expect-last '<last old line>'\` (new content via stdin) addresses by line range instead of quoting the whole old_string — cheaper for large edits. Use the line numbers from the file you just Read. Optional."
   fi
   exit 0
 fi

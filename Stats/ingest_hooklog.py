@@ -5,8 +5,8 @@ Parse the tk-route.sh PreToolUse hook audit log (~/.claude/tk-hook-YYYYMMDD.log)
 TAB-separated: ts_epoch<TAB>decision<TAB>session_id<TAB>cwd<TAB>command.
 See hooks/tk-route.sh _log_decision (~line 42) for the exact format.
 
-decision values: "cap-read", "nudge" (voluntary, additionalContext-only hints),
-"route-tk", "route-rtk" (auto-applied rewrites).
+decision values: "cap-read", "nudge", "nudge-edit-write" (voluntary,
+additionalContext-only hints), "route-tk", "route-rtk" (auto-applied rewrites).
 
 Importable API
 --------------

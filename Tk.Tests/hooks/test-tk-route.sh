@@ -690,5 +690,71 @@ expect_no_nudge "cat a .txt file -> no nudge, and rtk doesn't recognize it eithe
   "cat foo.txt"
 expect_no_nudge "unrelated passthrough command -> no stealth-read nudge" "kubectl get pods"
 
+# ── Edit tool: large native replacements nudge toward `tk write`. Never blocks/rewrites the
+# Edit itself (no updatedInput ever produced for this tool). Throttled like the other nudges,
+# keyed by session_id via the shared "nudge-edit-write" decision bucket. ───────────────────
+
+# hook_run_edit_keep_home <path> <file_path> <old_string> [cwd]
+# Does not reset FAKE_HOME first, so the throttle (previous "nudge-edit-write" decision-log
+# timestamp) can be exercised across invocations, mirroring hook_run_keep_home.
+hook_run_edit_keep_home() {
+  local path="$1" file_path="$2" old_string="$3" cwd="${4:-/repo}"
+  mkdir -p "$FAKE_HOME/.claude"
+
+  local input
+  input=$(jq -n --arg f "$file_path" --arg o "$old_string" --arg cwd "$cwd" '
+    {tool_name:"Edit", cwd:$cwd,
+     tool_input:{file_path:$f, old_string:$o, new_string:"replacement"}}')
+
+  OUT="$(PATH="$path" HOME="$FAKE_HOME" bash "$HOOK" <<<"$input" 2>"$WORK/stderr")"
+  RC=$?
+  ERR="$(cat "$WORK/stderr")"
+  if [[ -f "$(today_log_file)" ]]; then
+    LOG_CONTENT="$(cat "$(today_log_file)")"
+  else
+    LOG_CONTENT=""
+  fi
+}
+
+# expect_edit_write_nudge <desc> <file_path> <old_string> [cwd]
+expect_edit_write_nudge() {
+  local desc="$1" file_path="$2" old_string="$3" cwd="${4:-/repo}"
+  hook_run_edit_keep_home "$FAKE_BIN" "$file_path" "$old_string" "$cwd"
+
+  assert_eq "$desc: exit 0" "0" "$RC"
+  local got_ctx
+  got_ctx="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty')"
+  assert_true "$desc: additionalContext (tk write nudge) present" "$([[ -n "$got_ctx" ]] && echo 1 || echo 0)"
+  local got_updated
+  got_updated="$(printf '%s' "$OUT" | jq -r 'if (.hookSpecificOutput | has("updatedInput")) then "present" else "" end')"
+  assert_eq "$desc: no updatedInput (Edit unchanged, not blocked)" "" "$got_updated"
+  assert_true "$desc: decision-log line present (nudge-edit-write)" \
+    "$([[ "$LOG_CONTENT" == *$'\t'"nudge-edit-write"$'\t'* ]] && echo 1 || echo 0)"
+}
+
+# expect_no_edit_write_nudge <desc> <file_path> <old_string> [cwd]
+expect_no_edit_write_nudge() {
+  local desc="$1" file_path="$2" old_string="$3" cwd="${4:-/repo}"
+  local before_log="$LOG_CONTENT"
+  hook_run_edit_keep_home "$FAKE_BIN" "$file_path" "$old_string" "$cwd"
+
+  assert_eq "$desc: exit 0" "0" "$RC"
+  assert_eq "$desc: no stdout" "" "$OUT"
+  assert_eq "$desc: no new decision-log entry" "$before_log" "$LOG_CONTENT"
+}
+
+LARGE_OLD_STRING="$(printf 'x%.0s' $(seq 1 500))"
+SMALL_OLD_STRING="$(printf 'x%.0s' $(seq 1 50))"
+
+rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
+expect_edit_write_nudge "Edit with old_string >= 500 chars -> tk write nudge" \
+  "/repo/Foo.cs" "$LARGE_OLD_STRING"
+expect_no_edit_write_nudge "second qualifying Edit immediately after -> throttled, not nudged" \
+  "/repo/Foo.cs" "$LARGE_OLD_STRING"
+
+rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
+expect_no_edit_write_nudge "Edit with old_string < 500 chars -> no nudge" \
+  "/repo/Foo.cs" "$SMALL_OLD_STRING"
+
 echo "# --- $PASS passed, $FAIL failed ---"
 [[ "$FAIL" -eq 0 ]]

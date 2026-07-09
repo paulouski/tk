@@ -21,6 +21,7 @@ Importable API
   ADOPTION_LOOKAHEAD               detect.py  (S4 / hook adoption)
   ADOPTION_NAV_COMMANDS            detect.py  (S4 / hook adoption)
   ADOPTION_SYMBOL_COMMANDS         detect.py  (S4 / hook adoption)
+  ADOPTION_EDIT_WRITE_COMMANDS     detect.py  (S4 / hook adoption)
 """
 
 from __future__ import annotations
@@ -107,3 +108,7 @@ ADOPTION_NAV_COMMANDS = frozenset({"view", "def", "refs", "callers", "impl"})
 
 # tk commands that count as adoption of a symbol-grep nudge.
 ADOPTION_SYMBOL_COMMANDS = frozenset({"def", "refs", "callers", "sym"})
+
+# tk commands that count as adoption of an edit-write nudge (large native Edit ->
+# `tk write` on the SAME file — see hooks/tk-route.sh EDIT_WRITE_NUDGE_CHARS).
+ADOPTION_EDIT_WRITE_COMMANDS = frozenset({"write"})

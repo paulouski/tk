@@ -359,7 +359,7 @@ def _build_report(model: dict) -> dict:
         if decision in ("route-tk", "route-rtk"):
             auto_routed_n += 1
             continue
-        if decision not in ("cap-read", "nudge"):
+        if decision not in ("cap-read", "nudge", "nudge-edit-write"):
             continue
         subtype = iv.get("nudge_subtype") or decision
         st = adoption_stats[subtype]

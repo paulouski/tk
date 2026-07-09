@@ -66,6 +66,18 @@ def _read_ev(path: str, ts_epoch: float, offset=None, limit=None) -> dict:
     }
 
 
+def _tk_write_ev(file_path: str, ts_epoch: float) -> dict:
+    return {
+        "tool": "Bash", "is_tk": True, "tk_command": "write",
+        "tk_operand_values": [file_path, "10-20"],
+        "ts": _iso(ts_epoch), "tool_input_summary": f"tk write {file_path} 10-20",
+    }
+
+
+def _edit_ev(file_path: str, ts_epoch: float) -> dict:
+    return {"tool": "Edit", "is_tk": False, "ts": _iso(ts_epoch), "tool_input_summary": file_path}
+
+
 def _model(sessions: list[dict], interventions: list[dict]) -> dict:
     return {"sessions": sessions, "interventions": interventions}
 
@@ -145,6 +157,60 @@ class CapRead(unittest.TestCase):
         model = _model([_session("s1", [_tk_nav_ev("callers", 1001.0)])], [iv])
         detect._detect_adoption(model)
         self.assertTrue(iv["adopted"])
+
+
+class EditWriteNudge(unittest.TestCase):
+    def test_tk_write_same_file_adopted(self) -> None:
+        iv = _iv("nudge-edit-write", "/repo/Foo.cs", 1000.0)
+        model = _model([_session("s1", [_tk_write_ev("/repo/Foo.cs", 1001.0)])], [iv])
+        detect._detect_adoption(model)
+        self.assertEqual(iv["nudge_subtype"], "edit_write")
+        self.assertTrue(iv["adopted"])
+
+    def test_tk_write_different_file_not_adopted(self) -> None:
+        iv = _iv("nudge-edit-write", "/repo/Foo.cs", 1000.0)
+        model = _model([_session("s1", [_tk_write_ev("/repo/Bar.cs", 1001.0)])], [iv])
+        detect._detect_adoption(model)
+        self.assertFalse(iv["adopted"])
+
+    def test_another_native_edit_not_adopted(self) -> None:
+        iv = _iv("nudge-edit-write", "/repo/Foo.cs", 1000.0)
+        model = _model([_session("s1", [_edit_ev("/repo/Foo.cs", 1001.0)])], [iv])
+        detect._detect_adoption(model)
+        self.assertFalse(iv["adopted"])
+
+    def test_two_interventions_same_session_independent(self) -> None:
+        # Cardinality (RECURRENCE-GUARD): two edit_write interventions in the
+        # SAME session, on different files, must be scored independently.
+        iv1 = _iv("nudge-edit-write", "/repo/A.cs", 1000.0)
+        iv2 = _iv("nudge-edit-write", "/repo/B.cs", 2000.0)
+        model = _model(
+            [_session("s1", [
+                _tk_write_ev("/repo/A.cs", 1001.0),   # adopts iv1 only
+                _edit_ev("/repo/B.cs", 2001.0),         # NOT an adoption signal for iv2
+            ])],
+            [iv1, iv2],
+        )
+        detect._detect_adoption(model)
+        self.assertTrue(iv1["adopted"])
+        self.assertFalse(iv2["adopted"])
+
+    def test_forward_scan_does_not_leak_across_sessions(self) -> None:
+        # Cardinality (RECURRENCE-GUARD): TWO DIFFERENT sessions sharing the
+        # same target file — forward-scan must not leak across the
+        # session_id boundary.
+        iv_a = _iv("nudge-edit-write", "/repo/Foo.cs", 1000.0, session_id="sa")
+        iv_b = _iv("nudge-edit-write", "/repo/Foo.cs", 1000.0, session_id="sb")
+        model = _model(
+            [
+                _session("sa", [_tk_write_ev("/repo/Foo.cs", 1001.0)]),
+                _session("sb", [_edit_ev("/repo/Foo.cs", 1001.0)]),
+            ],
+            [iv_a, iv_b],
+        )
+        detect._detect_adoption(model)
+        self.assertTrue(iv_a["adopted"])
+        self.assertFalse(iv_b["adopted"])
 
 
 class AutoRoutedDecisions(unittest.TestCase):
