@@ -1,9 +1,6 @@
 """
-P3 — test_detectors3b.py
-
-Wave 3b detector tests: B2 native-grep retry, B3 stealth read, C3
-result_used_edit, B5 parent-sub operand overlap. Synthetic events only;
-no DB or jsonl reads.
+detect.py annotation tests: native-grep retry, stealth read, read-repeat
+kinds, result_used_edit. Synthetic events only; no DB or jsonl reads.
 """
 
 from __future__ import annotations
@@ -12,10 +9,10 @@ import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-import detect  # noqa: E402
-import join  # noqa: E402
+from tkstats.detect import events as detect  # noqa: E402
+from tkstats.detect import rollup  # noqa: E402
 
 
 def _bash_ev(cmd: str, *, is_tk: bool = False, shown: int = 0) -> dict:
@@ -151,7 +148,7 @@ class ReadRepeatKinds(unittest.TestCase):
         detect._detect_reread(events)
         session = {"events": events}
 
-        detect._rollup_session(session)
+        rollup._rollup_session(session)
 
         self.assertEqual(session["n_reread"], 1)
         self.assertEqual(session["read_repeat_counts"]["different_slice"], 1)
@@ -219,44 +216,6 @@ class ResultUsedEdit(unittest.TestCase):
         ]
         detect._detect_fallback(events)
         self.assertFalse(events[0]["result_used_edit"])
-
-
-class OperandOverlap(unittest.TestCase):
-    def _sm(self, sid: str, *, sub: bool, parent: str | None,
-            ops: list[str], group: str | None = None) -> dict:
-        return {
-            "session_id": sid,
-            "is_subagent": sub,
-            "group_id": group if group is not None else ("g1" if not sub else "g1"),
-            "parent_session_id": parent,
-            "cost": {"model": "", "usd": 0.0, "tokens": {}, "usd_by_type": {}},
-            "events": [
-                {"tool": "Bash", "is_tk": True, "tk_command": "def",
-                 "tk_operand_values": ops, "tool_input_summary": "tk def x"},
-            ],
-        }
-
-    def test_overlap_counts_common_operands(self) -> None:
-        main = self._sm("m1", sub=False, parent=None, ops=["Foo", "Bar", "Baz"])
-        sub = self._sm("s1", sub=True, parent="m1", ops=["Foo", "Bar", "Qux"])
-        groups = join._build_groups([main, sub])
-        self.assertEqual(len(groups), 1)
-        g = groups[0]
-        self.assertEqual(g["parent_sub_operand_overlap"], 2)
-        self.assertIn("Foo", g["parent_sub_operand_examples"])
-        self.assertIn("Bar", g["parent_sub_operand_examples"])
-
-    def test_no_subs_no_overlap(self) -> None:
-        main = self._sm("m1", sub=False, parent=None, ops=["Foo"])
-        groups = join._build_groups([main])
-        self.assertEqual(groups[0]["parent_sub_operand_overlap"], 0)
-        self.assertEqual(groups[0]["parent_sub_operand_examples"], [])
-
-    def test_disjoint_operands_zero_overlap(self) -> None:
-        main = self._sm("m1", sub=False, parent=None, ops=["Foo"])
-        sub = self._sm("s1", sub=True, parent="m1", ops=["Bar"])
-        groups = join._build_groups([main, sub])
-        self.assertEqual(groups[0]["parent_sub_operand_overlap"], 0)
 
 
 if __name__ == "__main__":

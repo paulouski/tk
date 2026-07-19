@@ -8,10 +8,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-import ingest_codex  # noqa: E402
-import join  # noqa: E402
+from tkstats.ingestion import codex as ingest_codex  # noqa: E402
+from tkstats.ingestion import codex_js  # noqa: E402
+from tkstats.matching import pipeline  # noqa: E402
 
 
 def _row(timestamp: str, record_type: str, payload: dict) -> dict:
@@ -35,13 +36,13 @@ class JavascriptExtraction(unittest.TestCase):
             "]);"
         )
 
-        commands, unparsed = ingest_codex._extract_exec_commands(source)
+        commands, unparsed = codex_js._extract_exec_commands(source)
 
         self.assertEqual(commands, ["tk def Foo", 'rg "free text" src'])
         self.assertEqual(unparsed, 0)
 
     def test_dynamic_template_is_reported_as_unparsed(self) -> None:
-        commands, unparsed = ingest_codex._extract_exec_commands(
+        commands, unparsed = codex_js._extract_exec_commands(
             "tools.exec_command({cmd: `rg ${pattern} src`})"
         )
 
@@ -49,10 +50,10 @@ class JavascriptExtraction(unittest.TestCase):
         self.assertEqual(unparsed, 1)
 
     def test_extracts_shorthand_command_and_array_map(self) -> None:
-        shorthand, shorthand_unparsed = ingest_codex._extract_exec_commands(
+        shorthand, shorthand_unparsed = codex_js._extract_exec_commands(
             "const cmd = `tk git status`; tools.exec_command({cmd, workdir: '/repo'})"
         )
-        mapped, mapped_unparsed = ingest_codex._extract_exec_commands(
+        mapped, mapped_unparsed = codex_js._extract_exec_commands(
             "const cmds = ['tk def Foo', \"tk refs Foo\"]; "
             "const rs = await Promise.all(cmds.map(cmd => "
             "tools.exec_command({cmd, workdir: '/repo'})));"
@@ -64,7 +65,7 @@ class JavascriptExtraction(unittest.TestCase):
         self.assertEqual(mapped_unparsed, 0)
 
     def test_extracts_json_style_quoted_cmd_property(self) -> None:
-        commands, unparsed = ingest_codex._extract_exec_commands(
+        commands, unparsed = codex_js._extract_exec_commands(
             'tools.exec_command({"cmd":"tk git status","workdir":"/repo"})'
         )
 
@@ -72,11 +73,11 @@ class JavascriptExtraction(unittest.TestCase):
         self.assertEqual(unparsed, 0)
 
     def test_resolves_scalar_template_and_string_loop(self) -> None:
-        templated, template_unparsed = ingest_codex._extract_exec_commands(
+        templated, template_unparsed = codex_js._extract_exec_commands(
             'const pattern = "Foo|Bar"; '
             "tools.exec_command({cmd: `rg -n \"${pattern}\" src`})"
         )
-        looped, loop_unparsed = ingest_codex._extract_exec_commands(
+        looped, loop_unparsed = codex_js._extract_exec_commands(
             "for (const filter of ['One', 'Two']) { "
             "tools.exec_command({cmd: `tk test --filter ${filter}`}); }"
         )
@@ -125,6 +126,88 @@ class RolloutIngestion(unittest.TestCase):
         self.assertEqual(len(session["events"]), 1)
         self.assertEqual(session["events"][0]["tool_input_summary"], "tk def Foo")
         self.assertEqual(session["events"][0]["shown_chars"], len(final_output))
+
+    def test_consecutive_waits_join_in_order_without_cross_cell_leakage(self) -> None:
+        # Regression: a cell polled by several sequential `wait(cell_id)` calls
+        # must have its outputs joined onto the ONE originating event, in the
+        # order the waits occurred — not just the last wait's output, and not
+        # mixed with an unrelated cell polled in the same rollout.
+        rows = [
+            _row("2026-07-15T10:00:00Z", "session_meta", {
+                "id": "thread-multi-wait", "cwd": "/repo", "originator": "codex-tui",
+            }),
+            # Cell 99: triggered by outer-1, polled by three consecutive waits.
+            _row("2026-07-15T10:00:01Z", "response_item", {
+                "type": "custom_tool_call", "call_id": "outer-1", "name": "exec",
+                "input": "const r = await tools.exec_command({cmd: 'tk def Foo'});",
+            }),
+            _row("2026-07-15T10:00:02Z", "response_item", {
+                "type": "custom_tool_call_output", "call_id": "outer-1",
+                "output": [{"type": "input_text", "text": (
+                    "Script running with cell ID 99\nWall time 1.0 seconds\nOutput:\n"
+                )}],
+            }),
+            _row("2026-07-15T10:00:03Z", "response_item", {
+                "type": "function_call", "call_id": "wait-1", "name": "wait",
+                "arguments": json.dumps({"cell_id": "99", "yield_time_ms": 5_000}),
+            }),
+            _row("2026-07-15T10:00:04Z", "response_item", {
+                "type": "function_call_output", "call_id": "wait-1",
+                "output": [{"type": "input_text", "text": "chunk-A "}],
+            }),
+            _row("2026-07-15T10:00:05Z", "response_item", {
+                "type": "function_call", "call_id": "wait-2", "name": "wait",
+                "arguments": json.dumps({"cell_id": "99", "yield_time_ms": 5_000}),
+            }),
+            _row("2026-07-15T10:00:06Z", "response_item", {
+                "type": "function_call_output", "call_id": "wait-2",
+                "output": [{"type": "input_text", "text": "chunk-B "}],
+            }),
+            _row("2026-07-15T10:00:07Z", "response_item", {
+                "type": "function_call", "call_id": "wait-3", "name": "wait",
+                "arguments": json.dumps({"cell_id": "99", "yield_time_ms": 5_000}),
+            }),
+            _row("2026-07-15T10:00:08Z", "response_item", {
+                "type": "function_call_output", "call_id": "wait-3",
+                "output": [{"type": "input_text", "text": "chunk-C done"}],
+            }),
+            # Cell 7: triggered by outer-2, polled by a single unrelated wait —
+            # must not pick up any of cell 99's chunks.
+            _row("2026-07-15T10:00:09Z", "response_item", {
+                "type": "custom_tool_call", "call_id": "outer-2", "name": "exec",
+                "input": "const r = await tools.exec_command({cmd: 'tk refs Bar'});",
+            }),
+            _row("2026-07-15T10:00:10Z", "response_item", {
+                "type": "custom_tool_call_output", "call_id": "outer-2",
+                "output": [{"type": "input_text", "text": (
+                    "Script running with cell ID 7\nWall time 1.0 seconds\nOutput:\n"
+                )}],
+            }),
+            _row("2026-07-15T10:00:11Z", "response_item", {
+                "type": "function_call", "call_id": "wait-4", "name": "wait",
+                "arguments": json.dumps({"cell_id": "7", "yield_time_ms": 5_000}),
+            }),
+            _row("2026-07-15T10:00:12Z", "response_item", {
+                "type": "function_call_output", "call_id": "wait-4",
+                "output": [{"type": "input_text", "text": "chunk-X done"}],
+            }),
+        ]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_rollout(Path(tmp), rows)
+            session = ingest_codex._parse_session(path)
+
+        self.assertIsNotNone(session)
+        # All 4 `wait` rows stay suppressed; only the two outer exec calls surface.
+        self.assertEqual(len(session["events"]), 2)
+
+        cell_99_event, cell_7_event = session["events"]
+        joined = "chunk-A chunk-B chunk-C done"
+        self.assertEqual(cell_99_event["tool_input_summary"], "tk def Foo")
+        self.assertEqual(cell_99_event["shown_chars"], len(joined))
+
+        self.assertEqual(cell_7_event["tool_input_summary"], "tk refs Bar")
+        self.assertEqual(cell_7_event["shown_chars"], len("chunk-X done"))
 
     def test_normalizes_exec_wrapper_and_direct_exec_command(self) -> None:
         rows = [
@@ -250,13 +333,13 @@ class SourceRouting(unittest.TestCase):
                 "is_tk": False, "tool_input_summary": "git status",
             }],
         }
-        with patch("join._load_codex_sessions", return_value=[session]) as load_codex, \
-             patch("join.load_sessions") as load_claude, \
-             patch("join._load_oc_sessions") as load_opencode, \
-             patch("join.load_own_log", return_value=[]), \
-             patch("join.load_interventions", return_value=[]) as load_interventions, \
-             patch("join._infer_version", return_value="0.10.0"):
-            model = join.run_join(source="codex")
+        with patch("tkstats.matching.pipeline._load_codex_sessions", return_value=[session]) as load_codex, \
+             patch("tkstats.matching.pipeline.load_sessions") as load_claude, \
+             patch("tkstats.matching.pipeline._load_oc_sessions") as load_opencode, \
+             patch("tkstats.matching.pipeline.load_own_log", return_value=[]), \
+             patch("tkstats.matching.pipeline.load_interventions", return_value=[]) as load_interventions, \
+             patch("tkstats.matching.pipeline._infer_version", return_value="0.10.0"):
+            model = pipeline.run_join(source="codex")
 
         load_codex.assert_called_once_with(None, None)
         load_claude.assert_not_called()

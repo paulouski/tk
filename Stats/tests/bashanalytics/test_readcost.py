@@ -8,9 +8,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-import bash_opp_reports  # noqa: E402
+from tkstats.bashanalytics import readcost as bash_opp_reports  # noqa: E402
 
 
 def _iso(epoch: float) -> str:

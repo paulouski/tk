@@ -82,7 +82,7 @@ import pathlib
 import sys
 
 sys.path.insert(0, sys.argv[1])
-from join import apply_version_filter
+from tkstats.matching.versions import apply_version_filter
 
 _, stats_dir, model_path, out_path, target = sys.argv
 model = json.loads(pathlib.Path(model_path).read_text())

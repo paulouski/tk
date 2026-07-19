@@ -17,10 +17,10 @@ import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-import detect  # noqa: E402
-import ingest  # noqa: E402
+from tkstats.detect import events as detect  # noqa: E402
+from tkstats.ingestion import common  # noqa: E402
 
 
 _CASES_PATH = Path(__file__).parent / "classify_cases.json"
@@ -36,8 +36,8 @@ def _split(cmd: str) -> list[str]:
 def _classify(cmd: str) -> dict:
     toks = _split(cmd)
     tk_args = toks[1:]  # drop the "tk" prefix
-    stripped, detail = ingest._strip_detail_flags(tk_args)
-    command, sub, flags, operands, operand_values = ingest._classify_tk(stripped)
+    stripped, detail = common._strip_detail_flags(tk_args)
+    command, sub, flags, operands, operand_values = common._classify_tk(stripped)
     return {
         "command": command,
         "sub": sub,

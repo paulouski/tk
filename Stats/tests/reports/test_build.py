@@ -1,16 +1,17 @@
 """
-P3 — test_report_aggregates.py
+P3 — test_build.py
 
-report._build_report surfaces two loss-detector rollups that previously only
-lived per-session in model.json:
+build_report (tkstats.reports.build) surfaces two loss-detector rollups that
+previously only lived per-session in model.json:
   - native_grep_retry: sum of session["n_native_grep_retry"] across sessions,
     plus top_sessions by count.
   - reread: sum of session["n_reread"] / session["reread_chars_total"] across
     sessions, plus top_sessions by count and by chars.
 
-These fields are set by detect._rollup_session (see Stats/detect.py), so the
-tests build synthetic session dicts with the rollup fields already populated
-rather than replaying _detect_reread / _detect_native_grep_retry on events.
+These fields are set by detect._rollup_session (see tkstats/detect.py), so
+the tests build synthetic session dicts with the rollup fields already
+populated rather than replaying _detect_reread / _detect_native_grep_retry
+on events.
 
 Cardinality (RECURRENCE-GUARD): each test uses >=2 sessions that each
 contribute a nonzero count, so a wrong sum (e.g. only counting the last
@@ -24,9 +25,9 @@ import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-import report  # noqa: E402
+from tkstats.reports.build import build_report  # noqa: E402
 
 
 def _session(session_id: str, **rollup_fields) -> dict:
@@ -57,7 +58,7 @@ class NativeGrepRetryAggregate(unittest.TestCase):
             _session("s2", n_native_grep_retry=5),
             _session("s3", n_native_grep_retry=0),
         ]
-        rpt = report._build_report(_rpt_model(sessions))
+        rpt = build_report(_rpt_model(sessions))
         ngr = rpt["native_grep_retry"]
         self.assertEqual(ngr["total"], 8)
         self.assertEqual(rpt["totals"]["native_grep_retry_total"], 8)
@@ -80,7 +81,7 @@ class RereadAggregate(unittest.TestCase):
             ),
             _session("s3", n_reread=0, reread_chars_total=0),
         ]
-        rpt = report._build_report(_rpt_model(sessions))
+        rpt = build_report(_rpt_model(sessions))
         rr = rpt["reread"]
         self.assertEqual(rr["total"], 3)
         self.assertEqual(rr["chars_total"], 1300)
@@ -116,7 +117,7 @@ class CoverageLabels(unittest.TestCase):
             "raw_baseline_invocations": 1,
         }
 
-        totals = report._build_report(model)["totals"]
+        totals = build_report(model)["totals"]
 
         self.assertEqual(totals["own_log_matched_events"], 2)
         self.assertEqual(totals["raw_baseline_events"], 1)
@@ -138,7 +139,7 @@ class CoverageLabels(unittest.TestCase):
         model["match_stats"]["total_tk_events"] = 1
         model["match_stats"]["total_tk_invocations"] = 2
 
-        result = report._build_report(model)
+        result = build_report(model)
 
         self.assertEqual(result["totals"]["tk_events"], 1)
         self.assertEqual(result["tk_invocations"]["total"], 2)

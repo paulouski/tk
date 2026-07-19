@@ -1,12 +1,9 @@
 """
-P2a — detect.py
+Event-level detectors.
 
-Pure annotation functions that enrich a joined model dict in place.
-Operates per session on the ts-ordered event list.
-
-Importable API
---------------
-  annotate(model) -> model   # mutates and returns the same dict
+Pure annotation functions that enrich a session's ts-ordered event list in
+place: empty-result, fallback/result-used, retry, escalation, symbol-grep,
+reread, native-grep-retry, and stealth-read detection.
 """
 
 from __future__ import annotations
@@ -14,11 +11,7 @@ from __future__ import annotations
 import re as _re
 import shlex
 
-from config import (
-    ADOPTION_EDIT_WRITE_COMMANDS,
-    ADOPTION_LOOKAHEAD,
-    ADOPTION_NAV_COMMANDS,
-    ADOPTION_SYMBOL_COMMANDS,
+from tkstats.config import (
     EDIT_RESULT_USED_TOOLS,
     NATIVE_GREP_RETRY_LOOKBACK,
     STEALTH_READ_EXTENSIONS,
@@ -26,13 +19,10 @@ from config import (
     _RESULT_USED_TOOLS,
     _SEARCH_NAV_COMMANDS,
 )
-from ingest import _parse_ts  # type: ignore[import]
 
-
-# ---------------------------------------------------------------------------
-# Search/nav tk commands eligible for fallback detection
-# ---------------------------------------------------------------------------
-# Constants are imported from config.py (single source of truth).
+# Grep-like binaries that count as a native grep when invoked via Bash.
+# Shared with tkstats.detect.adoption (nudge-subtype classification).
+_GREP_CMDS = frozenset({"grep", "rg", "egrep", "fgrep"})
 
 
 # ---------------------------------------------------------------------------
@@ -210,9 +200,6 @@ def _detect_empty(events: list[dict]) -> None:
 # Symbol-grep detection
 # ---------------------------------------------------------------------------
 
-# Grep-like binaries that count as a native grep when invoked via Bash
-_GREP_CMDS = frozenset({"grep", "rg", "egrep", "fgrep"})
-
 # Declaration keyword followed by a capital letter (mirrors tk-route.sh nudge)
 _DECL_PATTERN = _re.compile(
     r'\b(class|record|interface|enum|struct)\s+[A-Z]'
@@ -316,10 +303,6 @@ def _detect_reread(events: list[dict]) -> None:
 # Native-grep retry detection (B2)
 # ---------------------------------------------------------------------------
 
-# A sed line-range arg: "p" (whole file), "Np" (single line), or "N,Mp" (range).
-_SED_RANGE_PATTERN = _re.compile(r"^(\d+(,\d+)?)?p$")
-
-
 def _extract_grep_pattern(parts: list[str]) -> str:
     """First non-flag token in shlex-split grep args, with quotes stripped."""
     for tok in parts[1:]:
@@ -364,6 +347,10 @@ def _detect_native_grep_retry(events: list[dict]) -> None:
 # ---------------------------------------------------------------------------
 # Stealth-read detection (B3)
 # ---------------------------------------------------------------------------
+
+# A sed line-range arg: "p" (whole file), "Np" (single line), or "N,Mp" (range).
+_SED_RANGE_PATTERN = _re.compile(r"^(\d+(,\d+)?)?p$")
+
 
 def _is_garbage_path(tok: str) -> bool:
     """Skip flag-like or glob/var path tokens defensively."""
@@ -428,94 +415,9 @@ def _detect_stealth_read(events: list[dict]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# S4 — post-hook adoption stats
+# Structured tk-invocation accessor (general-purpose, used by aggregates.py
+# and tkstats.detect.adoption)
 # ---------------------------------------------------------------------------
-# Measures whether the agent obeys tk-route.sh hook interventions ("cap-read",
-# "nudge", and "nudge-edit-write" — additionalContext-only hints it complies
-# with voluntarily). "route-tk"/"route-rtk" are auto-applied rewrites, not
-# voluntary adoption, and are left unannotated here (report.py tallies them
-# separately).
-
-# Stealth-read nudge binaries (mirrors CS_STEALTH_READ_CMD_RE in tk-route.sh).
-_NUDGE_STEALTH_CMDS = frozenset({"cat", "sed", "head", "tail"})
-
-
-def _classify_nudge_subtype(command: str) -> str:
-    """Classify a 'nudge' intervention by its logged command's first token.
-
-    A "nudge" decision only ever comes from one of two hook triggers: a
-    symbol-grep (grep/egrep/fgrep/rg) or a .cs stealth read (cat/sed/head/
-    tail) — see hooks/tk-route.sh. "ambiguous" is a defensive fallback that
-    should not occur for a real nudge line.
-    """
-    try:
-        parts = shlex.split(command)
-    except ValueError:
-        parts = command.split()
-    first = parts[0] if parts else ""
-    if first in _GREP_CMDS:
-        return "symbol_grep"
-    if first in _NUDGE_STEALTH_CMDS:
-        return "stealth_read"
-    return "ambiguous"
-
-
-def _extract_stealth_read_file(command: str) -> str:
-    """Extract the target .cs path from a stealth-read nudge command
-    (cat/sed/head/tail ... file.cs), mirroring the extraction in
-    _detect_stealth_read. Returns "" if no plausible .cs path token is found.
-    """
-    try:
-        parts = shlex.split(command)
-    except ValueError:
-        parts = command.split()
-    for tok in parts[1:]:
-        if _is_garbage_path(tok):
-            continue
-        if tok.endswith(".cs"):
-            return tok
-    return ""
-
-
-def _adoption_signal_commands(subtype: str) -> frozenset[str]:
-    """tk commands that count as adoption for a given nudge/cap-read subtype."""
-    if subtype == "symbol_grep":
-        return ADOPTION_SYMBOL_COMMANDS
-    if subtype == "ambiguous":
-        return ADOPTION_NAV_COMMANDS | ADOPTION_SYMBOL_COMMANDS
-    return ADOPTION_NAV_COMMANDS  # cap_read, stealth_read
-
-
-def _is_adoption_signal(ev: dict, subtype: str, target_file: str) -> bool:
-    """True if ev is an adoption signal for the given intervention subtype."""
-    invocations = _event_tk_invocations(ev)
-    if subtype == "edit_write":
-        # Unlike the other subtypes, adoption requires `tk write` on the SAME
-        # file the nudge fired for — any `tk write` would over-count, since the
-        # nudge is per-file and the agent may be mid-edit on unrelated files.
-        if not target_file:
-            return False
-        for invocation in invocations:
-            if invocation.get("tk_command") not in ADOPTION_EDIT_WRITE_COMMANDS:
-                continue
-            operands = invocation.get("tk_operand_values") or []
-            if operands and operands[0] == target_file:
-                return True
-        return False
-    if any(
-        invocation.get("tk_command") in _adoption_signal_commands(subtype)
-        for invocation in invocations
-    ):
-        return True
-    # A sliced Read (non-empty offset/limit) of the same file that was
-    # capped/stealth-read also counts — not applicable to symbol-grep nudges
-    # (there is no "target file", just a symbol pattern).
-    if subtype != "symbol_grep" and target_file and ev.get("tool") == "Read":
-        path = ev.get("tool_input_summary") or ""
-        if path == target_file and (ev.get("read_offset") or ev.get("read_limit")):
-            return True
-    return False
-
 
 def _event_tk_invocations(ev: dict) -> list[dict]:
     """Return structured tk segments, falling back to the legacy event shape."""
@@ -523,218 +425,3 @@ def _event_tk_invocations(ev: dict) -> list[dict]:
     if isinstance(invocations, list) and invocations:
         return [item for item in invocations if isinstance(item, dict)]
     return [ev] if ev.get("is_tk") else []
-
-
-def _event_epoch(ev: dict) -> float | None:
-    """Convert an event's ISO ts to epoch seconds, comparable to the hook
-    log's ts_epoch (unix seconds)."""
-    dt = _parse_ts(ev.get("ts"))
-    return dt.timestamp() if dt is not None else None
-
-
-def _annotate_intervention(iv: dict, events: list[dict], event_epochs: list[float | None]) -> None:
-    """Set adopted (bool|None) and nudge_subtype (str|None) on one intervention.
-
-    events/event_epochs must be that intervention's session_id's own events,
-    ts-ordered (see _detect_adoption for how these are assembled).
-    """
-    iv["adopted"] = None
-    iv["nudge_subtype"] = None
-    decision = iv.get("decision")
-    if decision not in ("cap-read", "nudge", "nudge-edit-write"):
-        return
-
-    command = iv.get("command") or ""
-    if decision == "cap-read":
-        subtype = "cap_read"
-        target_file = command
-    elif decision == "nudge-edit-write":
-        # tk-route.sh logs the edited file path (not a shell command) as the
-        # command column for this decision — see _log_decision call site.
-        subtype = "edit_write"
-        target_file = command
-    else:
-        subtype = _classify_nudge_subtype(command)
-        target_file = _extract_stealth_read_file(command) if subtype != "symbol_grep" else ""
-    iv["nudge_subtype"] = subtype
-    iv["adopted"] = False
-
-    iv_ts = iv.get("ts_epoch")
-    if iv_ts is None:
-        return
-
-    start = None
-    for i, ep in enumerate(event_epochs):
-        if ep is not None and ep > iv_ts:
-            start = i
-            break
-    if start is None:
-        return
-
-    for j in range(start, min(start + ADOPTION_LOOKAHEAD, len(events))):
-        if _is_adoption_signal(events[j], subtype, target_file):
-            iv["adopted"] = True
-            break
-
-
-def _detect_adoption(model: dict) -> None:
-    """Annotate every hook-log intervention in model["interventions"] with
-    adopted (bool|None) and nudge_subtype (str|None). Mutates in place.
-
-    Interventions live in a single flat, model-level list (not attached per
-    session dict): a resumed Claude Code session can span multiple transcript
-    files that all share the same session_id (one session dict per file), so
-    grouping happens here, by session_id, against that session_id's events
-    MERGED across every file that shares it and re-sorted by ts — otherwise
-    an intervention logged in one file-fragment could never see an adoption
-    signal that lands in a later fragment, and (were interventions instead
-    attached per file) the same intervention would get scored once per
-    fragment. "route-tk"/"route-rtk" are auto-applied rewrites, not voluntary
-    adoption: adopted/nudge_subtype are left as None (see
-    _annotate_intervention).
-    """
-    interventions = model.get("interventions") or []
-    if not interventions:
-        return
-
-    events_by_sid: dict[str, list[dict]] = {}
-    for session in model.get("sessions", []):
-        sid = session.get("session_id", "")
-        events_by_sid.setdefault(sid, []).extend(session.get("events", []))
-
-    interventions_by_sid: dict[str, list[dict]] = {}
-    for iv in interventions:
-        interventions_by_sid.setdefault(iv.get("session_id", ""), []).append(iv)
-
-    for sid, ivs in interventions_by_sid.items():
-        events = events_by_sid.get(sid, [])
-        events = sorted(events, key=lambda ev: _event_epoch(ev) or 0.0)
-        event_epochs = [_event_epoch(ev) for ev in events]
-        for iv in ivs:
-            _annotate_intervention(iv, events, event_epochs)
-
-
-def _summarize_adoption(model: dict) -> dict:
-    """Aggregate already-annotated hook interventions without session duplication."""
-    stats: dict[str, dict[str, int]] = {}
-    auto_routed_n = 0
-    for iv in model.get("interventions") or []:
-        decision = iv.get("decision")
-        if decision in ("route-tk", "route-rtk"):
-            auto_routed_n += 1
-            continue
-        if decision not in ("cap-read", "nudge", "nudge-edit-write"):
-            continue
-        subtype = iv.get("nudge_subtype") or decision
-        row = stats.setdefault(subtype, {"n_interventions": 0, "n_adopted": 0})
-        row["n_interventions"] += 1
-        if iv.get("adopted"):
-            row["n_adopted"] += 1
-    return {
-        "by_subtype": {
-            subtype: {
-                **row,
-                "rate": round(row["n_adopted"] / row["n_interventions"], 4)
-                if row["n_interventions"] else 0.0,
-            }
-            for subtype, row in sorted(stats.items())
-        },
-        "auto_routed": {"n": auto_routed_n},
-    }
-
-
-# ---------------------------------------------------------------------------
-# Session rollups
-# ---------------------------------------------------------------------------
-
-def _rollup_session(session: dict) -> None:
-    """Add per-session summary counts."""
-    events = session.get("events", [])
-    n_fallback = 0
-    n_result_used = 0
-    n_result_used_edit = 0
-    n_retry = 0
-    n_escalated = 0
-    n_empty = 0
-    n_symbol_grep = 0
-    n_reread = 0
-    reread_chars_total = 0
-    read_repeat_counts = {
-        "exact_slice_repeat": 0,
-        "whole_file_repeat": 0,
-        "different_slice": 0,
-    }
-    read_repeat_chars = {key: 0 for key in read_repeat_counts}
-    n_native_grep_retry = 0
-    n_stealth_read = 0
-    stealth_read_chars_total = 0
-    outcomes: dict[str, int] = {"WIN": 0, "NEUTRAL": 0, "NET_NEGATIVE": 0, "UNKNOWN": 0}
-
-    for ev in events:
-        if ev.get("symbol_grep"):
-            n_symbol_grep += 1
-        if ev.get("reread"):
-            n_reread += 1
-            reread_chars_total += ev.get("reread_chars") or 0
-        repeat_kind = ev.get("read_repeat_kind")
-        if repeat_kind in read_repeat_counts:
-            read_repeat_counts[repeat_kind] += 1
-            read_repeat_chars[repeat_kind] += ev.get("shown_chars") or 0
-        if ev.get("native_grep_retry"):
-            n_native_grep_retry += 1
-        if ev.get("stealth_read"):
-            n_stealth_read += 1
-            stealth_read_chars_total += ev.get("stealth_read_chars") or 0
-        if not ev.get("is_tk"):
-            continue
-        if ev.get("fallback"):
-            n_fallback += 1
-        if ev.get("result_used"):
-            n_result_used += 1
-        if ev.get("result_used_edit"):
-            n_result_used_edit += 1
-        if ev.get("retry"):
-            n_retry += 1
-        if ev.get("escalated"):
-            n_escalated += 1
-        if ev.get("empty_result"):
-            n_empty += 1
-        oc = ev.get("outcome", "UNKNOWN")
-        outcomes[oc] = outcomes.get(oc, 0) + 1
-
-    session["n_fallback"] = n_fallback
-    session["n_result_used"] = n_result_used
-    session["n_result_used_edit"] = n_result_used_edit
-    session["n_retry"] = n_retry
-    session["n_escalated"] = n_escalated
-    session["n_empty"] = n_empty
-    session["n_symbol_grep"] = n_symbol_grep
-    session["n_reread"] = n_reread
-    session["reread_chars_total"] = reread_chars_total
-    session["read_repeat_counts"] = read_repeat_counts
-    session["read_repeat_chars"] = read_repeat_chars
-    session["n_native_grep_retry"] = n_native_grep_retry
-    session["n_stealth_read"] = n_stealth_read
-    session["stealth_read_chars_total"] = stealth_read_chars_total
-    session["outcomes"] = outcomes
-
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
-
-def annotate(model: dict) -> dict:
-    """Run all detectors on every session in the model, add rollups. Mutates in place."""
-    _detect_adoption(model)  # model-level: groups interventions by session_id itself
-    for session in model.get("sessions", []):
-        events = session.get("events", [])
-        _detect_stealth_read(events)
-        _detect_fallback(events)
-        _detect_retry(events)
-        _detect_escalated(events)
-        _detect_empty(events)
-        _detect_symbol_grep(events)
-        _detect_reread(events)
-        _detect_native_grep_retry(events)
-        _rollup_session(session)
-    return model

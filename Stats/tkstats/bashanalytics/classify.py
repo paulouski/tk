@@ -13,7 +13,7 @@ import shlex
 from collections import Counter
 from typing import Iterable
 
-from bash_opp_common import (
+from tkstats.bashanalytics.common import (
     AUTO_TK,
     COMPOUND,
     EVENT_CATEGORY_PRIORITY,
@@ -30,7 +30,7 @@ from bash_opp_common import (
     SCOPE_SUBAGENTS,
     UNKNOWN,
 )
-from bash_opp_shell import (
+from tkstats.shellsplit import (
     _is_compound_event,
     _norm_command,
     _shell_control_marks,

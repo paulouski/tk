@@ -8,16 +8,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-import ingest  # noqa: E402
-import ingest_opencode  # noqa: E402
-import bash_opp_reports  # noqa: E402
+from tkstats.ingestion import claude  # noqa: E402
+from tkstats.ingestion import common  # noqa: E402
+from tkstats.ingestion import opencode as ingest_opencode  # noqa: E402
+from tkstats.bashanalytics import opportunities as bash_opp_reports  # noqa: E402
 
 
 class TkInvocationParsing(unittest.TestCase):
     def test_newline_records_each_tk_invocation(self) -> None:
-        info = ingest._extract_tk_info("tk def Foo\ntk refs Foo")
+        info = common._extract_tk_info("tk def Foo\ntk refs Foo")
 
         self.assertIsNotNone(info)
         self.assertEqual(info["tk_command"], "def")
@@ -28,7 +29,7 @@ class TkInvocationParsing(unittest.TestCase):
         )
 
     def test_semicolon_and_redirection_do_not_pollute_operands(self) -> None:
-        info = ingest._extract_tk_info(
+        info = common._extract_tk_info(
             "echo before; tk diag Foo.cs 2>&1 >/tmp/diag.log; echo after"
         )
 
@@ -36,12 +37,12 @@ class TkInvocationParsing(unittest.TestCase):
         self.assertEqual(info["tk_operand_values"], ["Foo.cs"])
 
     def test_quoted_redirect_anchor_remains_an_operand(self) -> None:
-        info = ingest._extract_tk_info('tk focus ">foo" 2>&1 >/tmp/focus.log')
+        info = common._extract_tk_info('tk focus ">foo" 2>&1 >/tmp/focus.log')
 
         self.assertEqual(info["tk_operand_values"], [">foo"])
 
     def test_sequential_relative_cd_accumulates(self) -> None:
-        info = ingest._extract_tk_info(
+        info = common._extract_tk_info(
             "cd services && cd customer && tk diag Foo.cs",
             session_cwd="/repo",
         )
@@ -49,7 +50,7 @@ class TkInvocationParsing(unittest.TestCase):
         self.assertEqual(info["effective_cwd"], "/repo/services/customer")
 
     def test_pipeline_and_later_tk_are_both_recorded(self) -> None:
-        info = ingest._extract_tk_info("tk def Foo | head -20; tk refs Foo")
+        info = common._extract_tk_info("tk def Foo | head -20; tk refs Foo")
 
         self.assertEqual(info["tk_invocation_count"], 2)
         self.assertEqual(
@@ -58,7 +59,7 @@ class TkInvocationParsing(unittest.TestCase):
         )
 
     def test_heredoc_body_is_not_counted_as_more_commands(self) -> None:
-        info = ingest._extract_tk_info(
+        info = common._extract_tk_info(
             "tk write Foo.cs 1-2 <<'PATCH'\n"
             "tk refs ThisIsContent\n"
             "PATCH"
@@ -69,13 +70,13 @@ class TkInvocationParsing(unittest.TestCase):
         self.assertEqual(info["tk_operand_values"], ["Foo.cs", "1-2"])
 
     def test_quoted_heredoc_text_does_not_hide_later_command(self) -> None:
-        info = ingest._extract_tk_info('echo "<<EOF"\ntk def Foo')
+        info = common._extract_tk_info('echo "<<EOF"\ntk def Foo')
 
         self.assertEqual(info["tk_invocation_count"], 1)
         self.assertEqual(info["tk_operand_values"], ["Foo"])
 
     def test_command_after_real_heredoc_is_still_discovered(self) -> None:
-        info = ingest._extract_tk_info("cat <<EOF\nbody\nEOF\ntk def Foo")
+        info = common._extract_tk_info("cat <<EOF\nbody\nEOF\ntk def Foo")
 
         self.assertEqual(info["tk_invocation_count"], 1)
         self.assertEqual(info["tk_operand_values"], ["Foo"])
@@ -97,7 +98,7 @@ class TkInvocationParsing(unittest.TestCase):
             }],
         }]}
 
-        report = bash_opp_reports.build_report(
+        report = bash_opp_reports.build_opportunities_report(
             model,
             version="0.10.0",
             include_tk=True,
@@ -113,7 +114,7 @@ class TkInvocationParsing(unittest.TestCase):
         )
 
     def test_combined_stdout_stderr_redirects_do_not_become_operands(self) -> None:
-        info = ingest._extract_tk_info("tk def Foo &>/tmp/one &>> /tmp/two")
+        info = common._extract_tk_info("tk def Foo &>/tmp/one &>> /tmp/two")
 
         self.assertEqual(info["tk_operand_values"], ["Foo"])
 
@@ -151,7 +152,7 @@ class TkInvocationParsing(unittest.TestCase):
             ]
             transcript.write_text("\n".join(json.dumps(line) for line in lines))
 
-            session = ingest._parse_session(transcript, projects_dir)
+            session = claude._parse_session(transcript, projects_dir)
 
         self.assertEqual(len(session["events"]), 1)
         self.assertEqual(session["events"][0]["shown_chars"], len("combined output"))
@@ -168,7 +169,7 @@ class TkInvocationParsing(unittest.TestCase):
         }]
 
         self.assertEqual(
-            dict(ingest._top_commands(events)),
+            dict(claude._top_commands(events)),
             {"def": 1, "git status": 1},
         )
         self.assertEqual(
@@ -198,9 +199,9 @@ class TkInvocationParsing(unittest.TestCase):
             }
             start = datetime(2026, 7, 10, tzinfo=timezone.utc)
             end = datetime(2026, 7, 10, 23, 59, 59, tzinfo=timezone.utc)
-            with patch("ingest._projects_dir", return_value=projects_dir), \
-                 patch("ingest._parse_session", return_value=parsed):
-                sessions = ingest.load_sessions(start, end)
+            with patch("tkstats.ingestion.claude._projects_dir", return_value=projects_dir), \
+                 patch("tkstats.ingestion.claude._parse_session", return_value=parsed):
+                sessions = claude.load_sessions(start, end)
 
         self.assertEqual(sessions[0]["n_events"], 1)
         self.assertEqual(sessions[0]["n_tk_events"], 1)

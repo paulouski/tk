@@ -1,5 +1,5 @@
 """
-Stats/config.py
+tkstats/config.py
 
 Single source of truth for tunable thresholds and classifier constants
 used across the Stats pipeline. Centralizing these here makes it easy to
@@ -7,21 +7,21 @@ adjust detection sensitivity without grepping the whole tree.
 
 Importable API
 --------------
-  MATCH_WINDOW                     join.py
-  _SEARCH_NAV_COMMANDS             detect.py  (B1 / fallback)
-  _FALLBACK_TOOLS                  detect.py  (B1 / fallback)
-  _RESULT_USED_TOOLS               detect.py  (B1 / result-used)
-  EDIT_RESULT_USED_TOOLS           detect.py  (C3 / result-used-edit)
-  NATIVE_GREP_RETRY_LOOKBACK       detect.py  (B2 / native grep retry)
-  STEALTH_READ_EXTENSIONS          detect.py  (B3 / stealth reads)
-  FOLLOW_UP_WINDOW                 bash_opp_classify.py  (reserved)
-  LSP_NAV_COMMANDS                 bash_opp_classify.py  (reserved)
-  CHARS_BUCKETS                    bash_opp_reports.py   (read-cost)
-  LINE_BUCKETS                     bash_opp_reports.py   (read-cost)
-  ADOPTION_LOOKAHEAD               detect.py  (S4 / hook adoption)
-  ADOPTION_NAV_COMMANDS            detect.py  (S4 / hook adoption)
-  ADOPTION_SYMBOL_COMMANDS         detect.py  (S4 / hook adoption)
-  ADOPTION_EDIT_WRITE_COMMANDS     detect.py  (S4 / hook adoption)
+  MATCH_WINDOW                     tkstats/matching/ownlog.py
+  _SEARCH_NAV_COMMANDS             tkstats/detect/events.py  (B1 / fallback)
+  _FALLBACK_TOOLS                  tkstats/detect/events.py  (B1 / fallback)
+  _RESULT_USED_TOOLS               tkstats/detect/events.py  (B1 / result-used)
+  EDIT_RESULT_USED_TOOLS           tkstats/detect/events.py  (C3 / result-used-edit)
+  NATIVE_GREP_RETRY_LOOKBACK       tkstats/detect/events.py  (B2 / native grep retry)
+  STEALTH_READ_EXTENSIONS          tkstats/detect/events.py  (B3 / stealth reads)
+  FOLLOW_UP_WINDOW                 tkstats/bashanalytics/classify.py  (reserved)
+  LSP_NAV_COMMANDS                 tkstats/bashanalytics/classify.py  (reserved)
+  CHARS_BUCKETS                    tkstats/bashanalytics/readcost.py
+  LINE_BUCKETS                     tkstats/bashanalytics/readcost.py
+  ADOPTION_LOOKAHEAD               tkstats/detect/adoption.py  (S4 / hook adoption)
+  ADOPTION_NAV_COMMANDS            tkstats/detect/adoption.py  (S4 / hook adoption)
+  ADOPTION_SYMBOL_COMMANDS         tkstats/detect/adoption.py  (S4 / hook adoption)
+  ADOPTION_EDIT_WRITE_COMMANDS     tkstats/detect/adoption.py  (S4 / hook adoption)
 """
 
 from __future__ import annotations

@@ -27,11 +27,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-import detect  # noqa: E402
-import ingest_hooklog  # noqa: E402
-import report  # noqa: E402
+from tkstats.detect import adoption as detect  # noqa: E402
+from tkstats.ingestion import hooklog as ingest_hooklog  # noqa: E402
+from tkstats.reports.build import build_report  # noqa: E402
 
 
 def _iso(epoch: float) -> str:
@@ -318,7 +318,7 @@ class ResumedSessionFileFragmentation(unittest.TestCase):
             "groups": [],
             "interventions": model["interventions"],
         }
-        rpt = report._build_report(rpt_model)
+        rpt = build_report(rpt_model)
         # One intervention -> exactly one n_interventions, not one per fragment.
         self.assertEqual(rpt["adoption"]["by_subtype"]["cap_read"]["n_interventions"], 1)
 
@@ -342,7 +342,7 @@ class RouteTkAutoRouted(unittest.TestCase):
             "groups": [],
             "interventions": interventions,
         }
-        rpt = report._build_report(model)
+        rpt = build_report(model)
         adoption = rpt["adoption"]
         self.assertEqual(adoption["auto_routed"]["n"], 2)
         self.assertNotIn("route-tk", adoption["by_subtype"])

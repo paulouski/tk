@@ -8,3 +8,5 @@ publish/
 .idea/
 .claude/
 Stats/result/
+__pycache__/
+*.py[cod]

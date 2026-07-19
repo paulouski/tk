@@ -1,7 +1,8 @@
 """
-P3 — test_aggregates.py
+P3 — test_pipeline.py
 
-Projection-key cardinality tests for Stats/join.py:
+Projection-key cardinality tests for the matching pipeline
+(tkstats/matching/{groups,pipeline,versions}.py):
   - _build_groups links main + subagent sessions by group_id; sums
     main_usd + subs_usd == total_usd; surfaces n_subs and main_session_id.
   - main-only group yields delegation_delta_usd = None (no subs branch).
@@ -20,9 +21,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-import join  # noqa: E402
+from tkstats.matching import groups  # noqa: E402
+from tkstats.matching import pipeline  # noqa: E402
+from tkstats.matching import versions  # noqa: E402
 
 
 def _cost(usd: float = 1.0) -> dict:
@@ -43,9 +46,9 @@ class BuildGroups(unittest.TestCase):
             "session_id": "s2", "is_subagent": True, "group_id": "m1",
             "parent_session_id": "m1", "cost": _cost(1.0),
         }
-        groups = join._build_groups([main, sub1, sub2])
-        self.assertEqual(len(groups), 1)
-        g = groups[0]
+        result = groups._build_groups([main, sub1, sub2])
+        self.assertEqual(len(result), 1)
+        g = result[0]
         self.assertEqual(g["n_subs"], 2)
         self.assertEqual(g["main_session_id"], "m1")
         self.assertAlmostEqual(g["main_usd"] + g["subs_usd"], g["total_usd"], places=6)
@@ -63,9 +66,9 @@ class BuildGroups(unittest.TestCase):
             "session_id": "xyz", "is_subagent": True, "group_id": "abc",
             "parent_session_id": "abc", "cost": _cost(0.0),
         }
-        groups = join._build_groups([main, sub])
-        self.assertEqual(len(groups), 1)
-        g = groups[0]
+        result = groups._build_groups([main, sub])
+        self.assertEqual(len(result), 1)
+        g = result[0]
         self.assertEqual(g["n_subs"], 1)
         self.assertEqual(g["main_session_id"], "abc")
         self.assertEqual(g["group_id"], "abc")
@@ -75,11 +78,11 @@ class BuildGroups(unittest.TestCase):
             "session_id": "m1", "is_subagent": False, "group_id": "m1",
             "parent_session_id": None, "cost": _cost(1.0),
         }
-        groups = join._build_groups([main])
-        self.assertEqual(len(groups), 1)
-        self.assertEqual(groups[0]["n_subs"], 0)
-        self.assertIsNone(groups[0]["delegation_delta_usd"])
-        self.assertIsNone(groups[0]["inline_estimate_usd"])
+        result = groups._build_groups([main])
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["n_subs"], 0)
+        self.assertIsNone(result[0]["delegation_delta_usd"])
+        self.assertIsNone(result[0]["inline_estimate_usd"])
 
     def test_operand_overlap_uses_secondary_tk_invocations(self) -> None:
         main = {
@@ -99,10 +102,46 @@ class BuildGroups(unittest.TestCase):
             "events": [{"tk_operand_values": ["Shared"]}],
         }
 
-        group = join._build_groups([main, sub])[0]
+        group = groups._build_groups([main, sub])[0]
 
         self.assertEqual(group["parent_sub_operand_overlap"], 1)
         self.assertEqual(group["parent_sub_operand_examples"], ["Shared"])
+
+    def _overlap_sm(self, sid: str, *, sub: bool, parent: str | None,
+                     ops: list[str], group: str | None = None) -> dict:
+        return {
+            "session_id": sid,
+            "is_subagent": sub,
+            "group_id": group if group is not None else "g1",
+            "parent_session_id": parent,
+            "cost": {"model": "", "usd": 0.0, "tokens": {}, "usd_by_type": {}},
+            "events": [
+                {"tool": "Bash", "is_tk": True, "tk_command": "def",
+                 "tk_operand_values": ops, "tool_input_summary": "tk def x"},
+            ],
+        }
+
+    def test_overlap_counts_common_operands(self) -> None:
+        main = self._overlap_sm("m1", sub=False, parent=None, ops=["Foo", "Bar", "Baz"])
+        sub = self._overlap_sm("s1", sub=True, parent="m1", ops=["Foo", "Bar", "Qux"])
+        result = groups._build_groups([main, sub])
+        self.assertEqual(len(result), 1)
+        g = result[0]
+        self.assertEqual(g["parent_sub_operand_overlap"], 2)
+        self.assertIn("Foo", g["parent_sub_operand_examples"])
+        self.assertIn("Bar", g["parent_sub_operand_examples"])
+
+    def test_no_subs_no_overlap(self) -> None:
+        main = self._overlap_sm("m1", sub=False, parent=None, ops=["Foo"])
+        result = groups._build_groups([main])
+        self.assertEqual(result[0]["parent_sub_operand_overlap"], 0)
+        self.assertEqual(result[0]["parent_sub_operand_examples"], [])
+
+    def test_disjoint_operands_zero_overlap(self) -> None:
+        main = self._overlap_sm("m1", sub=False, parent=None, ops=["Foo"])
+        sub = self._overlap_sm("s1", sub=True, parent="m1", ops=["Bar"])
+        result = groups._build_groups([main, sub])
+        self.assertEqual(result[0]["parent_sub_operand_overlap"], 0)
 
 
 class ByVersionProjection(unittest.TestCase):
@@ -125,11 +164,11 @@ class ByVersionProjection(unittest.TestCase):
             {"rawChars": None, "shownChars": 10, "tkVersion": "0.10.0"},
             {"rawChars": 100, "shownChars": 20, "tkVersion": "0.10.0"},
         ]
-        with patch("join.load_sessions", return_value=[session]), \
-             patch("join.load_own_log", return_value=[]), \
-             patch("join.load_interventions", return_value=[]), \
-             patch("join._find_match", side_effect=matches):
-            model = join.run_join()
+        with patch("tkstats.matching.pipeline.load_sessions", return_value=[session]), \
+             patch("tkstats.matching.pipeline.load_own_log", return_value=[]), \
+             patch("tkstats.matching.pipeline.load_interventions", return_value=[]), \
+             patch("tkstats.matching.pipeline._find_match", side_effect=matches):
+            model = pipeline.run_join()
 
         stats = model["match_stats"]
         self.assertEqual(stats["total_tk_events"], 1)
@@ -170,10 +209,10 @@ class ByVersionProjection(unittest.TestCase):
                 },
             ],
         }
-        with patch("join.load_sessions", return_value=[session]), \
-             patch("join.load_own_log", return_value=[]), \
-             patch("join._infer_version", return_value="0.8.0"):
-            model = join.run_join()
+        with patch("tkstats.matching.pipeline.load_sessions", return_value=[session]), \
+             patch("tkstats.matching.pipeline.load_own_log", return_value=[]), \
+             patch("tkstats.matching.pipeline._infer_version", return_value="0.8.0"):
+            model = pipeline.run_join()
         # run_join does not populate by_version; seed it with our version so
         # apply_version_filter accepts the target. apply_version_filter then
         # recomputes by_version from the (filtered) tk events.
@@ -181,7 +220,7 @@ class ByVersionProjection(unittest.TestCase):
             "version": "0.8.0", "n": 0, "WIN": 0, "NEUTRAL": 0,
             "NET_NEGATIVE": 0, "UNKNOWN": 0, "saved_chars": 0,
         })
-        filtered = join.apply_version_filter(model, "0.8.0")
+        filtered = versions.apply_version_filter(model, "0.8.0")
         self.assertEqual(len(filtered["by_version"]), 1)
         self.assertEqual(filtered["by_version"][0]["version"], "0.8.0")
         self.assertEqual(filtered["by_version"][0]["n"], 2)
@@ -201,7 +240,7 @@ class ByVersionProjection(unittest.TestCase):
             "aggregates": {}, "match_stats": {"total_tk_events": 0},
             "generated_for_range": {},
         }
-        filtered = join.apply_version_filter(model, "latest")
+        filtered = versions.apply_version_filter(model, "latest")
         self.assertEqual(filtered["version_filter"], "0.8.0")
 
     def test_unknown_version_raises(self) -> None:
@@ -212,7 +251,7 @@ class ByVersionProjection(unittest.TestCase):
             "generated_for_range": {},
         }
         with self.assertRaises(ValueError):
-            join.apply_version_filter(model, "0.0.0")
+            versions.apply_version_filter(model, "0.0.0")
 
     def test_filter_removes_cross_version_interventions_and_recomputes_adoption(self) -> None:
         def iso(epoch: float) -> str:
@@ -279,8 +318,11 @@ class ByVersionProjection(unittest.TestCase):
             iso(1002): "0.9.0",
             iso(2002): "0.10.0",
         }
-        with patch("join._infer_version", side_effect=lambda ts: inferred_versions.get(ts)):
-            filtered = join.apply_version_filter(model, "0.10.0")
+        with patch(
+            "tkstats.matching.versions._infer_version",
+            side_effect=lambda ts: inferred_versions.get(ts),
+        ):
+            filtered = versions.apply_version_filter(model, "0.10.0")
 
         self.assertEqual(filtered["sessions"][0]["tk_version"], "0.10.0")
         self.assertEqual(filtered["sessions"][0]["ts_start"], iso(2001))
@@ -338,10 +380,10 @@ class ByVersionProjection(unittest.TestCase):
         }
 
         with patch(
-            "join._infer_version",
+            "tkstats.matching.versions._infer_version",
             side_effect=lambda ts: "0.10.0" if ts == native_ts else None,
         ):
-            filtered = join.apply_version_filter(model, "0.10.0")
+            filtered = versions.apply_version_filter(model, "0.10.0")
 
         self.assertEqual(len(filtered["sessions"]), 1)
         self.assertEqual(filtered["sessions"][0]["events"][0]["tool"], "Read")
@@ -350,7 +392,7 @@ class ByVersionProjection(unittest.TestCase):
 
     def test_all_returns_original_model(self) -> None:
         model = {"by_version": [], "sessions": []}
-        self.assertIs(join.apply_version_filter(model, "all"), model)
+        self.assertIs(versions.apply_version_filter(model, "all"), model)
 
 
 if __name__ == "__main__":
