@@ -59,6 +59,12 @@ case "$cmd" in
     printf 'env FOO=bar rtk find . -type f -o -type d'; exit 0 ;;
   "sudo find . -type f -o -type d")
     printf 'sudo rtk find . -type f -o -type d'; exit 0 ;;
+  "command grep -n foo file.txt")
+    printf 'command rtk grep -n foo file.txt'; exit 0 ;;
+  "env grep -n foo file.txt")
+    printf 'env rtk grep -n foo file.txt'; exit 0 ;;
+  "sudo grep -n foo file.txt")
+    printf 'sudo rtk grep -n foo file.txt'; exit 0 ;;
 esac
 case "$cmd" in
   "docker ps"|"docker ps -a"|"git commit"|"git commit -m test"| \
@@ -68,7 +74,8 @@ case "$cmd" in
   "find . -type f -exec wc -l {} \\;"|"find . -type f -delete"| \
   "find . -type f -ls"|"find . -type f -print0"| \
   "find . \( -type f -a -name '*.cs' \)"| \
-  'grep -rn "class Foo\|class Bar" src'|'grep -r class\|record src')
+  'grep -rn "class Foo\|class Bar" src'|'grep -r class\|record src'| \
+  'grep -n "^+.*" file.txt'|'rg foo bar')
     printf 'rtk %s' "$cmd"
     exit 0
     ;;
@@ -358,11 +365,13 @@ expect_passthrough "trailing background & -> pass (unsafe)" "git status &"
 # to the shell (inside quotes, or backslash-escaped) no longer false-flag a command as
 # unsafe. These cases prove the fix end-to-end rather than just pinning the old gap. ───────
 
-# (a) quoted "|" inside a grep pattern is literal to the shell -> safe single command ->
-# reaches the rtk fallback (fake rtk recognizes this exact grep command).
-expect_rewrite 'quoted pipe in grep pattern -> safe, routed to rtk' \
-  'grep -rn "class Foo\|class Bar" src' \
-  'rtk grep -rn "class Foo\|class Bar" src' "route-rtk"
+# (a) quoted "|" inside a grep pattern is literal to the shell -> safe single command, but
+# grep-family commands are excluded from the rtk fallback (GREP_FAMILY_RE) regardless of
+# allow_rtk -> command stays byte-for-byte unchanged, even though the fake rtk stub DOES
+# recognize this exact command (proves the exclusion actually fires, not just an accidental
+# miss). Symbol-shaped ("class Foo"/"class Bar") -> still gets the symbol-grep nudge.
+expect_nudge 'quoted pipe in grep pattern -> passthrough (grep excluded from rtk), still nudged' \
+  'grep -rn "class Foo\|class Bar" src'
 
 # (b) quoted "&&" inside a git log --grep value is literal -> safe single command -> still
 # matches the git-log -> tk route.
@@ -378,11 +387,38 @@ expect_passthrough 'unbalanced quote -> pass (unsafe)' 'echo "a && b'
 expect_rewrite 'unquoted pipe -> route supported left segment only' \
   'git status | head -5' 'tk git status | head -5' "route-tk"
 
-# (e) backslash-escaped pipe outside quotes: the shell sees a literal "|", so this is a
-# safe single command -> reaches the rtk fallback, same as (a).
-expect_rewrite 'backslash-escaped pipe -> safe, routed to rtk' \
-  'grep -r class\|record src' \
-  'rtk grep -r class\|record src' "route-rtk"
+# (e) backslash-escaped pipe outside quotes: the shell sees a literal "|", so this is a safe
+# single command, but grep-family stays excluded from the rtk fallback -> passthrough
+# unchanged, even though the fake rtk stub recognizes this exact command too. Not
+# symbol-shaped (no uppercase-led identifier) -> no nudge either, pure silent passthrough.
+expect_passthrough 'backslash-escaped pipe -> passthrough (grep excluded from rtk)' \
+  'grep -r class\|record src'
+
+# ── grep-family commands never lose their executable/regex dialect to the rtk fallback ─────
+# (GREP_FAMILY_RE, hooks/tk-route.sh). Not symbol-shaped -> no nudge either, pure silent
+# passthrough; the fake rtk stub is unrecognizing-by-default here (would exit 1 anyway for
+# the two new patterns), but the "^+.*" case is ALSO hardcoded into the stub's recognized
+# list above, so this proves the exclusion actually fires rather than merely rtk declining.
+expect_passthrough "grep with regex anchor pattern -> passthrough (grep excluded from rtk)" \
+  'grep -n "^+.*" file.txt'
+expect_passthrough "grep with escaped-plus pattern -> passthrough (grep excluded from rtk)" \
+  'grep -n "^\+.*" file.txt'
+expect_passthrough "rg (ripgrep) -> passthrough (grep-family excluded from rtk)" \
+  'rg foo bar'
+expect_passthrough "command-wrapped grep -> passthrough (grep-family rewrite rejected)" \
+  'command grep -n foo file.txt'
+expect_passthrough "env-wrapped grep -> passthrough (grep-family rewrite rejected)" \
+  'env grep -n foo file.txt'
+expect_passthrough "sudo-wrapped grep -> passthrough (grep-family rewrite rejected)" \
+  'sudo grep -n foo file.txt'
+
+# ugrep counts as grep-family too, for both the rtk-fallback exclusion and the symbol-grep
+# nudge (the nudge regex previously omitted ugrep -- fixed alongside the exclusion above).
+expect_passthrough "ugrep -> passthrough (grep-family excluded from rtk)" \
+  'ugrep -n foo bar.txt'
+rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
+expect_nudge 'symbol-shaped ugrep -> nudge (ugrep now included in grep-family)' \
+  'ugrep -rn "class Foo\|class Bar" src'
 
 # ── redirects: NOT unsafe; a single redirected command still gets the tk prefix ────────────
 expect_rewrite "redirect -> still routed to tk" "git status > /tmp/tk-route-test-out.txt" \

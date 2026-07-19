@@ -38,6 +38,7 @@ public sealed class LspDaemon
     private readonly ILanguageBackend _backend;
     private readonly string _logPath;
     private readonly DocumentSync _docSync;
+    private readonly WatchedFileTracker _watchedFiles;
 
     // State machine
     private volatile DaemonState _state = DaemonState.Loading;
@@ -78,6 +79,8 @@ public sealed class LspDaemon
         _backend = backend;
         _logPath = DaemonSocket.GetLogPath(workspaceRoot);
         _docSync = new DocumentSync(Log);
+        _watchedFiles = new WatchedFileTracker(
+            workspaceRoot, [.. backend.FileExtensions, .. backend.WorkspaceMarkers], Log);
     }
 
     // For testing: allow injecting a ready/failed state externally
@@ -186,6 +189,7 @@ public sealed class LspDaemon
         if (loop is not null)
             await loop.DisposeAsync().ConfigureAwait(false);
         handshakeCts?.Dispose();
+        _watchedFiles.Dispose();
     }
 
     private void TransitionToReady()
@@ -215,6 +219,11 @@ public sealed class LspDaemon
     private async Task WaitForReadyAndRefreshAsync(MessageLoop loop, CancellationToken ct)
     {
         await WaitForReadyAsync(ct).ConfigureAwait(false);
+        // Tell the server about files it was never asked to open (a new dependency, a
+        // rename, an external edit to a file tk has no open document for) before resyncing
+        // documents tk itself already has open — the project-membership-level fact first,
+        // then the specific-document-content-level fact.
+        await _watchedFiles.FlushAsync(loop, ct).ConfigureAwait(false);
         await _docSync.RefreshOpenDocumentsAsync(loop, ct).ConfigureAwait(false);
     }
 

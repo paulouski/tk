@@ -72,6 +72,12 @@ internal static class LspHandshake
                         workspaceFolders = true,
                         configuration = true,
                         didChangeConfiguration = new { dynamicRegistration = true },
+                        // Declares support for workspace/didChangeWatchedFiles — Roslyn does
+                        // not watch the filesystem itself; it relies on this client capability
+                        // (and the notification WatchedFileTracker sends) to learn about .cs/
+                        // .csproj/.sln files created, changed, or deleted outside of an
+                        // explicit textDocument/didOpen.
+                        didChangeWatchedFiles = new { dynamicRegistration = true },
                         symbol = new { dynamicRegistration = false }
                     },
                     textDocument = new

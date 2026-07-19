@@ -3,8 +3,10 @@ using Tk.Lsp;
 namespace Tk.Commands;
 
 /// <summary>
-/// Moves a source file preserving git history (via <c>git mv</c> when the file is tracked,
-/// filesystem move otherwise). Lets agents relocate or rename a file without the
+/// Moves a source file via a plain filesystem move — never <c>git mv</c> or any other
+/// index-writing git command, so this is safe to run in sandboxes that forbid touching the
+/// git index. Git detects the rename itself via content similarity on the next
+/// <c>git status</c>/<c>git diff</c>. Lets agents relocate or rename a file without the
 /// delete-and-recreate pattern that loses git history and re-emits the whole file.
 ///
 /// For a .cs file moved across directories, this also fixes the namespace by default (mirroring
@@ -36,7 +38,8 @@ public sealed class MvCommand : ICommand
         if (positional.Length < 2)
         {
             ctx.Out.WriteLine("usage: tk mv <old> <new> [--no-fix-ns] [--ns <namespace>]");
-            ctx.Out.WriteLine("       Moves a file preserving git history (git mv when tracked).");
+            ctx.Out.WriteLine("       Moves a file via a plain filesystem move (never touches the git index);");
+            ctx.Out.WriteLine("       git detects the rename itself on the next status/diff.");
             ctx.Out.WriteLine("       If <new> is an existing directory, moves into it.");
             ctx.Out.WriteLine("       Directory moves not supported yet.");
             ctx.Out.WriteLine("       For a .cs file moved across directories, the namespace is fixed to match");
@@ -76,14 +79,14 @@ public sealed class MvCommand : ICommand
             return 1;
         }
 
-        var (gitUsed, moveError) = await MoveFileAsync(ctx, oldPath, newPath).ConfigureAwait(false);
+        var moveError = MoveFile(oldPath, newPath);
         if (moveError is not null)
         {
             ctx.Err.WriteLine($"tk mv: {moveError}");
             return 1;
         }
 
-        ctx.Out.WriteLine(FormatOutput(oldArg, newArg, gitUsed));
+        ctx.Out.WriteLine(FormatOutput(oldArg, newArg));
 
         var isCsFile = newPath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase);
         var movedAcrossDirectories = CrossDirectoryNote(oldPath, newPath) is not null;
@@ -155,86 +158,44 @@ public sealed class MvCommand : ICommand
     }
 
     /// <summary>
-    /// Moves the file, preferring <c>git mv</c> when the file is git-tracked.
-    /// Returns (gitUsed, errorMessage). errorMessage is null on success.
+    /// Moves the file with a plain filesystem move — tracked and untracked files alike, never
+    /// touching the git index. Returns the error message, or null on success.
+    ///
+    /// Case-only renames (e.g. Foo.cs -&gt; foo.cs) on a case-insensitive-but-case-preserving
+    /// filesystem (the macOS/Windows default) work fine here: <see cref="File.Move"/> goes
+    /// straight to the OS rename primitive (rename(2) / MoveFileEx), which renames the directory
+    /// entry in place rather than treating same-vs-new name as "already exists" — verified
+    /// directly against this filesystem, not assumed.
     /// </summary>
-    private static async Task<(bool GitUsed, string? Error)> MoveFileAsync(
-        CommandContext ctx, string oldPath, string newPath)
+    private static string? MoveFile(string oldPath, string newPath)
     {
         var destDir = Path.GetDirectoryName(newPath)!;
+        Directory.CreateDirectory(destDir);
 
-        // Detect git context
-        var isGit = await IsInsideGitWorkTreeAsync(ctx).ConfigureAwait(false);
-        if (isGit)
-        {
-            var isTracked = await IsGitTrackedAsync(ctx, oldPath).ConfigureAwait(false);
-            if (isTracked)
-            {
-                // git mv requires the destination directory to exist first.
-                Directory.CreateDirectory(destDir);
-                var (exitCode, _, stderr) = await ctx.Process
-                    .RunAsync(["git", "mv", oldPath, newPath])
-                    .ConfigureAwait(false);
-                if (exitCode != 0)
-                    return (false, $"git mv failed: {stderr.Trim()}");
-                return (true, null);
-            }
-        }
-
-        // Filesystem fallback
         try
         {
-            Directory.CreateDirectory(destDir);
             File.Move(oldPath, newPath);
-            return (false, null);
+            return null;
         }
         catch (Exception ex)
         {
-            return (false, ex.Message);
+            return ex.Message;
         }
-    }
-
-    private static async Task<bool> IsInsideGitWorkTreeAsync(CommandContext ctx)
-    {
-        try
-        {
-            var (exit, stdout, _) = await ctx.Process
-                .RunAsync(["git", "rev-parse", "--is-inside-work-tree"])
-                .ConfigureAwait(false);
-            return exit == 0 && stdout.Trim() == "true";
-        }
-        catch { return false; }
-    }
-
-    private static async Task<bool> IsGitTrackedAsync(CommandContext ctx, string filePath)
-    {
-        try
-        {
-            var (exit, _, _) = await ctx.Process
-                .RunAsync(["git", "ls-files", "--error-unmatch", filePath])
-                .ConfigureAwait(false);
-            return exit == 0;
-        }
-        catch { return false; }
     }
 
     /// <summary>
     /// Whether two resolved paths refer to the same source and destination. Case-sensitive:
-    /// a case-only rename (e.g. Foo.cs -&gt; foo.cs) is a legitimate move — plain `git mv`
-    /// handles it correctly even on case-insensitive filesystems — so it must not be refused.
+    /// a case-only rename (e.g. Foo.cs -&gt; foo.cs) is a legitimate move — <see cref="MoveFile"/>
+    /// handles it safely even on case-insensitive filesystems — so it must not be refused.
     /// </summary>
     internal static bool IsSamePath(string oldPath, string newPath) =>
         string.Equals(oldPath, newPath, StringComparison.Ordinal);
 
     /// <summary>
     /// Formats the compact output line.
-    /// Example: <c>mv Old.cs -> New.cs git=yes</c>
+    /// Example: <c>mv Old.cs -> New.cs</c>
     /// </summary>
-    internal static string FormatOutput(string oldArg, string newArg, bool gitUsed)
-    {
-        var git = gitUsed ? "yes" : "no";
-        return $"mv {oldArg} -> {newArg} git={git}";
-    }
+    internal static string FormatOutput(string oldArg, string newArg) => $"mv {oldArg} -> {newArg}";
 
     /// <summary>
     /// Returns a reminder to check the namespace/references when the file moved to a

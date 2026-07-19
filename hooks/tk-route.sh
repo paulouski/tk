@@ -169,6 +169,9 @@ ENV_PREFIX_RE='^(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*)[[:space:]]+)+'
 # Tier-2 pipeline guard (see _rewrite_pipeline / _grep_segment_is_problem_filter).
 PROBLEM_PATTERN_RE='(fail|error|warn|cs[0-9]+|expected|received|assert|passed)'
 GREP_FLAG_DENY_CHARS='vcolL'
+# grep-family commands are never handed to the rtk-rewrite fallback in _rewrite_segment
+# (see there) -- rtk may rewrite to a different executable/regex runtime.
+GREP_FAMILY_RE='^(grep|egrep|fgrep|ugrep|rg)([[:space:]]|$)'
 GREP_LONG_FLAG_DENY_RE='^--(invert-match|count|only-matching|files-with-matches|files-without-match)$'
 TIER2_HINT="Pipeline routed to tk; your grep filter was dropped — tk compact output keeps all errors/warnings/failures. Rerun with \`tk --raw dotnet ...\` if you needed the raw stream."
 
@@ -248,6 +251,13 @@ _rewrite_segment() {
     return 1
   fi
 
+  # grep-family commands (grep/egrep/fgrep/ugrep/rg) are never handed to the generic
+  # rtk-rewrite fallback below, regardless of allow_rtk: rtk may recognize them and
+  # rewrite to a different executable/regex runtime (e.g. `rtk grep`/`rtk rg`), which
+  # can silently change how the user's pattern is evaluated. A nudge (symbol-grep,
+  # further down) may still attach, but the command byte-for-byte never changes.
+  [[ "$rest" =~ $GREP_FAMILY_RE ]] && return 1
+
   [[ "$allow_rtk" -eq 1 ]] || return 1
 
   # Record find forms that the rtk runtime rejects or silently changes. We
@@ -270,15 +280,21 @@ _rewrite_segment() {
     local rewritten
     rewritten=$(rtk rewrite "$core" 2>/dev/null)
     if [[ $? -eq 0 && -n "$rewritten" ]]; then
-      if [[ "$unsupported_find" -eq 1 ]]; then
-        _shell_words "$rewritten"
-        local word_index
-        for (( word_index=0; word_index + 1 < ${#_words[@]}; word_index++ )); do
-          if [[ "${_words[word_index]}" == "rtk" && "${_words[word_index + 1]}" == "find" ]]; then
+      # Inspect the rewrite target rather than trying to parse every possible wrapper.
+      # This catches `command rtk grep`, `env rtk grep`, and `sudo rtk grep` while the
+      # direct grep-family guard above remains the fast path for unwrapped commands.
+      _shell_words "$rewritten"
+      local word_index
+      for (( word_index=0; word_index + 1 < ${#_words[@]}; word_index++ )); do
+        if [[ "${_words[word_index]}" == "rtk" ]]; then
+          if [[ "${_words[word_index + 1]}" =~ $GREP_FAMILY_RE ]]; then
             return 1
           fi
-        done
-      fi
+          if [[ "$unsupported_find" -eq 1 && "${_words[word_index + 1]}" == "find" ]]; then
+            return 1
+          fi
+        fi
+      done
       _rewritten_segment="${leading}${rewritten}${trailing}"
       return 0
     fi
@@ -680,7 +696,7 @@ fi
 # usage data showed is a common symbol-hunt shape that (1) alone misses.
 SYMBOL_KEYWORD_RE='(class|record|interface|enum|struct)[[:space:]]+[A-Z]'
 SYMBOL_ALT_RE='[A-Z][A-Za-z0-9_]*\\?\|[A-Z]'
-if [[ "$trimmed" =~ ^(grep|egrep|fgrep|rg)[[:space:]] ]] && \
+if [[ "$trimmed" =~ ^(grep|egrep|fgrep|ugrep|rg)[[:space:]] ]] && \
    { [[ "$cmd" =~ $SYMBOL_KEYWORD_RE ]] || [[ "$cmd" =~ $SYMBOL_ALT_RE ]]; }; then
   # Throttle: skip if this session was already nudged within the last 300s, so a
   # grep-heavy loop doesn't get re-nudged on every call.

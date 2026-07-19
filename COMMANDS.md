@@ -83,7 +83,7 @@ tk unity status          # git status that folds .meta noise into a meta= count
 ## File moves (`core`, always available)
 
 ```bash
-tk mv src/OldName.cs src/NewName.cs  # git mv when tracked (preserves history), else filesystem move
+tk mv src/OldName.cs src/NewName.cs  # plain filesystem move (never touches the git index); git detects the rename itself on the next status/diff
 tk mv src/OldName.cs src/            # moves into directory, destination = src/OldName.cs
 tk mv src/OldName.cs src/NewName.cs --no-fix-ns   # skip automatic namespace fix; move only
 tk mv src/OldName.cs src/NewName.cs --ns Foo.Bar  # use this namespace instead of the computed convention

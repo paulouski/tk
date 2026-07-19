@@ -71,86 +71,52 @@ public class MvCommandTests
         Assert.Contains("directory moves not supported yet", err);
     }
 
-    // ─── git-tracked file → git mv ───────────────────────────────────────────
+    // ─── file move never touches the git index ───────────────────────────────
 
     [Fact]
-    public async Task Git_tracked_file_invokes_git_mv()
+    public async Task Move_never_invokes_any_process_at_all()
     {
+        // No FakeProcessRunner.Returns(...) configured: any call at all throws. Proves the move
+        // path never shells out to git (no git mv, no git add, no git anything) regardless of
+        // whether the file happens to be git-tracked.
         var (dir, oldPath) = MakeTempFile();
         var newPath = Path.Combine(dir, "NewName.cs");
 
-        var runner = new FakeProcessRunner()
-            // git rev-parse --is-inside-work-tree → yes
-            .Returns(exitCode: 0, stdout: "true")
-            // git ls-files --error-unmatch → tracked
-            .Returns(exitCode: 0, stdout: "")
-            // git mv → success
-            .Returns(exitCode: 0, stdout: "");
-
+        var runner = new FakeProcessRunner();
         var (exit, output, _, r) = await RunAsync([oldPath, newPath], runner);
 
         Assert.Equal(0, exit);
-        Assert.Contains("git=yes", output);
-        // Verify git mv was called with the right args
-        Assert.Contains(r.Calls, c => c.Contains("mv") && c.Contains(oldPath) && c.Contains(newPath));
-    }
-
-    [Fact]
-    public async Task Git_tracked_file_output_format_is_correct()
-    {
-        var (dir, oldPath) = MakeTempFile();
-        var newPath = Path.Combine(dir, "NewName.cs");
-
-        var runner = new FakeProcessRunner()
-            .Returns(exitCode: 0, stdout: "true")
-            .Returns(exitCode: 0, stdout: "")
-            .Returns(exitCode: 0, stdout: "");
-
-        var (exit, output, _, _) = await RunAsync([oldPath, newPath], runner);
-
-        Assert.Equal(0, exit);
-        // Output must be: mv <old> -> <new> git=yes
-        Assert.Matches($@"^mv .+ -> .+ git=yes$", output.Trim());
-    }
-
-    // ─── untracked file → filesystem move ───────────────────────────────────
-
-    [Fact]
-    public async Task Untracked_file_uses_filesystem_move()
-    {
-        var (dir, oldPath) = MakeTempFile();
-        var newPath = Path.Combine(dir, "NewName.cs");
-
-        var runner = new FakeProcessRunner()
-            // inside git work tree
-            .Returns(exitCode: 0, stdout: "true")
-            // NOT tracked (non-zero exit)
-            .Returns(exitCode: 1, stdout: "");
-
-        var (exit, output, _, _) = await RunAsync([oldPath, newPath], runner);
-
-        Assert.Equal(0, exit);
-        Assert.Contains("git=no", output);
-        Assert.True(File.Exists(newPath), "file should have moved");
-        Assert.False(File.Exists(oldPath), "old path should be gone");
-    }
-
-    [Fact]
-    public async Task No_git_uses_filesystem_move()
-    {
-        var (dir, oldPath) = MakeTempFile();
-        var newPath = Path.Combine(dir, "NewName.cs");
-
-        var runner = new FakeProcessRunner()
-            // Not inside a git work tree
-            .Returns(exitCode: 1, stdout: "false");
-
-        var (exit, output, _, _) = await RunAsync([oldPath, newPath], runner);
-
-        Assert.Equal(0, exit);
-        Assert.Contains("git=no", output);
+        Assert.Empty(r.Calls);
         Assert.True(File.Exists(newPath));
         Assert.False(File.Exists(oldPath));
+    }
+
+    [Fact]
+    public async Task Output_format_has_no_git_suffix()
+    {
+        var (dir, oldPath) = MakeTempFile();
+        var newPath = Path.Combine(dir, "NewName.cs");
+
+        var (exit, output, _, _) = await RunAsync([oldPath, newPath], new FakeProcessRunner());
+
+        Assert.Equal(0, exit);
+        Assert.Matches(@"^mv .+ -> .+$", output.Trim());
+        Assert.DoesNotContain("git=", output);
+    }
+
+    // ─── plain filesystem move (tracked and untracked are handled identically) ──
+
+    [Fact]
+    public async Task File_move_works_via_plain_filesystem_move()
+    {
+        var (dir, oldPath) = MakeTempFile();
+        var newPath = Path.Combine(dir, "NewName.cs");
+
+        var (exit, output, _, _) = await RunAsync([oldPath, newPath], new FakeProcessRunner());
+
+        Assert.Equal(0, exit);
+        Assert.True(File.Exists(newPath), "file should have moved");
+        Assert.False(File.Exists(oldPath), "old path should be gone");
     }
 
     // ─── destination is a directory → move into it ──────────────────────────
@@ -162,34 +128,11 @@ public class MvCommandTests
         var destDir = Directory.CreateTempSubdirectory().FullName;
         var expectedDest = Path.Combine(destDir, "Original.txt");
 
-        var runner = new FakeProcessRunner()
-            .Returns(exitCode: 0, stdout: "true")
-            .Returns(exitCode: 0, stdout: "")   // tracked
-            .Returns(exitCode: 0, stdout: "");   // git mv success
-
-        var (exit, output, _, r) = await RunAsync([oldPath, destDir], runner);
-
-        Assert.Equal(0, exit);
-        // git mv should have been called with the resolved destination
-        Assert.Contains(r.Calls, c => c.Contains("mv") && c.Contains(expectedDest));
-        Assert.Contains("->", output);
-    }
-
-    [Fact]
-    public async Task New_is_existing_directory_filesystem_fallback_moves_into_it()
-    {
-        var (dir, oldPath) = MakeTempFile("File.txt");
-        var destDir = Directory.CreateTempSubdirectory().FullName;
-        var expectedDest = Path.Combine(destDir, "File.txt");
-
-        var runner = new FakeProcessRunner()
-            // not in git
-            .Returns(exitCode: 1, stdout: "false");
-
-        var (exit, _, _, _) = await RunAsync([oldPath, destDir], runner);
+        var (exit, output, _, _) = await RunAsync([oldPath, destDir], new FakeProcessRunner());
 
         Assert.Equal(0, exit);
         Assert.True(File.Exists(expectedDest));
+        Assert.Contains("->", output);
     }
 
     // ─── parent directory creation ───────────────────────────────────────────
@@ -218,12 +161,10 @@ public class MvCommandTests
     // ─── FormatOutput pure logic ─────────────────────────────────────────────
 
     [Theory]
-    [InlineData("old.cs", "new.cs", true, "mv old.cs -> new.cs git=yes")]
-    [InlineData("old.cs", "new.cs", false, "mv old.cs -> new.cs git=no")]
-    public void FormatOutput_returns_correct_string(
-        string oldArg, string newArg, bool gitUsed, string expected)
+    [InlineData("old.cs", "new.cs", "mv old.cs -> new.cs")]
+    public void FormatOutput_returns_correct_string(string oldArg, string newArg, string expected)
     {
-        var actual = MvCommand.FormatOutput(oldArg, newArg, gitUsed);
+        var actual = MvCommand.FormatOutput(oldArg, newArg);
         Assert.Equal(expected, actual);
     }
 
@@ -242,22 +183,20 @@ public class MvCommandTests
     // ─── case-only rename is allowed (not blocked as "same path") ────────────
 
     [Fact]
-    public async Task Case_only_rename_proceeds_via_git_mv()
+    public async Task Case_only_rename_proceeds_via_plain_filesystem_move()
     {
-        var (dir, oldPath) = MakeTempFile("Foo.cs");
+        var (dir, oldPath) = MakeTempFile("Foo.cs", content: "hello");
         var newPath = Path.Combine(dir, "foo.cs");
 
-        var runner = new FakeProcessRunner()
-            .Returns(exitCode: 0, stdout: "true")   // inside git work tree
-            .Returns(exitCode: 0, stdout: "")       // tracked
-            .Returns(exitCode: 0, stdout: "");      // git mv success
-
-        var (exit, output, err, r) = await RunAsync([oldPath, newPath], runner);
+        var (exit, output, err, r) = await RunAsync([oldPath, newPath], new FakeProcessRunner());
 
         Assert.Equal(0, exit);
         Assert.DoesNotContain("same", err);
-        Assert.Contains("git=yes", output);
-        Assert.Contains(r.Calls, c => c.Contains("mv") && c.Contains(oldPath) && c.Contains(newPath));
+        Assert.Empty(r.Calls);
+        Assert.True(File.Exists(newPath), "renamed file should exist under the new casing");
+        Assert.Equal("hello", File.ReadAllText(newPath));
+        // Exactly one file left in the directory — no leftover temp/duplicate.
+        Assert.Single(Directory.GetFiles(dir));
     }
 
     // ─── cross-directory namespace reminder (legacy note, used for --no-fix-ns) ──
@@ -463,22 +402,27 @@ public class MvCommandTests
         });
     }
 
-    // ─── git mv failure propagates error ─────────────────────────────────────
+    // ─── forced move failure leaves no half-moved or leftover temp file ──────
 
     [Fact]
-    public async Task Git_mv_failure_returns_1_with_error()
+    public async Task Forced_move_failure_leaves_source_untouched_and_no_partial_state()
     {
-        var (dir, oldPath) = MakeTempFile();
+        var (dir, oldPath) = MakeTempFile("OldName.cs", content: "old content");
+        // Destination already exists as a file — File.Move refuses to overwrite, forcing failure.
         var newPath = Path.Combine(dir, "NewName.cs");
+        File.WriteAllText(newPath, "existing destination content");
 
-        var runner = new FakeProcessRunner()
-            .Returns(exitCode: 0, stdout: "true")
-            .Returns(exitCode: 0, stdout: "")   // tracked
-            .Returns(exitCode: 1, stdout: "", stderr: "fatal: bad source"); // git mv fails
-
-        var (exit, _, err, _) = await RunAsync([oldPath, newPath], runner);
+        var (exit, _, err, r) = await RunAsync([oldPath, newPath], new FakeProcessRunner());
 
         Assert.Equal(1, exit);
-        Assert.Contains("git mv failed", err);
+        Assert.NotEmpty(err);
+        Assert.Empty(r.Calls);
+        // Source untouched, no half-moved state.
+        Assert.True(File.Exists(oldPath));
+        Assert.Equal("old content", File.ReadAllText(oldPath));
+        // Destination untouched by the failed move.
+        Assert.Equal("existing destination content", File.ReadAllText(newPath));
+        // No stray temp file left behind.
+        Assert.Equal(2, Directory.GetFiles(dir).Length);
     }
 }

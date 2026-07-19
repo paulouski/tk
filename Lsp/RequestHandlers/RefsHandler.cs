@@ -61,7 +61,7 @@ internal sealed class RefsHandler : IRequestHandler
         {
             textDocument = new { uri = fileUri },
             position = new { line, character },
-            context = new { includeDeclaration = true }
+            context = new { includeDeclaration = false }
         };
 
         var result = await loop.SendRequestAsync("textDocument/references", refsParams, ct).ConfigureAwait(false);
