@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import sys
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -80,8 +81,66 @@ class BuildGroups(unittest.TestCase):
         self.assertIsNone(groups[0]["delegation_delta_usd"])
         self.assertIsNone(groups[0]["inline_estimate_usd"])
 
+    def test_operand_overlap_uses_secondary_tk_invocations(self) -> None:
+        main = {
+            "session_id": "m1", "is_subagent": False, "group_id": "m1",
+            "cost": _cost(),
+            "events": [{
+                "tk_operand_values": ["MainOnly"],
+                "tk_invocations": [
+                    {"tk_operand_values": ["MainOnly"]},
+                    {"tk_operand_values": ["Shared"]},
+                ],
+            }],
+        }
+        sub = {
+            "session_id": "s1", "is_subagent": True, "group_id": "m1",
+            "cost": _cost(),
+            "events": [{"tk_operand_values": ["Shared"]}],
+        }
+
+        group = join._build_groups([main, sub])[0]
+
+        self.assertEqual(group["parent_sub_operand_overlap"], 1)
+        self.assertEqual(group["parent_sub_operand_examples"], ["Shared"])
+
 
 class ByVersionProjection(unittest.TestCase):
+    def test_run_join_tracks_event_and_invocation_coverage_separately(self) -> None:
+        session = {
+            "session_id": "s1", "session_file": "fake.jsonl",
+            "is_subagent": False, "group_id": "s1", "parent_session_id": None,
+            "cwd": "/repo", "ts_start": "2026-07-10T10:00:00Z",
+            "ts_end": "2026-07-10T10:00:00Z", "events": [{
+                "tool": "Bash", "is_tk": True, "tk_command": "def",
+                "tk_sub": None, "ts": "2026-07-10T10:00:00Z", "cwd": "/repo",
+                "tk_invocations": [
+                    {"tk_command": "def", "tk_sub": None},
+                    {"tk_command": "refs", "tk_sub": None},
+                ],
+            }],
+            "cost": _cost(0.0),
+        }
+        matches = [
+            {"rawChars": None, "shownChars": 10, "tkVersion": "0.10.0"},
+            {"rawChars": 100, "shownChars": 20, "tkVersion": "0.10.0"},
+        ]
+        with patch("join.load_sessions", return_value=[session]), \
+             patch("join.load_own_log", return_value=[]), \
+             patch("join.load_interventions", return_value=[]), \
+             patch("join._find_match", side_effect=matches):
+            model = join.run_join()
+
+        stats = model["match_stats"]
+        self.assertEqual(stats["total_tk_events"], 1)
+        self.assertEqual(stats["total_tk_invocations"], 2)
+        self.assertEqual(stats["own_log_matched_events"], 1)
+        self.assertEqual(stats["raw_baseline_events"], 0)
+        self.assertEqual(stats["own_log_matched_invocations"], 2)
+        self.assertEqual(stats["raw_baseline_invocations"], 1)
+        self.assertEqual(len(model["sessions"][0]["events"]), 1)
+        self.assertEqual(len(model["sessions"][0]["events"][0]["tk_invocations"]), 2)
+
     def test_two_events_same_version(self) -> None:
         # One session, 2 tk events, both with tk_version="0.8.0".
         # After apply_version_filter("0.8.0") the projection must yield 1
@@ -154,6 +213,144 @@ class ByVersionProjection(unittest.TestCase):
         }
         with self.assertRaises(ValueError):
             join.apply_version_filter(model, "0.0.0")
+
+    def test_filter_removes_cross_version_interventions_and_recomputes_adoption(self) -> None:
+        def iso(epoch: float) -> str:
+            return datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat()
+
+        model = {
+            "by_version": [
+                {"version": "0.9.0", "n": 1},
+                {"version": "0.10.0", "n": 1},
+            ],
+            "sessions": [{
+                "session_id": "s1",
+                "group_id": "s1",
+                "tk_version": "0.9.0",
+                "events": [
+                    {
+                        "tool": "Bash", "is_tk": True, "tk_command": "def",
+                        "tk_version": "0.9.0", "ts": iso(1001),
+                        "outcome": "UNKNOWN", "own_log_matched": True,
+                        "raw_chars": None,
+                    },
+                    {
+                        "tool": "Bash", "is_tk": True, "tk_command": "def",
+                        "tk_version": "0.10.0", "ts": iso(2001),
+                        "outcome": "UNKNOWN", "own_log_matched": True,
+                        "raw_chars": None,
+                    },
+                    {
+                        "tool": "Read", "is_tk": False, "ts": iso(1002),
+                        "tool_input_summary": "/repo/Old.cs",
+                        "read_offset": 1, "read_limit": 100,
+                    },
+                    {
+                        "tool": "Read", "is_tk": False, "ts": iso(2002),
+                        "tool_input_summary": "/repo/New.cs",
+                        "read_offset": 1, "read_limit": 100,
+                    },
+                    {
+                        "tool": "Read", "is_tk": False,
+                        "tool_input_summary": "/repo/UnknownVersion.cs",
+                    },
+                ],
+            }],
+            "groups": [],
+            "interventions": [
+                {
+                    "ts_epoch": 1000.0, "decision": "cap-read", "session_id": "s1",
+                    "cwd": "/repo", "command": "/repo/Old.cs", "tk_version": "0.9.0",
+                    "adopted": True, "nudge_subtype": "cap_read",
+                },
+                {
+                    "ts_epoch": 2000.0, "decision": "cap-read", "session_id": "s1",
+                    "cwd": "/repo", "command": "/repo/New.cs", "tk_version": "0.10.0",
+                    "adopted": False, "nudge_subtype": "cap_read",
+                },
+            ],
+            "outcome_counts": {}, "aggregates": {},
+            "match_stats": {"total_tk_events": 2},
+            "generated_for_range": {},
+            "adoption": {"by_subtype": {"cap_read": {"n_interventions": 2}}},
+        }
+
+        inferred_versions = {
+            iso(1002): "0.9.0",
+            iso(2002): "0.10.0",
+        }
+        with patch("join._infer_version", side_effect=lambda ts: inferred_versions.get(ts)):
+            filtered = join.apply_version_filter(model, "0.10.0")
+
+        self.assertEqual(filtered["sessions"][0]["tk_version"], "0.10.0")
+        self.assertEqual(filtered["sessions"][0]["ts_start"], iso(2001))
+        self.assertEqual(filtered["sessions"][0]["ts_end"], iso(2002))
+        self.assertEqual(filtered["generated_for_range"]["actual_from"], iso(2001))
+        self.assertEqual(filtered["generated_for_range"]["actual_to"], iso(2002))
+        self.assertEqual(
+            [event["ts"] for event in filtered["sessions"][0]["events"]],
+            [iso(2001), iso(2002)],
+        )
+        self.assertEqual(len(filtered["interventions"]), 1)
+        self.assertEqual(filtered["interventions"][0]["tk_version"], "0.10.0")
+        self.assertTrue(filtered["interventions"][0]["adopted"])
+        self.assertEqual(
+            filtered["adoption"]["by_subtype"]["cap_read"]["n_interventions"], 1
+        )
+        self.assertEqual(filtered["match_stats"]["own_log_matched_events"], 1)
+        self.assertEqual(filtered["match_stats"]["raw_baseline_events"], 0)
+
+    def test_filter_keeps_latest_native_activity_without_latest_tk_event(self) -> None:
+        def iso(epoch: float) -> str:
+            return datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat()
+
+        native_ts = iso(2002)
+        model = {
+            "by_version": [
+                {"version": "0.9.0", "n": 1},
+                {"version": "0.10.0", "n": 1},
+            ],
+            "sessions": [{
+                "session_id": "s1",
+                "group_id": "s1",
+                "tk_version": "0.9.0",
+                "events": [
+                    {
+                        "tool": "Bash", "is_tk": True, "tk_command": "def",
+                        "tk_version": "0.9.0", "ts": iso(1001),
+                        "outcome": "UNKNOWN",
+                    },
+                    {
+                        "tool": "Read", "is_tk": False, "ts": native_ts,
+                        "tool_input_summary": "/repo/New.cs",
+                        "read_offset": 1, "read_limit": 100,
+                    },
+                ],
+            }],
+            "groups": [],
+            "interventions": [{
+                "ts_epoch": 2000.0, "decision": "cap-read", "session_id": "s1",
+                "cwd": "/repo", "command": "/repo/New.cs", "tk_version": "0.10.0",
+            }],
+            "outcome_counts": {}, "aggregates": {},
+            "match_stats": {"total_tk_events": 1},
+            "generated_for_range": {},
+        }
+
+        with patch(
+            "join._infer_version",
+            side_effect=lambda ts: "0.10.0" if ts == native_ts else None,
+        ):
+            filtered = join.apply_version_filter(model, "0.10.0")
+
+        self.assertEqual(len(filtered["sessions"]), 1)
+        self.assertEqual(filtered["sessions"][0]["events"][0]["tool"], "Read")
+        self.assertEqual(len(filtered["interventions"]), 1)
+        self.assertTrue(filtered["interventions"][0]["adopted"])
+
+    def test_all_returns_original_model(self) -> None:
+        model = {"by_version": [], "sessions": []}
+        self.assertIs(join.apply_version_filter(model, "all"), model)
 
 
 if __name__ == "__main__":

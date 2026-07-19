@@ -262,6 +262,10 @@ def _parse_session(
     ts_start = min(ts_values) if ts_values else None
     ts_end = max(ts_values) if ts_values else None
     n_tk = sum(1 for e in events if e.get("is_tk"))
+    n_tk_invocations = sum(
+        e.get("tk_invocation_count", 1)
+        for e in events if e.get("is_tk")
+    )
 
     cost = _build_session_cost(conn, session_id)
 
@@ -279,6 +283,7 @@ def _parse_session(
         "ts_end": ts_end,
         "n_events": len(events),
         "n_tk_events": n_tk,
+        "n_tk_invocations": n_tk_invocations,
         "cost": cost,
         "events": events,
     }
@@ -323,6 +328,10 @@ def load_sessions(
                 session["ts_end"] = max(ts_values) if ts_values else None
                 session["n_events"] = len(session["events"])
                 session["n_tk_events"] = sum(1 for e in session["events"] if e.get("is_tk"))
+                session["n_tk_invocations"] = sum(
+                    e.get("tk_invocation_count", 1)
+                    for e in session["events"] if e.get("is_tk")
+                )
             sessions.append(session)
         return sessions
     finally:
@@ -349,11 +358,12 @@ def _top_commands(events: list[dict], n: int = 10) -> list[tuple[str, int]]:
     counts: Counter = Counter()
     for e in events:
         if e.get("is_tk"):
-            key = e.get("tk_command") or "(empty)"
-            sub = e.get("tk_sub")
-            if sub:
-                key = f"{key} {sub}"
-            counts[key] += 1
+            for invocation in (e.get("tk_invocations") or [e]):
+                key = invocation.get("tk_command") or "(empty)"
+                sub = invocation.get("tk_sub")
+                if sub:
+                    key = f"{key} {sub}"
+                counts[key] += 1
     return counts.most_common(n)
 
 

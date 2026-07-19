@@ -47,7 +47,7 @@ def _tool_result_text(content) -> str:
 
 
 def _iter_transcript_tool_use_results(path: Path, tool_names: set[str]) -> Iterable[dict]:
-    """Yield {tool_input, result_chars, num_lines, total_lines, is_error} for each tool_use
+    """Yield {tool_input, tool_use_id, ts, result_chars, num_lines, total_lines, is_error} for each tool_use
     of the given names paired with its tool_result from one .jsonl transcript file.
 
     num_lines/total_lines come from the sidecar `toolUseResult.file` block Claude Code
@@ -72,12 +72,17 @@ def _iter_transcript_tool_use_results(path: Path, tool_names: set[str]) -> Itera
                     if not isinstance(block, dict):
                         continue
                     if block.get("type") == "tool_use" and block.get("name") in tool_names:
-                        pending[block.get("id")] = block.get("input") or {}
+                        tool_use_id = block.get("id")
+                        pending[tool_use_id] = {
+                            "tool_input": block.get("input") or {},
+                            "tool_use_id": tool_use_id,
+                            "ts": line.get("timestamp"),
+                        }
                     elif block.get("type") == "tool_result":
                         tool_use_id = block.get("tool_use_id")
                         if tool_use_id not in pending:
                             continue
-                        tool_input = pending.pop(tool_use_id)
+                        tool_use = pending.pop(tool_use_id)
                         result_text = _tool_result_text(block.get("content"))
                         num_lines = None
                         total_lines = None
@@ -88,7 +93,9 @@ def _iter_transcript_tool_use_results(path: Path, tool_names: set[str]) -> Itera
                                 num_lines = file_info.get("numLines")
                                 total_lines = file_info.get("totalLines")
                         yield {
-                            "tool_input": tool_input,
+                            "tool_input": tool_use["tool_input"],
+                            "tool_use_id": tool_use["tool_use_id"],
+                            "ts": tool_use["ts"],
                             "result_chars": len(result_text),
                             "num_lines": num_lines,
                             "total_lines": total_lines,

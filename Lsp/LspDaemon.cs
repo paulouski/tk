@@ -212,6 +212,12 @@ public sealed class LspDaemon
         await _readyTcs.Task.WaitAsync(ct).ConfigureAwait(false);
     }
 
+    private async Task WaitForReadyAndRefreshAsync(MessageLoop loop, CancellationToken ct)
+    {
+        await WaitForReadyAsync(ct).ConfigureAwait(false);
+        await _docSync.RefreshOpenDocumentsAsync(loop, ct).ConfigureAwait(false);
+    }
+
     private async Task HandleClientAsync(Socket client, MessageLoop loop, CancellationToken ct)
     {
         using var stream = new NetworkStream(client, ownsSocket: false);
@@ -248,7 +254,7 @@ public sealed class LspDaemon
                 // DocumentSync owns the open/resync state, the loop just carries LSP traffic.
                 var ctx = new LspDaemonContext(
                     Loop: loop,
-                    WaitForReadyAsync: WaitForReadyAsync,
+                    WaitForReadyAsync: c => WaitForReadyAndRefreshAsync(loop, c),
                     EnsureFileOpenAsync: (filePath, fileUri, c) => _docSync.EnsureFileOpenAsync(loop, filePath, fileUri, c),
                     Log: Log);
                 response = await handler.HandleAsync(ctx, request, ct).ConfigureAwait(false);
@@ -281,7 +287,7 @@ public sealed class LspDaemon
     public static SyncAction DecideSyncAction(DateTime storedMtime, bool fileExists, DateTime currentMtime)
     {
         if (!fileExists) return SyncAction.Close;
-        if (currentMtime > storedMtime) return SyncAction.Change;
+        if (currentMtime != storedMtime) return SyncAction.Change;
         return SyncAction.None;
     }
 

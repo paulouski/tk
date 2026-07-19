@@ -74,7 +74,8 @@ def _detect_fallback(events: list[dict]) -> None:
     """Annotate tk search/nav events with fallback and result_used signals.
 
     fallback (negative): tk search/nav followed within 3 events by Grep/Glob.
-    result_used (positive): tk search/nav followed within 3 events by Read.
+    result_used (positive): tk search/nav followed within 3 events by an exact
+        native read or code-snippet lookup.
     result_used_edit (positive, C3): tk search/nav followed within 3 events
         by Edit/MultiEdit/Write. Distinct from result_used (which is Read-only)
         so the read vs edit success signal stays separable.
@@ -112,7 +113,7 @@ def _detect_fallback(events: list[dict]) -> None:
                     if summary and any(op in summary for op in operand_vals):
                         ev["fallback_same_target"] = True
 
-            if tool in _RESULT_USED_TOOLS and not ev["result_used"]:
+            if _is_result_used(following) and not ev["result_used"]:
                 ev["result_used"] = True
                 if operand_vals:
                     summary = following.get("tool_input_summary", "")
@@ -125,6 +126,15 @@ def _detect_fallback(events: list[dict]) -> None:
                     summary = following.get("tool_input_summary", "")
                     if summary and any(op in summary for op in operand_vals):
                         ev["result_used_edit_same_target"] = True
+
+
+def _is_result_used(event: dict) -> bool:
+    if event.get("tool") in _RESULT_USED_TOOLS or event.get("stealth_read"):
+        return True
+    return any(
+        str(tool).endswith("get_code_snippet")
+        for tool in event.get("nested_tools") or []
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -276,26 +286,30 @@ def _detect_symbol_grep(events: list[dict]) -> None:
 # ---------------------------------------------------------------------------
 
 def _detect_reread(events: list[dict]) -> None:
-    """Annotate Read events that re-read a path already seen earlier in the session.
-
-    For each event with tool=="Read", the tool_input_summary is the file_path
-    string. If that path was already seen at an earlier index, mark the event
-    reread=True and store reread_chars=shown_chars; otherwise record the path
-    as the first sighting. Events with empty/None summary are skipped.
-    """
-    seen: dict[str, int] = {}
+    """Classify repeated Read paths without treating new slices as wasted reads."""
+    seen: dict[str, set[tuple[object, object]]] = {}
     for ev in events:
         ev["reread"] = False
+        ev["read_path_seen"] = False
+        ev["read_repeat_kind"] = None
+        ev["reread_chars"] = None
         if ev.get("tool") != "Read":
             continue
         path = ev.get("tool_input_summary") or ""
         if not path:
             continue
-        if path in seen:
+        read_range = (ev.get("read_offset"), ev.get("read_limit"))
+        prior_ranges = seen.setdefault(path, set())
+        if prior_ranges:
+            ev["read_path_seen"] = True
+        if read_range in prior_ranges:
+            kind = "whole_file_repeat" if read_range == (None, None) else "exact_slice_repeat"
             ev["reread"] = True
+            ev["read_repeat_kind"] = kind
             ev["reread_chars"] = ev.get("shown_chars")
-        else:
-            seen[path] = 1
+        elif prior_ranges:
+            ev["read_repeat_kind"] = "different_slice"
+        prior_ranges.add(read_range)
 
 
 # ---------------------------------------------------------------------------
@@ -474,17 +488,24 @@ def _adoption_signal_commands(subtype: str) -> frozenset[str]:
 
 def _is_adoption_signal(ev: dict, subtype: str, target_file: str) -> bool:
     """True if ev is an adoption signal for the given intervention subtype."""
+    invocations = _event_tk_invocations(ev)
     if subtype == "edit_write":
         # Unlike the other subtypes, adoption requires `tk write` on the SAME
         # file the nudge fired for — any `tk write` would over-count, since the
         # nudge is per-file and the agent may be mid-edit on unrelated files.
-        if not (target_file and ev.get("is_tk")):
+        if not target_file:
             return False
-        if ev.get("tk_command") not in ADOPTION_EDIT_WRITE_COMMANDS:
-            return False
-        operands = ev.get("tk_operand_values") or []
-        return bool(operands) and operands[0] == target_file
-    if ev.get("is_tk") and ev.get("tk_command") in _adoption_signal_commands(subtype):
+        for invocation in invocations:
+            if invocation.get("tk_command") not in ADOPTION_EDIT_WRITE_COMMANDS:
+                continue
+            operands = invocation.get("tk_operand_values") or []
+            if operands and operands[0] == target_file:
+                return True
+        return False
+    if any(
+        invocation.get("tk_command") in _adoption_signal_commands(subtype)
+        for invocation in invocations
+    ):
         return True
     # A sliced Read (non-empty offset/limit) of the same file that was
     # capped/stealth-read also counts — not applicable to symbol-grep nudges
@@ -494,6 +515,14 @@ def _is_adoption_signal(ev: dict, subtype: str, target_file: str) -> bool:
         if path == target_file and (ev.get("read_offset") or ev.get("read_limit")):
             return True
     return False
+
+
+def _event_tk_invocations(ev: dict) -> list[dict]:
+    """Return structured tk segments, falling back to the legacy event shape."""
+    invocations = ev.get("tk_invocations")
+    if isinstance(invocations, list) and invocations:
+        return [item for item in invocations if isinstance(item, dict)]
+    return [ev] if ev.get("is_tk") else []
 
 
 def _event_epoch(ev: dict) -> float | None:
@@ -585,6 +614,35 @@ def _detect_adoption(model: dict) -> None:
             _annotate_intervention(iv, events, event_epochs)
 
 
+def _summarize_adoption(model: dict) -> dict:
+    """Aggregate already-annotated hook interventions without session duplication."""
+    stats: dict[str, dict[str, int]] = {}
+    auto_routed_n = 0
+    for iv in model.get("interventions") or []:
+        decision = iv.get("decision")
+        if decision in ("route-tk", "route-rtk"):
+            auto_routed_n += 1
+            continue
+        if decision not in ("cap-read", "nudge", "nudge-edit-write"):
+            continue
+        subtype = iv.get("nudge_subtype") or decision
+        row = stats.setdefault(subtype, {"n_interventions": 0, "n_adopted": 0})
+        row["n_interventions"] += 1
+        if iv.get("adopted"):
+            row["n_adopted"] += 1
+    return {
+        "by_subtype": {
+            subtype: {
+                **row,
+                "rate": round(row["n_adopted"] / row["n_interventions"], 4)
+                if row["n_interventions"] else 0.0,
+            }
+            for subtype, row in sorted(stats.items())
+        },
+        "auto_routed": {"n": auto_routed_n},
+    }
+
+
 # ---------------------------------------------------------------------------
 # Session rollups
 # ---------------------------------------------------------------------------
@@ -601,6 +659,12 @@ def _rollup_session(session: dict) -> None:
     n_symbol_grep = 0
     n_reread = 0
     reread_chars_total = 0
+    read_repeat_counts = {
+        "exact_slice_repeat": 0,
+        "whole_file_repeat": 0,
+        "different_slice": 0,
+    }
+    read_repeat_chars = {key: 0 for key in read_repeat_counts}
     n_native_grep_retry = 0
     n_stealth_read = 0
     stealth_read_chars_total = 0
@@ -612,6 +676,10 @@ def _rollup_session(session: dict) -> None:
         if ev.get("reread"):
             n_reread += 1
             reread_chars_total += ev.get("reread_chars") or 0
+        repeat_kind = ev.get("read_repeat_kind")
+        if repeat_kind in read_repeat_counts:
+            read_repeat_counts[repeat_kind] += 1
+            read_repeat_chars[repeat_kind] += ev.get("shown_chars") or 0
         if ev.get("native_grep_retry"):
             n_native_grep_retry += 1
         if ev.get("stealth_read"):
@@ -643,6 +711,8 @@ def _rollup_session(session: dict) -> None:
     session["n_symbol_grep"] = n_symbol_grep
     session["n_reread"] = n_reread
     session["reread_chars_total"] = reread_chars_total
+    session["read_repeat_counts"] = read_repeat_counts
+    session["read_repeat_chars"] = read_repeat_chars
     session["n_native_grep_retry"] = n_native_grep_retry
     session["n_stealth_read"] = n_stealth_read
     session["stealth_read_chars_total"] = stealth_read_chars_total
@@ -658,6 +728,7 @@ def annotate(model: dict) -> dict:
     _detect_adoption(model)  # model-level: groups interventions by session_id itself
     for session in model.get("sessions", []):
         events = session.get("events", [])
+        _detect_stealth_read(events)
         _detect_fallback(events)
         _detect_retry(events)
         _detect_escalated(events)
@@ -665,6 +736,5 @@ def annotate(model: dict) -> dict:
         _detect_symbol_grep(events)
         _detect_reread(events)
         _detect_native_grep_retry(events)
-        _detect_stealth_read(events)
         _rollup_session(session)
     return model

@@ -51,7 +51,23 @@ if [[ "$cmd" =~ ^(cat|head|tail)[[:space:]]+([^[:space:]]+\.cs)$ ]]; then
   exit 0
 fi
 case "$cmd" in
+  "FOO=bar find . -type f -o -type d")
+    printf 'FOO=bar rtk find . -type f -o -type d'; exit 0 ;;
+  "command find . -type f -o -type d")
+    printf 'command rtk find . -type f -o -type d'; exit 0 ;;
+  "env FOO=bar find . -type f -o -type d")
+    printf 'env FOO=bar rtk find . -type f -o -type d'; exit 0 ;;
+  "sudo find . -type f -o -type d")
+    printf 'sudo rtk find . -type f -o -type d'; exit 0 ;;
+esac
+case "$cmd" in
   "docker ps"|"docker ps -a"|"git commit"|"git commit -m test"| \
+  "find . -type f"|"find . -type f -o -type d"| \
+  "FOO=bar find . -type f -o -type d"| \
+  "find . -not -path ./obj"|"find . ! -path ./obj"| \
+  "find . -type f -exec wc -l {} \\;"|"find . -type f -delete"| \
+  "find . -type f -ls"|"find . -type f -print0"| \
+  "find . \( -type f -a -name '*.cs' \)"| \
   'grep -rn "class Foo\|class Bar" src'|'grep -r class\|record src')
     printf 'rtk %s' "$cmd"
     exit 0
@@ -283,6 +299,25 @@ expect_rewrite "git log -> tk" "git log" "tk git log" "route-tk"
 # ── rtk-routed commands (fake rtk recognizes these) ─────────────────────────
 expect_rewrite "git commit -> rtk" "git commit -m test" "rtk git commit -m test" "route-rtk"
 expect_rewrite "docker ps -> rtk" "docker ps" "rtk docker ps" "route-rtk"
+expect_rewrite "simple find -> rtk" "find . -type f" "rtk find . -type f" "route-rtk"
+expect_passthrough "find with -o stays native" "find . -type f -o -type d"
+expect_passthrough "env-prefixed find with -o stays native" \
+  "FOO=bar find . -type f -o -type d"
+expect_passthrough "command-wrapped find with -o stays native" \
+  "command find . -type f -o -type d"
+expect_passthrough "env-wrapped find with -o stays native" \
+  "env FOO=bar find . -type f -o -type d"
+expect_passthrough "sudo-wrapped find with -o stays native" \
+  "sudo find . -type f -o -type d"
+expect_passthrough "find with -not stays native" "find . -not -path ./obj"
+expect_passthrough "find with ! stays native" "find . ! -path ./obj"
+expect_passthrough "find with explicit -a/parentheses stays native" \
+  "find . \( -type f -a -name '*.cs' \)"
+expect_passthrough "find with -exec stays native" \
+  "find . -type f -exec wc -l {} \;"
+expect_passthrough "find with -delete stays native" "find . -type f -delete"
+expect_passthrough "find with -ls stays native" "find . -type f -ls"
+expect_passthrough "find with -print0 stays native" "find . -type f -print0"
 
 # ── git diff/show: deliberately excluded from both tk and rtk routing ───────
 expect_passthrough "git diff -> pass, no log" "git diff"
@@ -508,24 +543,28 @@ assert_true "log rotation: dated log file contains the route-tk line" \
 assert_true "log rotation: legacy flat tk-hook.log is NOT created" \
   "$([[ ! -f "$FAKE_HOME/.claude/tk-hook.log" ]] && echo 1 || echo 0)"
 
-# ── Read-tool cap: whole-file reads (no offset/limit) over a 2000-char budget are
+# ── Read-tool cap: whole-file .cs reads (no offset/limit) over a 2000-char budget are
 # character-capped (not line-capped) to however many leading lines fit that budget, clamped
-# to a 500-line ceiling; silent for files under the budget, missing files, or when
-# offset/limit is given; deterministic (not throttled). ────────────────────────────────────
-BIG_FILE="$WORK/big_file.txt"
+# to a 500-line ceiling; non-C# files pass through; silent for files under the budget,
+# missing files, or when offset/limit is given; deterministic (not throttled). ──────────────
+BIG_FILE="$WORK/big_file.cs"
 seq 1 500 > "$BIG_FILE"
-SMALL_FILE="$WORK/small_file.txt"
+SMALL_FILE="$WORK/small_file.cs"
 seq 1 10 > "$SMALL_FILE"
-MISSING_FILE="$WORK/does_not_exist.txt"
+MISSING_FILE="$WORK/does_not_exist.cs"
 # Char-dense but SHORT file: 50 lines of 800 chars each (40050 bytes) -- well over the 2000-
 # char budget despite having far fewer than 500 lines. This is exactly the case a line-only
 # cap misses.
-DENSE_FILE="$WORK/dense_file.txt"
+DENSE_FILE="$WORK/dense_file.cs"
 line800="$(printf 'x%.0s' $(seq 1 800))"
 yes "$line800" | head -50 > "$DENSE_FILE"
+DENSE_MARKDOWN_FILE="$WORK/dense_file.md"
+cp "$DENSE_FILE" "$DENSE_MARKDOWN_FILE"
+DENSE_TEXT_FILE="$WORK/dense_file.txt"
+cp "$DENSE_FILE" "$DENSE_TEXT_FILE"
 # Large file with short, uniform lines (1500 lines x 2 bytes) so the computed limit exceeds
 # the 500-line ceiling and gets clamped.
-LARGE_FILE="$WORK/large_file.txt"
+LARGE_FILE="$WORK/large_file.cs"
 yes a | head -1500 > "$LARGE_FILE"
 
 # compute_expected_cap_limit <file> — mirrors the hook's own awk formula (see
@@ -622,8 +661,10 @@ rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
 expect_read_cap "large file, no offset/limit -> capped, limit clamped to 500" "$LARGE_FILE" "" "" "$LARGE_EXPECTED_LIMIT"
 assert_eq "large file expected limit is clamped to the 500-line ceiling" "500" "$LARGE_EXPECTED_LIMIT"
 
-# Group 3: silent cases -- no stdout at all.
+# Group 3: silent cases -- no stdout at all, including non-C# files over the budget.
 rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
+expect_no_read_cap "dense markdown file -> no cap" "$DENSE_MARKDOWN_FILE" "" ""
+expect_no_read_cap "dense text file -> no cap" "$DENSE_TEXT_FILE" "" ""
 expect_no_read_cap "small file (<2000 chars), no offset/limit -> no cap" "$SMALL_FILE" "" ""
 expect_no_read_cap "big file (500 lines, <2000 chars), no offset/limit -> no cap" "$BIG_FILE" "" ""
 expect_no_read_cap "missing file -> no cap" "$MISSING_FILE" "" ""

@@ -53,7 +53,7 @@ curl -fsSL https://raw.githubusercontent.com/paulouski/tk/main/install.sh | bash
 
 Downloads the latest `tk-osx-arm64` binary into `~/.local/bin/tk` and adds it to your PATH.
 
-Both installers also install global instruction blocks to `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`. Re-run the same command any time to update to the latest release.
+Both installers also run `tk init`, which installs global instruction blocks and the Codex LSP sandbox rules described below. Re-run the same command any time to update to the latest release.
 
 ### Build from source (development)
 
@@ -70,8 +70,16 @@ cd tk
 ```bash
 dotnet publish Tk.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o <your-bin-dir>
 # add <your-bin-dir> to PATH
-tk init   # optional: install global Claude + AGENTS instructions
+tk init   # optional: install agent instructions + Codex LSP sandbox rules
 ```
+
+### Codex sandbox and the LSP daemon
+
+Codex runs spawned commands inside its sandbox. Without an explicit rule, `tk` and its child LSP daemon inherit that sandbox and cannot create or connect to the daemon's Unix socket on macOS.
+
+`tk init` writes an idempotent managed block to `~/.codex/rules/tk-lsp.rules`. It allows read-only semantic commands (`def`, `refs`, `callers`, `calls`, `impl`, `sig`, `sym`, and `diag`), `tk lsp status|stop`, and the explicitly trusted workspace mutation commands `fix`, `rename`, and `mv` to run outside the sandbox without per-command approval. The direct and `--more`/`--raw` forms are covered. Existing Codex rule files are preserved.
+
+Restart Codex after the first `tk init` so it loads the new rule. See the official [Codex rules documentation](https://learn.chatgpt.com/docs/agent-configuration/rules) for the permission model.
 
 ## The gist
 
@@ -93,7 +101,7 @@ Full command reference, including all flags and the filter table: **[docs/COMMAN
 - `unity` — `tk unity tree|files|status`
 - `lsp` — semantic navigation: `tk refs`, `tk def`, `tk impl`, `tk callers`, `tk calls`, `tk sig`, `tk sym`, `tk diag`, `tk fix`, `tk rename`, `tk lsp status|stop`
 
-`tk module list|enable <name>|disable <name>` toggles a group. Disabling a module removes its commands and stops advertising it to your agents. Run `tk init` to (re)install/update the instruction blocks in `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, and `~/.config/opencode/AGENTS.md` — idempotent, safe to re-run.
+`tk module list|enable <name>|disable <name>` toggles a group. Disabling a module removes its commands and stops advertising it to your agents. Run `tk init` to (re)install/update the instruction blocks in `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, and `~/.config/opencode/AGENTS.md`, plus the managed Codex rules in `~/.codex/rules/tk-lsp.rules` — idempotent, safe to re-run.
 
 ## License
 

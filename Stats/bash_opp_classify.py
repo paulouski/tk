@@ -36,6 +36,7 @@ from bash_opp_shell import (
     _shell_control_marks,
     _split_on_shell_operators,
     _split_pipeline_parts,
+    _strip_heredoc_bodies,
     _strip_prefix,
     _subcommand,
 )
@@ -287,6 +288,7 @@ def _compound_rows(
 
 
 def _pipeline_suffixes(command: str) -> list[str]:
+    command = _strip_heredoc_bodies(command)
     parts = _split_pipeline_parts(command)
     suffixes = []
     for part in parts[1:]:

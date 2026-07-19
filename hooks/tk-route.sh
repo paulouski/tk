@@ -50,9 +50,9 @@ _log_decision() {
 }
 
 # _recently_nudged <decision> — throttle helper shared by the symbol-grep nudge
-# and the large-read nudge: true (0) if the last logged line for this exact
+# and the Edit-to-tk-write nudge: true (0) if the last logged line for this exact
 # <decision, session_id> pair is under 300s old, so a grep-heavy loop or a
-# repeated large read within one session doesn't get re-nudged on every call.
+# repeated large Edit within one session doesn't get re-nudged on every call.
 # Keyed by session_id (not just decision) so a nudge in one session never
 # suppresses a nudge in a different, freshly spawned session. An unreadable/
 # missing log means "not recently nudged" (just nudge).
@@ -91,10 +91,10 @@ _emit_nudge() {
     '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"allow",additionalContext:$ctx}}'
 }
 
-# Read auto-cap thresholds. READ_CAP_BYTES is the primary, char-based trigger: a whole-file
-# Read (no offset/limit) over this many chars gets capped to however many leading lines fit
-# the budget. READ_CAP_LINES is a secondary line ceiling clamping that computed limit, so a
-# file with extremely short lines can't produce a limit larger than this. Chosen from
+# C# Read auto-cap thresholds. READ_CAP_BYTES is the primary, char-based trigger: a whole-file
+# .cs Read (no offset/limit) over this many chars gets capped to however many leading lines
+# fit the budget. READ_CAP_LINES is a secondary line ceiling clamping that computed limit, so
+# a file with extremely short lines can't produce a limit larger than this. Chosen from
 # Stats/bash_opportunities.py --read-cost on tk 0.6.0 transcripts: of uncapped Read events
 # over 400 lines, a 500-line cutoff captures ~71% of their chars (36/60 events), well ahead
 # of 600 (~44%) or 700-800 (~22%) — the sharpest bulk-capture point in the 400-800 range.
@@ -107,11 +107,13 @@ _emit_read_cap() {
     '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"allow",updatedInput:{file_path:$fp,limit:$lim},additionalContext:$ctx}}'
 }
 
-# --- Read handling: cap large whole-file reads with no offset/limit at a char budget. ---
+# --- Read handling: cap large whole-file C# reads with no offset/limit at a char budget. ---
 if [[ "$tool" == "Read" ]]; then
   file_path=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
   offset=$(printf '%s' "$INPUT" | jq -r '.tool_input.offset // empty' 2>/dev/null)
   limit=$(printf '%s' "$INPUT" | jq -r '.tool_input.limit // empty' 2>/dev/null)
+
+  [[ "$file_path" =~ \.[cC][sS]$ ]] || exit 0
 
   if [[ -z "$offset" && -z "$limit" && -n "$file_path" && -f "$file_path" ]]; then
     bytes=$(wc -c < "$file_path" 2>/dev/null | tr -d '[:space:]')
@@ -124,7 +126,7 @@ if [[ "$tool" == "Read" ]]; then
         # Deterministic — not throttled: a cap must fire on every qualifying Read, not
         # just the first one per 300s window (unlike the nudges elsewhere in this hook).
         _log_decision "cap-read" "$file_path"
-        _emit_read_cap "$file_path" "$lim" "Read capped to ~2000 chars (${lim} lines) by tk-route (file is ${bytes} chars / ${lines} lines). For C# files run \`tk view <file>\` for a symbol map, then Read the needed offset/limit slice; use \`tk def|refs|callers|impl\` to jump to a symbol. Re-run with an explicit offset/limit to read more."
+        _emit_read_cap "$file_path" "$lim" "C# Read capped to ~2000 chars (${lim} lines) by tk-route (file is ${bytes} chars / ${lines} lines). Run \`tk view <file>\` for a symbol map, then Read the needed offset/limit slice; use \`tk def|refs|callers|impl\` to jump to a symbol. Re-run with an explicit offset/limit to read more."
       fi
     fi
   fi
@@ -248,6 +250,19 @@ _rewrite_segment() {
 
   [[ "$allow_rtk" -eq 1 ]] || return 1
 
+  # Record find forms that the rtk runtime rejects or silently changes. We
+  # confirm the rewrite actually targets `rtk find` below, so wrappers such as
+  # `command`, `env`, `sudo`, and VAR=value are covered without a wrapper parser.
+  local unsupported_find=0 find_word
+  _shell_words "$core"
+  for find_word in "${_words[@]}"; do
+    case "$find_word" in
+      -o|-or|-a|-and|-not|'!'|'('|')'|-exec|-execdir|-delete|-ls|-print0|-printf)
+        unsupported_find=1
+        ;;
+    esac
+  done
+
   # RTK FALLBACK: for anything not routed to tk above, ask rtk if it recognizes
   # the command. rtk exits 0 with the rewritten command on stdout if recognized,
   # or exits 1 with empty stdout otherwise. Skip entirely if rtk isn't installed.
@@ -255,6 +270,15 @@ _rewrite_segment() {
     local rewritten
     rewritten=$(rtk rewrite "$core" 2>/dev/null)
     if [[ $? -eq 0 && -n "$rewritten" ]]; then
+      if [[ "$unsupported_find" -eq 1 ]]; then
+        _shell_words "$rewritten"
+        local word_index
+        for (( word_index=0; word_index + 1 < ${#_words[@]}; word_index++ )); do
+          if [[ "${_words[word_index]}" == "rtk" && "${_words[word_index + 1]}" == "find" ]]; then
+            return 1
+          fi
+        done
+      fi
       _rewritten_segment="${leading}${rewritten}${trailing}"
       return 0
     fi

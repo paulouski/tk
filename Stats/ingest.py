@@ -30,6 +30,10 @@ from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
 from pricing import cost_for_usage, cost_tokens_by_type  # type: ignore[import]
+from bash_opp_shell import (  # type: ignore[import]
+    _split_on_shell_operators,
+    _strip_heredoc_bodies,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -152,24 +156,108 @@ def _is_tk_segment(tokens: list[str]) -> bool:
 
 def _split_command(cmd: str) -> list[list[str]]:
     """
-    Split a shell command string into segments (split on && / || / ;),
-    then tokenize each segment.  Returns a list of token-lists.
+    Split a shell command string on control operators and newlines, remove
+    redirections, then tokenize each segment. Returns a list of token-lists.
     """
-    # Replace logical/sequential separators with newlines, then split
-    # Order matters: || must be matched before | (alternation is left-to-right)
-    import re
-    parts = re.split(r"\s*(?:&&|\|\||;|\|)\s*", cmd)
-    segments = []
-    for part in parts:
-        part = part.strip()
+    segments: list[list[str]] = []
+    for part in _split_on_shell_operators(_strip_heredoc_bodies(cmd)):
+        part = _strip_shell_redirections(part).strip()
         if not part:
             continue
         try:
             tokens = shlex.split(part)
         except ValueError:
             tokens = part.split()
-        segments.append(tokens)
+        if tokens:
+            segments.append(tokens)
     return segments
+
+
+def _strip_shell_redirections(segment: str) -> str:
+    """Remove unquoted shell redirects while preserving quoted query operands."""
+    result: list[str] = []
+    quote = ""
+    escaped = False
+    i = 0
+    while i < len(segment):
+        ch = segment[i]
+        if escaped:
+            result.append(ch)
+            escaped = False
+            i += 1
+            continue
+        if ch == "\\" and quote != "'":
+            result.append(ch)
+            escaped = True
+            i += 1
+            continue
+        if quote:
+            result.append(ch)
+            if ch == quote:
+                quote = ""
+            i += 1
+            continue
+        if ch in {"'", '"'}:
+            quote = ch
+            result.append(ch)
+            i += 1
+            continue
+        if ch not in {"<", ">"}:
+            result.append(ch)
+            i += 1
+            continue
+
+        # Numeric text directly adjacent to the operator is a file descriptor.
+        token_start = len(result)
+        while token_start and not result[token_start - 1].isspace():
+            token_start -= 1
+        if token_start < len(result) and "".join(result[token_start:]).isdigit():
+            del result[token_start:]
+        if ch == ">" and i > 0 and segment[i - 1] == "&" and result:
+            backslashes = 0
+            source_index = i - 2
+            while source_index >= 0 and segment[source_index] == "\\":
+                backslashes += 1
+                source_index -= 1
+            if backslashes % 2 == 0 and result[-1] == "&":
+                result.pop()
+
+        if segment.startswith("<<<", i):
+            i += 3
+        elif i + 1 < len(segment) and segment[i + 1] in {ch, "&", ">"}:
+            i += 2
+        else:
+            i += 1
+        while i < len(segment) and segment[i].isspace():
+            i += 1
+
+        # Consume the redirect target as one shell word, including quoted paths.
+        target_quote = ""
+        target_escaped = False
+        while i < len(segment):
+            target = segment[i]
+            if target_escaped:
+                target_escaped = False
+                i += 1
+                continue
+            if target == "\\" and target_quote != "'":
+                target_escaped = True
+                i += 1
+                continue
+            if target_quote:
+                if target == target_quote:
+                    target_quote = ""
+                i += 1
+                continue
+            if target in {"'", '"'}:
+                target_quote = target
+                i += 1
+                continue
+            if target.isspace():
+                break
+            i += 1
+        result.append(" ")
+    return "".join(result)
 
 
 def _resolve_effective_cwd(segments: list[list[str]], tk_idx: int, session_cwd: str | None) -> str | None:
@@ -194,30 +282,27 @@ def _resolve_effective_cwd(segments: list[list[str]], tk_idx: int, session_cwd: 
         if os.path.isabs(path):
             result = path
         else:
-            if base:
-                result = os.path.normpath(os.path.join(base, path))
+            current = result or base
+            if current:
+                result = os.path.normpath(os.path.join(current, path))
             else:
                 result = path
     return result or None
 
 
-def _extract_tk_info(cmd: str, session_cwd: str | None = None) -> dict | None:
-    """
-    If this Bash command invokes tk, return parsed tk fields.
-    Returns None if not a tk invocation.
-    """
+def _extract_tk_invocations(cmd: str, session_cwd: str | None = None) -> list[dict]:
+    """Return every standalone tk segment in a Bash tool invocation."""
     segments = _split_command(cmd)
+    invocations: list[dict] = []
     for idx, tokens in enumerate(segments):
         if not _is_tk_segment(tokens):
             continue
-        tk_args = tokens[1:]  # everything after 'tk'
-        # Fix 1: strip leading --raw/--more before classifying
+        tk_args = tokens[1:]
         stripped_args, tk_detail = _strip_detail_flags(tk_args)
         command, sub, flags, operands, operand_values = _classify_tk(stripped_args)
-        # Fix 3: resolve effective cwd from preceding cd segments
         effective_cwd = _resolve_effective_cwd(segments, idx, session_cwd)
-        return {
-            "is_tk": True,
+        invocations.append({
+            "segment_index": idx,
             "tk_command": command,
             "tk_sub": sub,
             "tk_flags": flags,
@@ -225,8 +310,21 @@ def _extract_tk_info(cmd: str, session_cwd: str | None = None) -> dict | None:
             "tk_operand_values": operand_values,
             "tk_detail": tk_detail,
             "effective_cwd": effective_cwd,
-        }
-    return None
+        })
+    return invocations
+
+
+def _extract_tk_info(cmd: str, session_cwd: str | None = None) -> dict | None:
+    """Return compatibility fields for the first tk segment plus all segments."""
+    invocations = _extract_tk_invocations(cmd, session_cwd)
+    if not invocations:
+        return None
+    return {
+        "is_tk": True,
+        **invocations[0],
+        "tk_invocations": invocations,
+        "tk_invocation_count": len(invocations),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -578,6 +676,10 @@ def _parse_session(jsonl_path: Path, projects_dir: Path) -> dict | None:
     ts_start = min(ts_values) if ts_values else None
     ts_end = max(ts_values) if ts_values else None
     n_tk = sum(1 for e in events if e.get("is_tk"))
+    n_tk_invocations = sum(
+        e.get("tk_invocation_count", 1)
+        for e in events if e.get("is_tk")
+    )
 
     # Aggregate cost from per-turn records
     cost = _aggregate_cost(_turn_costs)
@@ -596,6 +698,7 @@ def _parse_session(jsonl_path: Path, projects_dir: Path) -> dict | None:
         "ts_end": ts_end,
         "n_events": len(events),
         "n_tk_events": n_tk,
+        "n_tk_invocations": n_tk_invocations,
         "cost": cost,
         "events": events,
     }
@@ -648,6 +751,10 @@ def load_sessions(from_dt: datetime | None = None, to_dt: datetime | None = None
             session["ts_end"] = max(ts_values) if ts_values else None
             session["n_events"] = len(session["events"])
             session["n_tk_events"] = sum(1 for e in session["events"] if e.get("is_tk"))
+            session["n_tk_invocations"] = sum(
+                e.get("tk_invocation_count", 1)
+                for e in session["events"] if e.get("is_tk")
+            )
         sessions.append(session)
     return sessions
 
@@ -669,11 +776,12 @@ def _top_commands(events: list[dict], n: int = 10) -> list[tuple[str, int]]:
     counts: Counter = Counter()
     for e in events:
         if e.get("is_tk"):
-            key = e.get("tk_command") or "(empty)"
-            sub = e.get("tk_sub")
-            if sub:
-                key = f"{key} {sub}"
-            counts[key] += 1
+            for invocation in (e.get("tk_invocations") or [e]):
+                key = invocation.get("tk_command") or "(empty)"
+                sub = invocation.get("tk_sub")
+                if sub:
+                    key = f"{key} {sub}"
+                counts[key] += 1
     return counts.most_common(n)
 
 

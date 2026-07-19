@@ -167,6 +167,19 @@ class EditWriteNudge(unittest.TestCase):
         self.assertEqual(iv["nudge_subtype"], "edit_write")
         self.assertTrue(iv["adopted"])
 
+    def test_secondary_tk_invocation_can_adopt_without_synthetic_event(self) -> None:
+        iv = _iv("nudge-edit-write", "/repo/Foo.cs", 1000.0)
+        event = _tk_nav_ev("diag", 1001.0)
+        event["tk_invocations"] = [
+            {"tk_command": "diag", "tk_operand_values": ["/repo"]},
+            {"tk_command": "write", "tk_operand_values": ["/repo/Foo.cs", "10-20"]},
+        ]
+        model = _model([_session("s1", [event])], [iv])
+
+        detect._detect_adoption(model)
+
+        self.assertTrue(iv["adopted"])
+
     def test_tk_write_different_file_not_adopted(self) -> None:
         iv = _iv("nudge-edit-write", "/repo/Foo.cs", 1000.0)
         model = _model([_session("s1", [_tk_write_ev("/repo/Bar.cs", 1001.0)])], [iv])

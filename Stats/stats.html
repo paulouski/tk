@@ -288,6 +288,10 @@ function render(m) {
   var oc = m.outcome_counts;
   var ag = m.aggregates;
   var sessions = m.sessions || [];
+  var ownLogMatched = ms.own_log_matched_events == null ? ms.matched : ms.own_log_matched_events;
+  var ownLogRate = ms.own_log_event_match_rate == null ? ms.match_rate : ms.own_log_event_match_rate;
+  var rawBaseline = ms.raw_baseline_events == null ? ms.matched : ms.raw_baseline_events;
+  var rawBaselineRate = ms.raw_baseline_event_rate == null ? ms.match_rate : ms.raw_baseline_event_rate;
 
   var out = '';
 
@@ -297,15 +301,18 @@ function render(m) {
     + '<div class="logo">tk<span class="sl">/</span><span class="cm">stats</span></div>'
     + '<div class="hdr-meta">' + rangeStr + '<br>'
     + sessions.length + ' session' + (sessions.length !== 1 ? 's' : '')
-    + ' &middot; ' + fmt(ms.total_tk_events) + ' tk events</div>'
+    + ' &middot; ' + fmt(ms.total_tk_events) + ' tk events'
+    + (ms.total_tk_invocations && ms.total_tk_invocations !== ms.total_tk_events
+      ? ' / ' + fmt(ms.total_tk_invocations) + ' invocations' : '') + '</div>'
     + '</header>';
 
   // ── Overview strip: match stats + outcome counts + savings
   var ocTotal = (oc.WIN || 0) + (oc.NEUTRAL || 0) + (oc.NET_NEGATIVE || 0) + (oc.UNKNOWN || 0);
   out += '<div class="overview">';
-  out += '<span class="ov-item">matched: <span class="ov-val">' + fmt(ms.matched) + '</span>/' + fmt(ms.total_tk_events)
-    + ' <span class="ov-sep">(</span>' + Math.round((ms.match_rate || 0) * 100) + '%<span class="ov-sep">)</span></span>';
-  out += '<span class="ov-item">unmatched: <span class="ov-val">' + fmt(ms.unmatched) + '</span></span>';
+  out += '<span class="ov-item">own-log: <span class="ov-val">' + fmt(ownLogMatched) + '</span>/' + fmt(ms.total_tk_events)
+    + ' <span class="ov-sep">(</span>' + Math.round((ownLogRate || 0) * 100) + '%<span class="ov-sep">)</span></span>';
+  out += '<span class="ov-item">raw baseline: <span class="ov-val">' + fmt(rawBaseline) + '</span>/' + fmt(ms.total_tk_events)
+    + ' <span class="ov-sep">(</span>' + Math.round((rawBaselineRate || 0) * 100) + '%<span class="ov-sep">)</span></span>';
   out += '<span class="ov-item">WIN: <span class="ov-ok">' + (oc.WIN || 0) + '</span></span>';
   out += '<span class="ov-item">NEU: <span style="color:var(--neu);font-weight:600;">' + (oc.NEUTRAL || 0) + '</span></span>';
   out += '<span class="ov-item">NEG: <span class="ov-err">' + (oc.NET_NEGATIVE || 0) + '</span></span>';

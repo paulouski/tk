@@ -7,19 +7,20 @@ MODEL="$SELF/result/model.json"
 OUT=$(mktemp /tmp/tk-stats-XXXXXX).html
 FILTERED_MODEL=$(mktemp /tmp/tk-stats-model-XXXXXX).json
 VERSION_FILTER="latest"
-REPORT_ARGS=()
+REPORT_ARGS=("--source" "all")
 
 usage() {
   cat <<'EOF'
-Usage: Stats/stats.sh [--version latest|all|<version>] [--source {claude,opencode,both}] [report.py args...]
+Usage: Stats/stats.sh [--version latest|all|<version>] [--source {claude,opencode,codex,both,all}] [report.py args...]
 
 Defaults to --version latest. Use --version all to inject the full model.
---source picks which transcript source the rebuilt model.json covers
-(default claude; pass both to merge claude+opencode).
+--source picks which transcript source the rebuilt model.json covers.
+Defaults to all; both means claude+opencode, all includes codex too.
 Examples:
   Stats/stats.sh
   Stats/stats.sh --version 0.6.0
   Stats/stats.sh --version all --source both --from 2026-07-01
+  Stats/stats.sh --version latest --source codex --from 2026-07-01
 EOF
 }
 
@@ -43,7 +44,7 @@ while [ "$#" -gt 0 ]; do
       ;;
     --source|-s)
       if [ "$#" -lt 2 ]; then
-        echo "Error: $1 requires a value: claude, opencode, or both." >&2
+        echo "Error: $1 requires a value: claude, opencode, codex, both, or all." >&2
         exit 1
       fi
       REPORT_ARGS+=("--source" "$2")

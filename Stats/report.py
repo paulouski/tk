@@ -22,7 +22,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from ingest import _parse_cli_dt  # type: ignore[import]
 from join import run_join  # type: ignore[import]
-from detect import annotate, _SEARCH_NAV_COMMANDS  # type: ignore[import]
+from detect import (  # type: ignore[import]
+    annotate,
+    _event_tk_invocations,
+    _SEARCH_NAV_COMMANDS,
+    _summarize_adoption,
+)
 from pricing import get_unknown_models  # type: ignore[import]
 
 
@@ -40,7 +45,8 @@ def _build_report(model: dict) -> dict:
 
     # -- by_command ----------------------------------------------------------
     cmd_stats: dict[str, dict] = defaultdict(lambda: {
-        "n": 0, "matched": 0, "win": 0, "neutral": 0, "net_negative": 0,
+        "n": 0, "own_log_matched": 0, "raw_baseline": 0,
+        "win": 0, "neutral": 0, "net_negative": 0,
         "empty_n": 0, "fallback_n": 0, "result_used_n": 0, "retry_n": 0,
         "sum_shown": 0, "sum_raw": 0, "n_shown": 0, "n_raw": 0,
         "symbol_grep_n": 0,
@@ -63,6 +69,9 @@ def _build_report(model: dict) -> dict:
     reread_chars_by_session: dict[str, int] = defaultdict(int)
     reread_total = 0
     reread_chars_total = 0
+    read_repeat_counts: Counter = Counter()
+    read_repeat_chars: Counter = Counter()
+    tk_invocation_counts: Counter = Counter()
 
     for session in sessions:
         at = session.get("agent_type", "unknown")
@@ -85,6 +94,8 @@ def _build_report(model: dict) -> dict:
         if rr:
             reread_by_session[sid] += rr
             reread_chars_by_session[sid] += rr_chars
+        read_repeat_counts.update(session.get("read_repeat_counts") or {})
+        read_repeat_chars.update(session.get("read_repeat_chars") or {})
 
         for ev in session.get("events", []):
             # symbol_grep is on ALL events (tk and native)
@@ -101,6 +112,13 @@ def _build_report(model: dict) -> dict:
             if not ev.get("is_tk"):
                 continue
 
+            for invocation in _event_tk_invocations(ev):
+                invocation_cmd = invocation.get("tk_command") or "(empty)"
+                invocation_sub = invocation.get("tk_sub")
+                if invocation_sub:
+                    invocation_cmd = f"{invocation_cmd} {invocation_sub}"
+                tk_invocation_counts[invocation_cmd] += 1
+
             cmd = ev.get("tk_command") or "(empty)"
             sub = ev.get("tk_sub")
             if sub:
@@ -112,16 +130,15 @@ def _build_report(model: dict) -> dict:
             outcome = ev.get("outcome", "UNKNOWN")
             if outcome == "WIN":
                 cs["win"] += 1
-                cs["matched"] += 1
             elif outcome == "NEUTRAL":
                 cs["neutral"] += 1
-                cs["matched"] += 1
             elif outcome == "NET_NEGATIVE":
                 cs["net_negative"] += 1
-                cs["matched"] += 1
-            # UNKNOWN with raw_chars present is still matched
-            elif ev.get("raw_chars") is not None:
-                cs["matched"] += 1
+
+            if ev.get("own_log_matched", ev.get("raw_chars") is not None):
+                cs["own_log_matched"] += 1
+            if ev.get("raw_chars") is not None:
+                cs["raw_baseline"] += 1
 
             if ev.get("empty_result"):
                 cs["empty_n"] += 1
@@ -163,7 +180,9 @@ def _build_report(model: dict) -> dict:
             "avg_raw_chars": round(cs["sum_raw"] / cs["n_raw"]) if cs["n_raw"] else None,
         }
         if is_search_nav:
-            row["matched"] = cs["matched"]
+            row["matched"] = cs["own_log_matched"]
+            row["own_log_matched"] = cs["own_log_matched"]
+            row["raw_baseline"] = cs["raw_baseline"]
             row["win"] = cs["win"]
             row["neutral"] = cs["neutral"]
             row["net_negative"] = cs["net_negative"]
@@ -268,6 +287,14 @@ def _build_report(model: dict) -> dict:
     reread_block = {
         "total": reread_total,
         "chars_total": reread_chars_total,
+        "by_kind": {
+            kind: {
+                "n": read_repeat_counts.get(kind, 0),
+                "chars": read_repeat_chars.get(kind, 0),
+            }
+            for kind in ("exact_slice_repeat", "whole_file_repeat", "different_slice")
+        },
+        "same_path_total": sum(read_repeat_counts.values()),
         "top_sessions": [{"session_id": sid, "n": n} for sid, n in top_reread_sessions],
         "top_sessions_by_chars": [
             {"session_id": sid, "chars": c} for sid, c in top_reread_chars_sessions
@@ -348,36 +375,7 @@ def _build_report(model: dict) -> dict:
     by_version.sort(key=lambda x: _ver_sort_key(x["version"]))
     by_version.reverse()
 
-    # -- adoption (S4: post-hook adoption stats) ------------------------------
-    # Interventions live in a flat, model-level list (see detect.py
-    # _detect_adoption for why: session dicts are one-per-transcript-file and
-    # can repeat a session_id, so per-session iteration would double-count).
-    adoption_stats: dict[str, dict] = defaultdict(lambda: {"n_interventions": 0, "n_adopted": 0})
-    auto_routed_n = 0
-    for iv in model.get("interventions") or []:
-        decision = iv.get("decision")
-        if decision in ("route-tk", "route-rtk"):
-            auto_routed_n += 1
-            continue
-        if decision not in ("cap-read", "nudge", "nudge-edit-write"):
-            continue
-        subtype = iv.get("nudge_subtype") or decision
-        st = adoption_stats[subtype]
-        st["n_interventions"] += 1
-        if iv.get("adopted"):
-            st["n_adopted"] += 1
-
-    adoption_block = {
-        "by_subtype": {
-            subtype: {
-                "n_interventions": st["n_interventions"],
-                "n_adopted": st["n_adopted"],
-                "rate": round(st["n_adopted"] / st["n_interventions"], 4) if st["n_interventions"] else 0.0,
-            }
-            for subtype, st in sorted(adoption_stats.items())
-        },
-        "auto_routed": {"n": auto_routed_n},
-    }
+    adoption_block = _summarize_adoption(model)
 
     return {
         "range": {
@@ -391,6 +389,13 @@ def _build_report(model: dict) -> dict:
             "tk_events": ms["total_tk_events"],
             "matched": ms["matched"],
             "match_rate": ms["match_rate"],
+            "own_log_matched_events": ms.get("own_log_matched_events", ms["matched"]),
+            "own_log_event_match_rate": ms.get("own_log_event_match_rate", ms["match_rate"]),
+            "raw_baseline_events": ms.get("raw_baseline_events", ms["matched"]),
+            "raw_baseline_event_rate": ms.get("raw_baseline_event_rate", ms["match_rate"]),
+            "tk_invocations": ms.get("total_tk_invocations", ms["total_tk_events"]),
+            "own_log_matched_invocations": ms.get("own_log_matched_invocations", ms["matched"]),
+            "raw_baseline_invocations": ms.get("raw_baseline_invocations", ms["matched"]),
             "retry_total": retry_total,
             "symbol_grep_total": sg_total,
             "native_grep_retry_total": ngr_total,
@@ -409,6 +414,13 @@ def _build_report(model: dict) -> dict:
         "by_command": by_command,
         "by_agent_type": by_agent_type,
         "by_version": by_version,
+        "tk_invocations": {
+            "total": sum(tk_invocation_counts.values()),
+            "by_command": [
+                {"command": command, "n": n}
+                for command, n in tk_invocation_counts.most_common()
+            ],
+        },
         "adoption": adoption_block,
         "findings": findings,
     }
@@ -462,12 +474,17 @@ def _print_summary(report: dict) -> None:
     at = rng.get("actual_to") or "?"
     print(f"Range:         {af[:10]} -> {at[:10]}")
     print(f"Sessions:      {t['sessions']}")
-    print(f"tk events:     {t['tk_events']}  (matched {t['matched']}, rate {t['match_rate']*100:.1f}%)")
+    print(
+        f"tk events:     {t['tk_events']}  "
+        f"(own-log {t['own_log_matched_events']}, {t['own_log_event_match_rate']*100:.1f}%; "
+        f"raw baseline {t['raw_baseline_events']}, {t['raw_baseline_event_rate']*100:.1f}%)"
+    )
+    print(f"tk invocations:{t['tk_invocations']:>7}")
     print(f"Outcomes:      WIN={oc['WIN']}  NEU={oc.get('NEUTRAL', 0)}  NET_NEG={oc['NET_NEGATIVE']}  UNK={oc['UNKNOWN']}")
     print(f"Savings:       saved={sv['win_saved_chars']:,}  extra={sv['net_negative_extra_chars']:,}  net={sv['net_chars']:,}")
     print()
 
-    print("Top commands:")
+    print("Top primary event commands:")
     for c in report["by_command"][:5]:
         parts = [f"n={c['n']}"]
         if c.get("win"):
@@ -487,6 +504,11 @@ def _print_summary(report: dict) -> None:
         print(f"  {c['command']:20s} {', '.join(parts)}")
     print()
 
+    print("Top tk invocations:")
+    for item in (report.get("tk_invocations") or {}).get("by_command", [])[:5]:
+        print(f"  {item['command']:20s} n={item['n']}")
+    print()
+
     sg = report.get("symbol_grep") or {}
     if sg.get("total"):
         print(f"Symbol greps:  {sg['total']} total (nav gap baseline)")
@@ -503,7 +525,11 @@ def _print_summary(report: dict) -> None:
 
     rr = report.get("reread") or {}
     if rr.get("total"):
-        print(f"Rereads:       {rr['total']} total, {rr['chars_total']:,} chars")
+        kinds = rr.get("by_kind") or {}
+        print(
+            f"Exact rereads: {rr['total']} total, {rr['chars_total']:,} chars "
+            f"(different slices {kinds.get('different_slice', {}).get('n', 0)})"
+        )
         for item in (rr.get("top_sessions") or [])[:3]:
             print(f"  session {item['session_id'][:8]}  n={item['n']}")
     print()
@@ -589,9 +615,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Build annotated model + compact report")
     parser.add_argument("--from", dest="from_dt", metavar="ISO")
     parser.add_argument("--to", dest="to_dt", metavar="ISO")
-    parser.add_argument("--source", dest="source", choices=("claude", "opencode", "both"),
+    parser.add_argument(
+        "--source", dest="source",
+        choices=("claude", "opencode", "codex", "both", "all"),
                         default="claude",
-                        help="Data source: claude (default), opencode, or both")
+        help="Data source: claude (default), opencode, codex, both, or all",
+    )
     args = parser.parse_args()
 
     from_dt = _parse_cli_dt(args.from_dt) if args.from_dt else None

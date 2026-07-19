@@ -2,7 +2,7 @@
 
 Two Claude Code `PreToolUse` hooks:
 
-- **`tk-route.sh`** (matcher `Bash|Read`) routes Bash calls through `tk` (or, as a
+- **`tk-route.sh`** (matcher `Bash|Read|Edit`) routes Bash calls through `tk` (or, as a
   fallback, `rtk`) for compact output — both single commands and, conservatively,
   compound commands — and nudges grep-for-symbol toward semantic navigation.
 - **`tk-agent-preamble.sh`** (matcher `Task`) appends a short tk cheat-sheet to every
@@ -55,29 +55,25 @@ Plus one opencode plugin (TypeScript):
 - **Falls back to `rtk`**: any other safe, single command not covered above is offered
   to `rtk rewrite <cmd>` (if `rtk` is installed on PATH). If `rtk` recognizes it, the
   rewritten command replaces the original; if `rtk` doesn't recognize it (exit 1) or
-  isn't installed, the command passes through unchanged.
+  isn't installed, the command passes through unchanged. Compound `find` expressions
+  using `-o`/`-or`, explicit `-a`/`-and`, `-not`/`!`, or parentheses stay native because
+  the current `rtk find` runtime rejects those forms after accepting the rewrite. The
+  same guard covers unsupported or shape-changing actions such as `-exec`, `-execdir`,
+  `-delete`, `-ls`, `-print0`, and `-printf`, including wrapped `command`/`env`/`sudo`
+  invocations.
 - **Nudges** grep/egrep/fgrep/rg commands that look like a symbol search — either the
   `class|record|interface|enum|struct <Identifier>` keyword shape, or a bare
   alternation of two capitalized identifiers (`"FooService\|BarService"` /
   `"FooService|BarService"`) — with a hint to prefer semantic symbol navigation. This
   does not modify the command (`additionalContext` only), so it fires even for
   compound/unsafe commands that are never rewritten.
-- **Nudges large whole-file `Read`s**: a `Read` with no `offset`/`limit` on a regular
-  file over 400 lines (but at or under the 500-line cap below) gets an
-  `additionalContext` hint to locate the relevant slice first (codebase-memory
-  `get_code_snippet`, `tk def <Symbol>`, or `tk view <file>`) and then re-read just
-  that range. The command/input is never modified. Throttled (see below).
-- **Caps large whole-file `Read`s over 500 lines**: a `Read` with no `offset`/`limit`
-  on a regular file over 500 lines gets `updatedInput.limit` set to 500, so the call
-  actually returns only the first 500 lines instead of the whole file, plus an
-  `additionalContext` hint to continue with explicit `offset`/`limit` or to locate the
-  relevant slice first. Unlike the nudge above, this is deterministic — it fires on
-  every qualifying call, not throttled — and it's the one case where `tk-route.sh`
-  rewrites a `Read`'s input rather than only attaching a hint. 500 lines was chosen
-  from `Stats/bash_opportunities.py --read-cost` data on real transcripts: of uncapped
-  `Read`s over 400 lines, a 500-line cutoff captures the bulk (~71%) of their chars.
-  Any `Read` with an explicit `offset` or `limit` is left completely untouched by
-  both the nudge and the cap.
+- **Caps large whole-file C# `Read`s over 2000 chars**: a `Read` with no
+  `offset`/`limit` on a regular `.cs` file over the character budget gets
+  `updatedInput.limit` set to however many leading lines fit about 2000 chars, clamped
+  to 500 lines. It also gets an `additionalContext` hint to continue with explicit
+  `offset`/`limit` or locate the relevant slice first. The cap is deterministic and
+  fires on every qualifying call. Any `Read` with an explicit `offset` or `limit` is
+  left untouched.
 
 ## Safety
 
@@ -118,8 +114,8 @@ Plus one opencode plugin (TypeScript):
 `tk` is a global tool (its guidance lives in `~/.claude/CLAUDE.md`), so the hooks
 that enforce that guidance belong in your **global** settings too. Install each
 once, in one place — do not enable a hook both globally and per-project, or it
-fires twice per command. The tk-route matcher must be `Bash|Read` — a matcher of
-just `Bash` will silently skip the large-file-read nudge and cap below. The
+fires twice per command. The tk-route matcher must be `Bash|Read|Edit` — a matcher of
+just `Bash` will silently skip the read cap and Edit nudge below. The
 agent-preamble hook uses its own entry with matcher `Task`.
 
 ### Recommended — Global (all repos)
@@ -130,7 +126,7 @@ Add to `~/.claude/settings.json`, using absolute paths to the scripts:
 "hooks": {
   "PreToolUse": [
     {
-      "matcher": "Bash|Read",
+      "matcher": "Bash|Read|Edit",
       "hooks": [
         {
           "type": "command",
@@ -182,13 +178,10 @@ attribute the action to a repo:
   `rtk docker ps`)
 - `nudge` — symbol-grep was detected and the hint was emitted (additionalContext only;
   the command itself is not changed, and this can fire on unsafe/compound commands too)
-- `nudge-read` — a large whole-file `Read` (no `offset`/`limit`, file over 400 lines,
-  at or under the 500-line cap) was detected and the hint was emitted (additionalContext
-  only; the `command` column holds the file path instead of a shell command). Throttled
-  independently of `nudge`.
-- `cap-read` — a whole-file `Read` (no `offset`/`limit`, file over 500 lines) was
-  capped: `updatedInput.limit` was set to 500 and the hint was emitted (the `command`
-  column holds the file path). Not throttled — logged on every qualifying call.
+- `cap-read` — a whole-file `.cs` `Read` (no `offset`/`limit`, file over 2000 chars) was
+  capped to the leading lines fitting the character budget, with a 500-line ceiling;
+  the `command` column holds the file path. Not throttled — logged on every qualifying
+  call.
 
 Skip-throughs (no match, compound/unsafe commands, `rtk` declining a command, etc.) are
 not logged; only the active cases above are recorded. The log is append-only and safe to
@@ -205,19 +198,12 @@ and nothing deletes it; any tooling that mines hook-log history across days need
   first, and `tk def|refs|callers` as the fallback when MCP is unavailable or the repo
   isn't indexed — since either one resolves cross-file and crosses interface dispatch,
   unlike a text grep for `class X`.
-- **Large-read nudge**: when a `Read` has no `offset`/`limit` and the target file is a
-  regular file over 400 lines (and at or under the 500-line cap), the
-  `additionalContext` suggests locating the relevant slice first (codebase-memory
-  `get_code_snippet`, `tk def <Symbol>`, or `tk view <file>` for a structure map) and
-  then re-reading just that range with `offset`/`limit`. A full read is still correct
-  when editing or reviewing the whole file; this only nudges, it never blocks or
-  rewrites the `Read` input.
 - **Large-read cap**: when a `Read` has no `offset`/`limit` and the target file is a
-  regular file over 500 lines, `updatedInput.limit` is set to 500 so the call actually
-  returns only the first 500 lines, and the `additionalContext` explains the file was
-  capped and how to continue (explicit `offset`/`limit`, or locate the slice first).
+  regular `.cs` file over 2000 chars, `updatedInput.limit` is set to however many leading
+  lines fit about 2000 chars, clamped to 500 lines. The `additionalContext` explains
+  the cap and how to continue (explicit `offset`/`limit`, or locate the slice first).
   Escape hatch: pass an explicit `offset` or `limit` on the `Read` call and it is left
-  completely untouched by both the nudge and the cap.
+  completely untouched by the cap.
 
 ## The agent preamble (tk-agent-preamble.sh)
 
@@ -225,8 +211,9 @@ For every `Task` tool call (spawning a subagent), the hook appends a six-line
 `[tk cheat-sheet]` block to the subagent's prompt via `updatedInput`: symbol lookup
 with `tk def|refs|callers|impl` (never grep for symbols), `tk diag` after `.cs`
 edits, run noisy commands bare (no defensive piping — the router compacts them),
-escalate with `tk --more`/`--raw`, `tk mv` for file moves, and reading big files in
-offset/limit slices (the tk-route.sh 500-line Read cap above). Idempotent: a prompt
+escalate with `tk --more`/`--raw`, `tk mv` for file moves, and reading big C# files in
+offset/limit slices (the tk-route.sh roughly 2000-character Read cap above, with a
+500-line ceiling). Idempotent: a prompt
 already containing the `[tk cheat-sheet]` marker is left untouched, so nothing
 double-appends. Non-`Task` tools, missing/empty prompts, and unparsable input all
 exit as silent no-ops — same degrade-to-no-op philosophy as the router.

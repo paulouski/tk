@@ -11,14 +11,12 @@ namespace Tk.Tests.Modules;
 [Collection("HomeSensitive")]
 public class InitCommandModuleTests
 {
-    private static async Task<string> RunInitAndRead(IReadOnlyList<ModuleDescriptor> enabledModules, string relativePath)
+    private static async Task RunInit(IReadOnlyList<ModuleDescriptor> enabledModules, string home)
     {
-        var tempHome = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-        Directory.CreateDirectory(tempHome);
         var origHome = Environment.GetEnvironmentVariable("HOME");
         try
         {
-            Environment.SetEnvironmentVariable("HOME", tempHome);
+            Environment.SetEnvironmentVariable("HOME", home);
 
             var stdout = new StringWriter();
             var stderr = new StringWriter();
@@ -26,14 +24,27 @@ public class InitCommandModuleTests
                 new FakeProcessRunner());
 
             var cmd = new InitCommand(enabledModules);
-            await cmd.RunAsync(ctx);
+            Assert.Equal(0, await cmd.RunAsync(ctx));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("HOME", origHome);
+        }
+    }
+
+    private static async Task<string> RunInitAndRead(IReadOnlyList<ModuleDescriptor> enabledModules, string relativePath)
+    {
+        var tempHome = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(tempHome);
+        try
+        {
+            await RunInit(enabledModules, tempHome);
 
             var path = Path.Combine(tempHome, relativePath);
             return File.Exists(path) ? File.ReadAllText(path) : "";
         }
         finally
         {
-            Environment.SetEnvironmentVariable("HOME", origHome);
             Directory.Delete(tempHome, recursive: true);
         }
     }
@@ -113,5 +124,36 @@ public class InitCommandModuleTests
 
         Assert.Contains("tk Global Agent Preset", content);
         Assert.Contains("tk changes", content);
+    }
+
+    [Fact]
+    public async Task Codex_lsp_rules_are_idempotent_and_preserve_user_content()
+    {
+        var tempHome = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        var rulesPath = Path.Combine(tempHome, ".codex", "rules", "tk-lsp.rules");
+        Directory.CreateDirectory(Path.GetDirectoryName(rulesPath)!);
+        File.WriteAllText(rulesPath, "# user rule\n");
+
+        try
+        {
+            await RunInit(ModuleCatalog.All, tempHome);
+            var first = File.ReadAllText(rulesPath);
+
+            await RunInit(ModuleCatalog.All, tempHome);
+            var second = File.ReadAllText(rulesPath);
+
+            Assert.Equal(first, second);
+            Assert.StartsWith("# user rule", second);
+            Assert.Contains("# tk-lsp-sandbox:start", second);
+            Assert.Contains("pattern=[\"tk\", [\"def\", \"refs\", \"callers\", \"calls\", \"impl\", \"sig\", \"sym\", \"diag\"]]", second);
+            Assert.Contains("pattern=[\"tk\", \"lsp\", [\"status\", \"stop\"]]", second);
+            Assert.Contains("pattern=[\"tk\", [\"fix\", \"rename\", \"mv\"]]", second);
+            Assert.Contains("pattern=[\"tk\", [\"--more\", \"--raw\"], [\"fix\", \"rename\", \"mv\"]]", second);
+            Assert.Equal(1, second.Split("# tk-lsp-sandbox:start").Length - 1);
+        }
+        finally
+        {
+            Directory.Delete(tempHome, recursive: true);
+        }
     }
 }

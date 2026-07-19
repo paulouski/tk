@@ -112,7 +112,80 @@ class StealthRead(unittest.TestCase):
         self.assertFalse(ev["stealth_read"])
 
 
+class ReadRepeatKinds(unittest.TestCase):
+    @staticmethod
+    def _read(path: str, offset=None, limit=None, shown: int = 100) -> dict:
+        return {
+            "tool": "Read",
+            "is_tk": False,
+            "tool_input_summary": path,
+            "read_offset": offset,
+            "read_limit": limit,
+            "shown_chars": shown,
+        }
+
+    def test_exact_slice_different_slice_and_whole_file_are_distinct(self) -> None:
+        events = [
+            self._read("Foo.cs", offset=1, limit=100),
+            self._read("Foo.cs", offset=101, limit=100),
+            self._read("Foo.cs", offset=1, limit=100),
+            self._read("Bar.cs"),
+            self._read("Bar.cs"),
+        ]
+
+        detect._detect_reread(events)
+
+        self.assertEqual(events[1]["read_repeat_kind"], "different_slice")
+        self.assertFalse(events[1]["reread"])
+        self.assertEqual(events[2]["read_repeat_kind"], "exact_slice_repeat")
+        self.assertTrue(events[2]["reread"])
+        self.assertEqual(events[4]["read_repeat_kind"], "whole_file_repeat")
+        self.assertTrue(events[4]["reread"])
+
+    def test_rollup_keeps_repeat_kind_counts(self) -> None:
+        events = [
+            self._read("Foo.cs", offset=1, limit=100),
+            self._read("Foo.cs", offset=101, limit=100, shown=200),
+            self._read("Foo.cs", offset=101, limit=100, shown=300),
+        ]
+        detect._detect_reread(events)
+        session = {"events": events}
+
+        detect._rollup_session(session)
+
+        self.assertEqual(session["n_reread"], 1)
+        self.assertEqual(session["read_repeat_counts"]["different_slice"], 1)
+        self.assertEqual(session["read_repeat_counts"]["exact_slice_repeat"], 1)
+        self.assertEqual(session["read_repeat_chars"]["different_slice"], 200)
+
 class ResultUsedEdit(unittest.TestCase):
+    def test_codex_exact_bash_read_marks_result_used(self) -> None:
+        events = [
+            _tk_ev("def", ["Foo"]),
+            _bash_ev("sed -n 1,20p src/Foo.cs"),
+        ]
+
+        detect._detect_stealth_read(events)
+        detect._detect_fallback(events)
+
+        self.assertTrue(events[0]["result_used"])
+        self.assertTrue(events[0]["result_used_same_target"])
+
+    def test_codex_code_snippet_marks_result_used(self) -> None:
+        events = [
+            _tk_ev("def", ["Foo"]),
+            {
+                "tool": "Exec",
+                "is_tk": False,
+                "tool_input_summary": "mcp__codebase_memory_mcp__get_code_snippet",
+                "nested_tools": ["mcp__codebase_memory_mcp__get_code_snippet"],
+            },
+        ]
+
+        detect._detect_fallback(events)
+
+        self.assertTrue(events[0]["result_used"])
+
     def test_edit_in_next_three_marks_result_used_edit(self) -> None:
         events = [
             _tk_ev("def", ["Foo"]),

@@ -38,7 +38,24 @@ public class DaemonClientSocketTests
         var listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
         listener.Bind(new UnixDomainSocketEndPoint(socketPath));
         listener.Listen(1);
+        DaemonSocket.WritePidInfo(
+            DaemonSocket.GetPidPath(workspaceRoot),
+            new DaemonPidInfo(Environment.ProcessId, null));
         return listener;
+    }
+
+    private static void CleanupDaemonState(string workspaceRoot)
+    {
+        foreach (var path in new[]
+                 {
+                     DaemonSocket.GetSocketPath(workspaceRoot),
+                     DaemonSocket.GetPidPath(workspaceRoot),
+                     DaemonSocket.GetSocketPath(workspaceRoot) + ".lock"
+                 })
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
     }
 
     /// <summary>Accepts exactly one connection, reads one JSON request line, hands it to
@@ -64,7 +81,6 @@ public class DaemonClientSocketTests
     {
         var root = NewWorkspaceRoot();
         using var listener = BindFakeDaemon(root);
-        var socketPath = DaemonSocket.GetSocketPath(root);
 
         try
         {
@@ -95,8 +111,7 @@ public class DaemonClientSocketTests
         finally
         {
             listener.Close();
-            if (File.Exists(socketPath))
-                File.Delete(socketPath);
+            CleanupDaemonState(root);
         }
     }
 
@@ -105,7 +120,6 @@ public class DaemonClientSocketTests
     {
         var root = NewWorkspaceRoot();
         using var listener = BindFakeDaemon(root);
-        var socketPath = DaemonSocket.GetSocketPath(root);
 
         try
         {
@@ -125,8 +139,7 @@ public class DaemonClientSocketTests
         finally
         {
             listener.Close();
-            if (File.Exists(socketPath))
-                File.Delete(socketPath);
+            CleanupDaemonState(root);
         }
     }
 
@@ -135,7 +148,6 @@ public class DaemonClientSocketTests
     {
         var root = NewWorkspaceRoot();
         using var listener = BindFakeDaemon(root);
-        var socketPath = DaemonSocket.GetSocketPath(root);
 
         try
         {
@@ -159,8 +171,56 @@ public class DaemonClientSocketTests
         finally
         {
             listener.Close();
-            if (File.Exists(socketPath))
-                File.Delete(socketPath);
+            CleanupDaemonState(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    public async Task SendAsync_replaces_orphaned_state_and_retries_with_fresh_daemon(
+        bool withStaleSocket,
+        bool withDeadPid)
+    {
+        var root = NewWorkspaceRoot();
+        var socketPath = DaemonSocket.GetSocketPath(root);
+        var pidPath = DaemonSocket.GetPidPath(root);
+        Directory.CreateDirectory(Path.GetDirectoryName(socketPath)!);
+        if (withStaleSocket)
+            File.WriteAllText(socketPath, "stale socket");
+        if (withDeadPid)
+            DaemonSocket.WritePidInfo(pidPath, new DaemonPidInfo(int.MaxValue - 1, null));
+
+        Socket? replacementListener = null;
+        Task<string>? serverTask = null;
+        var spawnCount = 0;
+
+        try
+        {
+            Task<bool> SpawnFakeDaemon(string workspaceRoot, string _, CancellationToken __)
+            {
+                spawnCount++;
+                replacementListener = BindFakeDaemon(workspaceRoot);
+                serverTask = RunFakeDaemonOnceAsync(replacementListener,
+                    _ => new DaemonResponse(true, null, [new LspLocation("file:///fresh.cs", 1, 0, 1, 5)]));
+                return Task.FromResult(true);
+            }
+
+            var request = new DaemonRequest("refs", "/fresh.cs", 1, 0, "Fresh");
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            var response = await DaemonClient.SendAsync(root, request, cts.Token, SpawnFakeDaemon);
+
+            Assert.NotNull(serverTask);
+            await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(1, spawnCount);
+            Assert.True(response.Success);
+            Assert.Equal("file:///fresh.cs", Assert.Single(response.Locations!).Uri);
+        }
+        finally
+        {
+            replacementListener?.Close();
+            CleanupDaemonState(root);
         }
     }
 }

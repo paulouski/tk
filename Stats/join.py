@@ -27,6 +27,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from config import MATCH_WINDOW
 from ingest import load_sessions, _parse_ts, _parse_cli_dt  # type: ignore[import]
+from ingest_codex import load_sessions as _load_codex_sessions  # type: ignore[import]
 from ingest_hooklog import load_interventions  # type: ignore[import]
 from ingest_opencode import load_sessions as _load_oc_sessions  # type: ignore[import]
 from pricing import cost_tokens_by_type, get_unknown_models, is_known_model  # type: ignore[import]
@@ -301,9 +302,10 @@ def _build_groups(session_models: list[dict]) -> list[dict]:
                 return set()
             ops: set[str] = set()
             for ev in sm.get("events") or []:
-                for op in (ev.get("tk_operand_values") or []):
-                    if op:
-                        ops.add(op)
+                for invocation in (ev.get("tk_invocations") or [ev]):
+                    for op in (invocation.get("tk_operand_values") or []):
+                        if op:
+                            ops.add(op)
             return ops
 
         if main_sm and subs:
@@ -396,16 +398,26 @@ def run_join(
     """
     Load sessions + own-log, join, classify outcomes, return the full model dict.
 
-    source: "claude" (default), "opencode", or "both".
+    source: "claude" (default), "opencode", "codex", "both", or "all".
     """
     if source == "claude":
         sessions = load_sessions(from_dt, to_dt)
     elif source == "opencode":
         sessions = _load_oc_sessions(from_dt, to_dt)
+    elif source == "codex":
+        sessions = _load_codex_sessions(from_dt, to_dt)
     elif source == "both":
         sessions = load_sessions(from_dt, to_dt) + _load_oc_sessions(from_dt, to_dt)
+    elif source == "all":
+        sessions = (
+            load_sessions(from_dt, to_dt)
+            + _load_oc_sessions(from_dt, to_dt)
+            + _load_codex_sessions(from_dt, to_dt)
+        )
     else:
-        raise ValueError(f"Unknown source: {source!r} (expected claude|opencode|both)")
+        raise ValueError(
+            f"Unknown source: {source!r} (expected claude|opencode|codex|both|all)"
+        )
     own_log = load_own_log()
     index = _build_own_log_index(own_log)
 
@@ -418,10 +430,23 @@ def run_join(
     # session_id itself, against that session_id's events merged across every
     # file that shares it. Sessions from a non-Claude source (opencode)
     # simply get no matches (different session_id namespace).
-    interventions = load_interventions(from_dt, to_dt)
+    interventions = (
+        load_interventions(from_dt, to_dt)
+        if source in ("claude", "both", "all")
+        else []
+    )
+    for intervention in interventions:
+        ts_epoch = intervention.get("ts_epoch")
+        if ts_epoch is not None:
+            ts = datetime.fromtimestamp(ts_epoch, tz=timezone.utc).isoformat()
+            intervention["tk_version"] = _infer_version(ts)
 
     total_tk = 0
     matched = 0
+    raw_baseline_events = 0
+    total_tk_invocations = 0
+    matched_invocations = 0
+    raw_baseline_invocations = 0
     outcome_counts: dict[str, int] = {"WIN": 0, "NEUTRAL": 0, "NET_NEGATIVE": 0, "UNKNOWN": 0}
     agg_raw_win = 0
     agg_shown_win = 0
@@ -454,29 +479,60 @@ def run_join(
     tk_enriched: dict[int, dict] = {}  # id(original event) -> enriched ev
     for session, event in tk_events_ordered:
         total_tk += 1
-        match = _find_match(event, index, used)
-
         ev = {k: v for k, v in event.items() if k != "tool_use_id"}  # Fix 6
-        if match:
+        invocations = event.get("tk_invocations") or [{
+            key: event.get(key)
+            for key in (
+                "tk_command", "tk_sub", "tk_flags", "tk_operands",
+                "tk_operand_values", "tk_detail", "effective_cwd",
+            )
+        }]
+        enriched_invocations: list[dict] = []
+        for invocation in invocations:
+            total_tk_invocations += 1
+            match_event = {**event, **invocation}
+            match = _find_match(match_event, index, used)
+            child = dict(invocation)
+            child["own_log_matched"] = match is not None
+            if match:
+                matched_invocations += 1
+                used.add(id(match))
+                child["raw_chars"] = match.get("rawChars")
+                child["raw_lines"] = match.get("rawLines")
+                child["shown_chars_ownlog"] = match.get("shownChars")
+                child["duration_ms"] = match.get("durationMs")
+                child["exit"] = match.get("exit")
+                child["detail"] = match.get("detail")
+                child["tk_version"] = match.get("tkVersion") or _infer_version(event.get("ts"))
+                child["result_count"] = match.get("resultCount")
+            else:
+                child["raw_chars"] = None
+                child["raw_lines"] = None
+                child["shown_chars_ownlog"] = None
+                child["duration_ms"] = None
+                child["exit"] = None
+                child["detail"] = None
+                child["tk_version"] = _infer_version(event.get("ts"))
+                child["result_count"] = None
+            child["raw_baseline_available"] = child["raw_chars"] is not None
+            if child["raw_baseline_available"]:
+                raw_baseline_invocations += 1
+            child["outcome"] = _outcome(child)
+            enriched_invocations.append(child)
+
+        primary = enriched_invocations[0]
+        ev["tk_invocations"] = enriched_invocations
+        ev["tk_invocation_count"] = len(enriched_invocations)
+        for key in (
+            "raw_chars", "raw_lines", "shown_chars_ownlog", "duration_ms", "exit",
+            "detail", "tk_version", "result_count", "own_log_matched",
+            "raw_baseline_available",
+        ):
+            ev[key] = primary.get(key)
+        if ev["own_log_matched"]:
             matched += 1
-            used.add(id(match))  # Fix 2: mark consumed
-            ev["raw_chars"] = match.get("rawChars")
-            ev["raw_lines"] = match.get("rawLines")
-            ev["shown_chars_ownlog"] = match.get("shownChars")
-            ev["duration_ms"] = match.get("durationMs")
-            ev["exit"] = match.get("exit")
-            ev["detail"] = match.get("detail")
-            ev["tk_version"] = match.get("tkVersion") or _infer_version(event.get("ts"))
-            ev["result_count"] = match.get("resultCount")
-        else:
-            ev["raw_chars"] = None
-            ev["raw_lines"] = None
-            ev["shown_chars_ownlog"] = None
-            ev["duration_ms"] = None
-            ev["exit"] = None
-            ev["detail"] = None
-            ev["tk_version"] = _infer_version(event.get("ts"))
-            ev["result_count"] = None
+        if ev["raw_baseline_available"]:
+            raw_baseline_events += 1
 
         outcome = _outcome(ev)
         ev["outcome"] = outcome
@@ -544,6 +600,18 @@ def run_join(
             "matched": matched,
             "unmatched": total_tk - matched,
             "match_rate": round(match_rate, 4),
+            "own_log_matched_events": matched,
+            "own_log_unmatched_events": total_tk - matched,
+            "own_log_event_match_rate": round(match_rate, 4),
+            "raw_baseline_events": raw_baseline_events,
+            "raw_baseline_event_rate": round(raw_baseline_events / total_tk, 4) if total_tk else 0.0,
+            "total_tk_invocations": total_tk_invocations,
+            "own_log_matched_invocations": matched_invocations,
+            "own_log_invocation_match_rate": round(matched_invocations / total_tk_invocations, 4)
+            if total_tk_invocations else 0.0,
+            "raw_baseline_invocations": raw_baseline_invocations,
+            "raw_baseline_invocation_rate": round(raw_baseline_invocations / total_tk_invocations, 4)
+            if total_tk_invocations else 0.0,
         },
         "outcome_counts": outcome_counts,
         "aggregates": {
@@ -598,20 +666,48 @@ def apply_version_filter(model: dict, target: str) -> dict:
 
     sessions = []
     for session in model.get("sessions", []):
-        event_versions = {
-            ev.get("tk_version")
-            for ev in session.get("events", [])
-            if ev.get("is_tk") and ev.get("tk_version")
-        }
-        if session.get("tk_version") != target and target not in event_versions:
-            continue
         copy = dict(session)
-        copy["events"] = [
-            ev for ev in session.get("events", [])
-            if not ev.get("is_tk") or ev.get("tk_version") == target
-        ]
+        copy["tk_version"] = target
+        copy["events"] = []
+        for event in session.get("events", []):
+            if not event.get("is_tk"):
+                # Native events without an attributable release are excluded:
+                # retaining them would leak adoption/read stats across versions.
+                event_version = event.get("tk_version") or _infer_version(event.get("ts"))
+                if event_version == target:
+                    copy["events"].append(dict(event))
+                continue
+            invocations = [
+                dict(invocation)
+                for invocation in (event.get("tk_invocations") or [event])
+                if (invocation.get("tk_version") or event.get("tk_version")) == target
+            ]
+            if not invocations:
+                continue
+            event_copy = dict(event)
+            event_copy["tk_invocations"] = invocations
+            event_copy["tk_invocation_count"] = len(invocations)
+            primary = invocations[0]
+            for key in (
+                "tk_command", "tk_sub", "tk_flags", "tk_operands", "tk_operand_values",
+                "tk_detail", "effective_cwd", "raw_chars", "raw_lines",
+                "shown_chars_ownlog", "duration_ms", "exit", "detail", "tk_version",
+                "result_count", "own_log_matched", "raw_baseline_available", "outcome",
+            ):
+                if key in primary:
+                    event_copy[key] = primary[key]
+            copy["events"].append(event_copy)
+        if not copy["events"]:
+            continue
+        event_ts = [event["ts"] for event in copy["events"] if event.get("ts")]
+        copy["ts_start"] = min(event_ts) if event_ts else None
+        copy["ts_end"] = max(event_ts) if event_ts else None
         copy["n_events"] = len(copy["events"])
         copy["n_tk_events"] = sum(1 for ev in copy["events"] if ev.get("is_tk"))
+        copy["n_tk_invocations"] = sum(
+            len(ev.get("tk_invocations") or [ev])
+            for ev in copy["events"] if ev.get("is_tk")
+        )
         sessions.append(copy)
 
     tk_events = [
@@ -620,7 +716,23 @@ def apply_version_filter(model: dict, target: str) -> dict:
         for ev in session.get("events", [])
         if ev.get("is_tk")
     ]
-    matched = sum(1 for ev in tk_events if ev.get("raw_chars") is not None)
+    matched = sum(
+        1 for ev in tk_events
+        if ev.get("own_log_matched", ev.get("raw_chars") is not None)
+    )
+    raw_baseline_events = sum(1 for ev in tk_events if ev.get("raw_chars") is not None)
+    tk_invocations = [
+        invocation
+        for ev in tk_events
+        for invocation in (ev.get("tk_invocations") or [ev])
+    ]
+    matched_invocations = sum(
+        1 for invocation in tk_invocations
+        if invocation.get("own_log_matched", invocation.get("raw_chars") is not None)
+    )
+    raw_baseline_invocations = sum(
+        1 for invocation in tk_invocations if invocation.get("raw_chars") is not None
+    )
     outcomes = {"WIN": 0, "NEUTRAL": 0, "NET_NEGATIVE": 0, "UNKNOWN": 0}
     win_raw = win_shown = neg_raw = neg_shown = 0
     by_version: dict[str, dict] = {}
@@ -660,6 +772,23 @@ def apply_version_filter(model: dict, target: str) -> dict:
         if ev.get("ts")
     ]
     group_ids = {session.get("group_id") for session in sessions}
+    session_ids = {session.get("session_id") for session in sessions}
+
+    interventions = []
+    for intervention in model.get("interventions", []):
+        if intervention.get("session_id") not in session_ids:
+            continue
+        intervention_version = intervention.get("tk_version")
+        if intervention_version is None and intervention.get("ts_epoch") is not None:
+            ts = datetime.fromtimestamp(
+                intervention["ts_epoch"], tz=timezone.utc
+            ).isoformat()
+            intervention_version = _infer_version(ts)
+        if intervention_version != target:
+            continue
+        intervention_copy = dict(intervention)
+        intervention_copy["tk_version"] = intervention_version
+        interventions.append(intervention_copy)
 
     filtered = dict(model)
     filtered["version_filter"] = target
@@ -673,6 +802,18 @@ def apply_version_filter(model: dict, target: str) -> dict:
         "matched": matched,
         "unmatched": len(tk_events) - matched,
         "match_rate": round(matched / len(tk_events), 4) if tk_events else 0.0,
+        "own_log_matched_events": matched,
+        "own_log_unmatched_events": len(tk_events) - matched,
+        "own_log_event_match_rate": round(matched / len(tk_events), 4) if tk_events else 0.0,
+        "raw_baseline_events": raw_baseline_events,
+        "raw_baseline_event_rate": round(raw_baseline_events / len(tk_events), 4) if tk_events else 0.0,
+        "total_tk_invocations": len(tk_invocations),
+        "own_log_matched_invocations": matched_invocations,
+        "own_log_invocation_match_rate": round(matched_invocations / len(tk_invocations), 4)
+        if tk_invocations else 0.0,
+        "raw_baseline_invocations": raw_baseline_invocations,
+        "raw_baseline_invocation_rate": round(raw_baseline_invocations / len(tk_invocations), 4)
+        if tk_invocations else 0.0,
     }
     filtered["outcome_counts"] = outcomes
     filtered["aggregates"] = {
@@ -695,6 +836,11 @@ def apply_version_filter(model: dict, target: str) -> dict:
         key=lambda row: _ver_key(row["version"]),
         reverse=True,
     )
+    filtered["interventions"] = interventions
+
+    from detect import annotate, _summarize_adoption  # type: ignore[import]
+    annotate(filtered)
+    filtered["adoption"] = _summarize_adoption(filtered)
 
     return filtered
 
@@ -716,12 +862,17 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Join tk events with own-log")
     parser.add_argument("--from", dest="from_dt", metavar="ISO")
     parser.add_argument("--to", dest="to_dt", metavar="ISO")
+    parser.add_argument(
+        "--source",
+        choices=("claude", "opencode", "codex", "both", "all"),
+        default="claude",
+    )
     args = parser.parse_args()
 
     from_dt = _parse_cli_dt(args.from_dt) if args.from_dt else None
     to_dt = _parse_cli_dt(args.to_dt, end_of_day=True) if args.to_dt else None
 
-    model = run_join(from_dt, to_dt)
+    model = run_join(from_dt, to_dt, source=args.source)
 
     # Write model.json
     result_dir = Path(__file__).parent / "result"
@@ -740,7 +891,15 @@ def main() -> None:
 
     print(f"Sessions:      {n_sessions}")
     print(f"tk events:     {n_tk}")
-    print(f"Matched:       {ms['matched']} / {n_tk}  ({ms['match_rate']*100:.1f}%)")
+    print(
+        f"Own-log:      {ms['own_log_matched_events']} / {n_tk}  "
+        f"({ms['own_log_event_match_rate']*100:.1f}%)"
+    )
+    print(
+        f"Raw baseline: {ms['raw_baseline_events']} / {n_tk}  "
+        f"({ms['raw_baseline_event_rate']*100:.1f}%)"
+    )
+    print(f"Invocations:  {ms['total_tk_invocations']}")
     print()
     print("Outcomes:")
     print(f"  WIN:          {oc['WIN']}")
