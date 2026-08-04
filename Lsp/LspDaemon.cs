@@ -71,6 +71,9 @@ public sealed class LspDaemon
             ["outline"] = new DocumentSymbolHandler(),
         };
 
+    /// <summary>Daemon logs untouched for this long are deleted on the next daemon startup.</summary>
+    private static readonly TimeSpan LogMaxAge = TimeSpan.FromDays(14);
+
     public DaemonState State => _state;
 
     public LspDaemon(string workspaceRoot, ILanguageBackend backend)
@@ -92,7 +95,16 @@ public sealed class LspDaemon
 
     public async Task RunAsync(CancellationToken ct)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(_logPath)!);
+        var daemonsDir = Path.GetDirectoryName(_logPath)!;
+        Directory.CreateDirectory(daemonsDir);
+
+        // Daemon logs are append-only and nothing else ever removes them, so a workspace that
+        // is gone still leaves its log behind forever. Sweep on startup, before this run's own
+        // first write: only *.log (never the live .sock/.pid/.lock), and only files untouched
+        // for LogMaxAge — a daemon idles out after 30 minutes, so anything that stale belongs
+        // to no running process, including this one.
+        Common.StaleFileSweeper.Sweep(daemonsDir, LogMaxAge, "*.log");
+
         Log("daemon starting");
 
         var serverPath = _backend.ResolveServer();

@@ -5,8 +5,8 @@ namespace Tk.Common;
 
 public static class RawOutputStore
 {
-    /// <summary>Raw copies older than this are purged on every store write (see <see cref="CleanupOldFiles"/>).</summary>
-    private const int MaxAgeDays = 7;
+    /// <summary>Raw copies older than this are purged on every store write.</summary>
+    private static readonly TimeSpan MaxAge = TimeSpan.FromDays(7);
 
     /// <summary>
     /// Saves a copy of the raw pre-filter output and returns its path, per the exit-code policy
@@ -45,7 +45,7 @@ public static class RawOutputStore
 
         // Sweep stale files before writing this run's own file, so the new file is never a
         // candidate (it doesn't exist yet) and no ordering trick is needed to protect it.
-        CleanupOldFiles(dir);
+        StaleFileSweeper.Sweep(dir, MaxAge);
 
         var stamp = DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmssfff");
         var command = commandArgs.Length == 0 ? "cmd" : commandArgs[0];
@@ -57,34 +57,4 @@ public static class RawOutputStore
         return path;
     }
 
-    /// <summary>
-    /// Deletes files in <paramref name="dir"/> whose last-write time is older than
-    /// <see cref="MaxAgeDays"/>. Best-effort: any failure (permission error, file removed by
-    /// something else mid-sweep, etc.) is swallowed — a cleanup problem must never fail the
-    /// command that triggered it.
-    /// </summary>
-    private static void CleanupOldFiles(string dir)
-    {
-        try
-        {
-            var cutoffUtc = DateTime.UtcNow - TimeSpan.FromDays(MaxAgeDays);
-            foreach (var file in Directory.EnumerateFiles(dir))
-            {
-                try
-                {
-                    if (File.GetLastWriteTimeUtc(file) < cutoffUtc)
-                        File.Delete(file);
-                }
-                catch
-                {
-                    // Best-effort per-file: skip whatever couldn't be inspected/deleted and
-                    // keep sweeping the rest.
-                }
-            }
-        }
-        catch
-        {
-            // Best-effort: e.g. the directory itself became unreadable mid-sweep.
-        }
-    }
 }

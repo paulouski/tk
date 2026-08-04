@@ -32,6 +32,17 @@ internal static class SymbolResolver
     }
 
     /// <summary>
+    /// The error message for "workspace/symbol returned nothing for this name". The server only
+    /// indexes symbols declared in the workspace's own sources, so a symbol coming from metadata
+    /// (NuGet package or BCL) looks exactly like a symbol that does not exist — an empty result
+    /// either way. Name the ambiguity and point at the position form, which skips name resolution
+    /// and asks the compiler from a usage site, where metadata symbols do resolve.
+    /// </summary>
+    internal static string NotFoundMessage(string symbol, string what) =>
+        $"symbol '{symbol}' not found in workspace sources — if it is external (NuGet/BCL), " +
+        $"use 'tk {what} <file:line:col>' at a usage site";
+
+    /// <summary>
     /// Shared "file position, or resolve a symbol name via workspace/symbol" resolution used
     /// by the newer position-or-symbol request kinds (sig, calls) — the same resolution
     /// def/impl/callers/rename already do inline. Returns exactly one of: a resolved position,
@@ -48,7 +59,7 @@ internal static class SymbolResolver
         {
             var matches = await ResolveSymbolAsync(loop, symbol, ct).ConfigureAwait(false);
             if (matches.Count == 0)
-                return (null, null, $"symbol '{symbol}' not found");
+                return (null, null, NotFoundMessage(symbol, what));
             if (matches.Count > 1)
                 return (null, matches.ToArray(), null);
 

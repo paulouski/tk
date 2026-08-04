@@ -3,8 +3,10 @@
 #
 # Local install is the part that matters: it builds the same artifact the GitHub
 # release workflow ships and copies it over ~/.local/bin/tk, so you never have to
-# round-trip through GitHub to update your own machine. The tag push also triggers
-# .github/workflows/release.yml for the published binaries (nice-to-have).
+# round-trip through GitHub to update your own machine. Those steps live in
+# install-local.sh, which this script calls after the bump — run that one directly
+# when you want the local update without cutting a release. The tag push also
+# triggers .github/workflows/release.yml for the published binaries (nice-to-have).
 #
 # Usage: ./release.sh [patch|minor|major]   (default: minor — each release ≈ a feature)
 set -euo pipefail
@@ -13,8 +15,6 @@ cd "$(dirname "$0")"
 
 BUMP="${1:-minor}"
 CSPROJ="Tk.csproj"
-INSTALL_DIR="$HOME/.local/bin"
-EXE="$INSTALL_DIR/tk"
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
 # --- current version from csproj ---
@@ -34,27 +34,12 @@ git status --short
 read -r -p "Proceed? [y/N] " ans
 [ "$ans" = "y" ] || { echo "aborted"; exit 1; }
 
-# --- tests first: never ship a broken release ---
-echo "==> tests"
-dotnet test Tk.Tests/Tk.Tests.csproj -c Release --nologo
-
-# --- bump version ---
+# --- bump version before building, so the artifact carries the new one ---
 sed -i '' "s|<Version>$CUR</Version>|<Version>$NEW</Version>|" "$CSPROJ"
 
-# --- build the same artifact release.yml ships (framework-dependent single file) ---
-echo "==> build"
-rm -rf publish
-dotnet publish "$CSPROJ" -c Release -r osx-arm64 --self-contained false -p:PublishSingleFile=true -o publish
-
-# --- update the LOCAL install (do this before pushing so a network failure can't skip it) ---
-echo "==> install -> $EXE"
-mkdir -p "$INSTALL_DIR"
-cp publish/tk "$EXE"
-chmod +x "$EXE"
-# cp invalidates the linker's ad-hoc Mach-O signature on Apple Silicon → the
-# copied binary gets SIGKILL'd. Re-sign ad-hoc so it runs.
-codesign --force --sign - "$EXE"
-"$EXE" --version
+# --- test, build and update the local install (do this before pushing so a network
+# --- failure can't skip it). install-local.sh owns those steps for both scripts.
+./install-local.sh
 
 # --- record the release: commit everything pending, tag, push ---
 echo "==> commit & tag"

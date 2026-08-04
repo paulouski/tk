@@ -27,7 +27,7 @@ internal sealed class DefHandler : IRequestHandler
         {
             var matches = await SymbolResolver.ResolveSymbolAsync(ctx.Loop, request.Symbol, ct).ConfigureAwait(false);
             if (matches.Count == 0)
-                return new DaemonResponse(false, $"symbol '{request.Symbol}' not found", null);
+                return new DaemonResponse(false, SymbolResolver.NotFoundMessage(request.Symbol, "def"), null);
             if (matches.Count > 1)
                 return new DaemonResponse(true, null, null) with { Candidates = matches.ToArray() };
 

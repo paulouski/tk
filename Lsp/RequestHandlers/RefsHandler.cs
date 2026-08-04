@@ -30,7 +30,7 @@ internal sealed class RefsHandler : IRequestHandler
 
             var matches = await SymbolResolver.ResolveSymbolAsync(ctx.Loop, request.Symbol, ct).ConfigureAwait(false);
             if (matches.Count == 0)
-                return new DaemonResponse(false, $"symbol '{request.Symbol}' not found", null);
+                return new DaemonResponse(false, SymbolResolver.NotFoundMessage(request.Symbol, "refs"), null);
 
             if (matches.Count == 1)
             {
