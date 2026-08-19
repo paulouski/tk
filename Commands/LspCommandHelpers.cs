@@ -38,12 +38,15 @@ internal static class LspCommandHelpers
     }
 
     /// <summary>
-    /// Resolves the workspace root (.sln or .csproj directory) from the current directory.
-    /// Returns null if no workspace root is found.
+    /// Resolves the workspace root (.sln or .csproj directory) starting from
+    /// <paramref name="startPath"/> (a file or directory) if given, otherwise from the current
+    /// directory. Prefer passing a real target path when the caller already has one — walking up
+    /// from the wrong directory (e.g. a repo root above a nested .sln) can miss the workspace
+    /// entirely. Returns null if no workspace root is found.
     /// </summary>
-    internal static string? ResolveWorkspaceRoot()
+    internal static string? ResolveWorkspaceRoot(string? startPath = null)
     {
-        var target = Common.DotnetWorkspaceResolver.FindTarget(Directory.GetCurrentDirectory());
+        var target = Common.DotnetWorkspaceResolver.FindWarmestTarget(startPath ?? Directory.GetCurrentDirectory());
         if (target is null)
             return null;
         return Path.GetDirectoryName(Path.GetFullPath(target));

@@ -149,7 +149,7 @@ def _find_examples(sessions: list[dict], finding_type: str, command: str, limit:
             match = False
             if finding_type == "net_negative" and ev.get("outcome") == "NET_NEGATIVE":
                 match = True
-            elif finding_type == "fallback" and ev.get("fallback"):
+            elif finding_type == "fallback" and ev.get("fallback_same_target"):
                 match = True
             elif finding_type == "empty" and ev.get("empty_result"):
                 match = True

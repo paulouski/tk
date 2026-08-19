@@ -3,10 +3,10 @@
 # proxies. `dotnet build|test|restore` and `git status|log` (optionally prefixed
 # by `-C <path>` / `-c <key=val>` global flags, or `VAR=val` env-var prefixes)
 # are routed to `tk`; any other recognized command falls back to `rtk rewrite`
-# (if `rtk` is installed). Also nudges symbol-grep and stealth cat/sed/head/tail reads of
-# .cs files toward `tk def|refs|callers`/`tk view`, and deterministically caps whole-file
-# Reads (no offset/limit) over READ_CAP_BYTES chars to however many leading lines fit that
-# budget (clamped to READ_CAP_LINES) via updatedInput.
+# (if `rtk` is installed). Also nudges symbol-grep reads of .cs files toward
+# `tk def|refs|callers`/`tk view`, and deterministically caps whole-file .cs reads over
+# READ_CAP_LINES lines — both Read (no offset/limit) via updatedInput, and functionally
+# equivalent whole-file Bash cat/sed/head/tail via a rewritten, bounded command.
 #
 # Compound commands (&&, ||, ;, |, and bare newlines used as statement
 # separators) get a conservative, quote-aware segment rewrite: each `&&`/`||`/
@@ -91,15 +91,10 @@ _emit_nudge() {
     '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"allow",additionalContext:$ctx}}'
 }
 
-# C# Read auto-cap thresholds. READ_CAP_BYTES is the primary, char-based trigger: a whole-file
-# .cs Read (no offset/limit) over this many chars gets capped to however many leading lines
-# fit the budget. READ_CAP_LINES is a secondary line ceiling clamping that computed limit, so
-# a file with extremely short lines can't produce a limit larger than this. Chosen from
-# Stats/bash_opportunities.py --read-cost on tk 0.6.0 transcripts: of uncapped Read events
-# over 400 lines, a 500-line cutoff captures ~71% of their chars (36/60 events), well ahead
-# of 600 (~44%) or 700-800 (~22%) — the sharpest bulk-capture point in the 400-800 range.
-READ_CAP_BYTES=2000  # char budget for whole-file reads; user-chosen 2k.
-READ_CAP_LINES=500
+# C# Read/Bash whole-file auto-cap threshold: a whole-file .cs Read (no offset/limit), or a
+# functionally-equivalent whole-file Bash cat/sed/head/tail, over this many lines gets capped
+# to this many leading lines. Line-count is the sole trigger (no byte budget).
+READ_CAP_LINES=120
 
 _emit_read_cap() {
   local file_path="$1" limit="$2" ctx="$3"
@@ -107,7 +102,7 @@ _emit_read_cap() {
     '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"allow",updatedInput:{file_path:$fp,limit:$lim},additionalContext:$ctx}}'
 }
 
-# --- Read handling: cap large whole-file C# reads with no offset/limit at a char budget. ---
+# --- Read handling: cap large whole-file C# reads with no offset/limit at a flat line count. ---
 if [[ "$tool" == "Read" ]]; then
   file_path=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
   offset=$(printf '%s' "$INPUT" | jq -r '.tool_input.offset // empty' 2>/dev/null)
@@ -119,14 +114,11 @@ if [[ "$tool" == "Read" ]]; then
     bytes=$(wc -c < "$file_path" 2>/dev/null | tr -d '[:space:]')
     lines=$(wc -l < "$file_path" 2>/dev/null | tr -d '[:space:]')
     if [[ "$bytes" =~ ^[0-9]+$ && "$lines" =~ ^[0-9]+$ ]]; then
-      if (( bytes > READ_CAP_BYTES )); then
-        lim=$(awk -v cap="$READ_CAP_BYTES" '{b+=length($0)+1; c++; if(b>=cap){print c; exit}} END{if(b<cap)print c+0}' "$file_path")
-        [[ "$lim" =~ ^[0-9]+$ && "$lim" -ge 1 ]] || lim=1
-        (( lim > READ_CAP_LINES )) && lim=$READ_CAP_LINES
+      if (( lines > READ_CAP_LINES )); then
         # Deterministic — not throttled: a cap must fire on every qualifying Read, not
         # just the first one per 300s window (unlike the nudges elsewhere in this hook).
         _log_decision "cap-read" "$file_path"
-        _emit_read_cap "$file_path" "$lim" "C# Read capped to ~2000 chars (${lim} lines) by tk-route (file is ${bytes} chars / ${lines} lines). Run \`tk view <file>\` for a symbol map, then Read the needed offset/limit slice; use \`tk def|refs|callers|impl\` to jump to a symbol. Re-run with an explicit offset/limit to read more."
+        _emit_read_cap "$file_path" "$READ_CAP_LINES" "C# Read capped to ${READ_CAP_LINES} of ${lines} lines (${bytes} chars total) by tk-route. Run \`tk view <file>\` for a symbol map, then Read the needed offset/limit slice; use \`tk def|refs|callers|impl\` to jump straight to a symbol. If you genuinely need the whole file, re-run with an explicit offset/limit covering it."
       fi
     fi
   fi
@@ -160,6 +152,70 @@ cmd=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
 # Strip leading whitespace
 trimmed="${cmd#"${cmd%%[![:space:]]*}"}"
 
+# --- Whole-file .cs cat/sed/head/tail cap: closes the loophole where an agent capped on
+# Read just falls back to cat/sed/head/tail via Bash, which is otherwise only advisory-
+# nudged, not enforced. Fires only for a genuinely untargeted whole-file dump, mirroring the
+# Read cap's own no-offset/no-limit trigger: bare cat (cat has no line-range mechanism at
+# all — any single-file cat is inherently whole-file), head/tail with an explicit count over
+# READ_CAP_LINES, or sed with no args / a `1,N`-or-`1,$` range over READ_CAP_LINES. A
+# deliberate, bounded ask (small -n count, small sed range, or head/tail with no count at
+# all — which already defaults to 10 lines) is left completely untouched. Takes priority over
+# (runs before) the rtk-rewrite fallback below, since rtk's own cat/head/tail rewrite doesn't
+# bound whole-file output. Only single, simple commands match (the trailing `$` anchor rules
+# out compound/piped forms) — those fall through to the existing routing/nudge logic below.
+CS_CAP_CAT_RE='^cat[[:space:]]+(-n[[:space:]]+)?([^[:space:]]+\.cs)[[:space:]]*$'
+CS_CAP_HEADTAIL_N_RE='^(head|tail)[[:space:]]+-n[[:space:]]*([0-9]+)[[:space:]]+([^[:space:]]+\.cs)[[:space:]]*$'
+CS_CAP_HEADTAIL_DASHN_RE='^(head|tail)[[:space:]]+-([0-9]+)[[:space:]]+([^[:space:]]+\.cs)[[:space:]]*$'
+CS_CAP_SED_BARE_RE='^sed[[:space:]]+([^[:space:]]+\.cs)[[:space:]]*$'
+CS_CAP_SED_RANGE_RE="^sed[[:space:]]+-n[[:space:]]+[\"']?1,(\\\$|[0-9]+)p[\"']?[[:space:]]+([^[:space:]]+\\.cs)[[:space:]]*\$"
+
+# _cs_cap_total_lines_of <file> — sets _cs_cap_total_lines to <file>'s line count; returns 1
+# if the file isn't readable (also implicitly guards non-existent paths from a mismatched
+# quote/argument in the regex above).
+_cs_cap_total_lines_of() {
+  _cs_cap_total_lines=""
+  [[ -f "$1" ]] || return 1
+  local n
+  n=$(wc -l < "$1" 2>/dev/null | tr -d '[:space:]')
+  [[ "$n" =~ ^[0-9]+$ ]] || return 1
+  _cs_cap_total_lines="$n"
+}
+
+_cs_cap_ctx() {
+  printf 'Bash whole-file .cs read capped to %s of %s lines by tk-route. Run `tk view <file>` for a symbol map, then target the needed range; use `tk def|refs|callers|impl` to jump straight to a symbol. If you genuinely need the whole file, re-run with an explicit wider range.' "$1" "$2"
+}
+
+if [[ "$trimmed" =~ $CS_CAP_CAT_RE ]]; then
+  _cap_file="${BASH_REMATCH[2]}"
+  if _cs_cap_total_lines_of "$_cap_file" && (( _cs_cap_total_lines > READ_CAP_LINES )); then
+    _log_decision "cap-bash" "$cmd"
+    _emit_rewrite "head -n ${READ_CAP_LINES} ${_cap_file}" "$(_cs_cap_ctx "$READ_CAP_LINES" "$_cs_cap_total_lines")"
+    exit 0
+  fi
+elif [[ "$trimmed" =~ $CS_CAP_HEADTAIL_N_RE || "$trimmed" =~ $CS_CAP_HEADTAIL_DASHN_RE ]]; then
+  _cap_cmd="${BASH_REMATCH[1]}"; _cap_n="${BASH_REMATCH[2]}"; _cap_file="${BASH_REMATCH[3]}"
+  if (( _cap_n > READ_CAP_LINES )) && _cs_cap_total_lines_of "$_cap_file" && (( _cs_cap_total_lines > READ_CAP_LINES )); then
+    _log_decision "cap-bash" "$cmd"
+    _emit_rewrite "${_cap_cmd} -n ${READ_CAP_LINES} ${_cap_file}" "$(_cs_cap_ctx "$READ_CAP_LINES" "$_cs_cap_total_lines")"
+    exit 0
+  fi
+elif [[ "$trimmed" =~ $CS_CAP_SED_BARE_RE ]]; then
+  _cap_file="${BASH_REMATCH[1]}"
+  if _cs_cap_total_lines_of "$_cap_file" && (( _cs_cap_total_lines > READ_CAP_LINES )); then
+    _log_decision "cap-bash" "$cmd"
+    _emit_rewrite "sed -n '1,${READ_CAP_LINES}p' ${_cap_file}" "$(_cs_cap_ctx "$READ_CAP_LINES" "$_cs_cap_total_lines")"
+    exit 0
+  fi
+elif [[ "$trimmed" =~ $CS_CAP_SED_RANGE_RE ]]; then
+  _cap_high="${BASH_REMATCH[1]}"; _cap_file="${BASH_REMATCH[2]}"
+  if _cs_cap_total_lines_of "$_cap_file" && (( _cs_cap_total_lines > READ_CAP_LINES )) && \
+     { [[ "$_cap_high" == '$' ]] || (( _cap_high > READ_CAP_LINES )); }; then
+    _log_decision "cap-bash" "$cmd"
+    _emit_rewrite "sed -n '1,${READ_CAP_LINES}p' ${_cap_file}" "$(_cs_cap_ctx "$READ_CAP_LINES" "$_cs_cap_total_lines")"
+    exit 0
+  fi
+fi
+
 GIT_GLOBAL_FLAGS_RE='(-C|-c)[[:space:]]+[^[:space:]]*[[:space:]]+'
 
 # Leading run of `VAR=val` environment-variable assignments (one or more,
@@ -174,6 +230,7 @@ GREP_FLAG_DENY_CHARS='vcolL'
 GREP_FAMILY_RE='^(grep|egrep|fgrep|ugrep|rg)([[:space:]]|$)'
 GREP_LONG_FLAG_DENY_RE='^--(invert-match|count|only-matching|files-with-matches|files-without-match)$'
 TIER2_HINT="Pipeline routed to tk; your grep filter was dropped — tk compact output keeps all errors/warnings/failures. Rerun with \`tk --raw dotnet ...\` if you needed the raw stream."
+TIER1_HINT="Pipeline routed to tk; the trailing head/tail/cat was dropped — tk compact output is already bounded and keeps all errors/warnings/failures. Rerun with \`tk --raw ...\` if you needed the raw stream."
 
 # Shell control-flow keywords: a segment starting with one of these means the
 # command is a real shell script, not a simple compound of independent
@@ -312,7 +369,8 @@ _rewrite_segment() {
 # compacts away:
 #
 #   Tier 1 — every downstream segment is a display modifier (head/tail/cat):
-#            rewrite the LHS only, keep the rest of the pipeline verbatim.
+#            replace the WHOLE pipeline with `tk ...`, dropping the display
+#            modifier, and surface a hint that it was dropped.
 #   Tier 2 — LHS is `dotnet build|test|restore`, every downstream segment is
 #            grep/egrep/rg with a problem-shaped pattern and no output-mangling
 #            flags (optionally followed by a trailing head/tail): replace the
@@ -447,7 +505,7 @@ _pipeline_matches_tier2() {
 }
 
 # _rewrite_pipeline <seg1> [seg2 ...] — applies the three-tier guard to one
-# pipeline. Sets _rewritten_pipeline (and _pipeline_hint, tier 2 only) on
+# pipeline. Sets _rewritten_pipeline (and _pipeline_hint, tiers 1 and 2) on
 # success; returns 1 (passthrough) otherwise.
 _rewrite_pipeline() {
   _rewritten_pipeline=""
@@ -463,17 +521,20 @@ _rewrite_pipeline() {
     return 1
   fi
 
-  # Tier 1: every downstream segment is a display modifier -> rewrite LHS only.
+  # Tier 1: every downstream segment is a display modifier -> replace the whole
+  # pipeline with just the routed LHS, dropping the head/tail/cat.
   local all_display=1 j
   for (( j = 1; j < n; j++ )); do
     _is_display_modifier "${segs[$j]}" || { all_display=0; break; }
   done
   if [[ "$all_display" -eq 1 ]]; then
     if _rewrite_segment "${segs[0]}" 0; then
-      _rewritten_pipeline="$_rewritten_segment"
-      for (( j = 1; j < n; j++ )); do
-        _rewritten_pipeline+="|${segs[$j]}"
-      done
+      # Trim the LHS segment's own trailing whitespace (the run before the dropped `|`), but
+      # keep the LAST segment's trailing whitespace: it's the spacer the caller
+      # (_rewrite_compound_command) expects before whatever separator follows the pipeline.
+      _split_segment "${segs[$((n - 1))]}"
+      _rewritten_pipeline="${_rewritten_segment%"${_rewritten_segment##*[![:space:]]}"}$_seg_trailing"
+      _pipeline_hint="$TIER1_HINT"
       return 0
     fi
     return 1
@@ -690,23 +751,66 @@ fi
 # additionalContext never touches the command itself. Tested against the ORIGINAL $cmd
 # (not the quote-stripped copy): the symbol pattern usually lives inside quotes.
 #
-# Two trigger shapes: (1) a keyword (class/record/interface/enum/struct) followed by an
+# Three trigger shapes: (1) a keyword (class/record/interface/enum/struct) followed by an
 # identifier — the original heuristic; (2) a bare alternation of two capitalized
 # identifiers via "|" or backslash-escaped "\|" (e.g. "FooService\|BarService"), which
-# usage data showed is a common symbol-hunt shape that (1) alone misses.
+# usage data showed is a common symbol-hunt shape that (1) alone misses; (3) a bare
+# single PascalCase pattern with no keyword/alternation (e.g. `grep -n PaymentService
+# file.cs`), mirroring tkstats' own _PASCAL_PATTERN classifier — the most common
+# genuinely 1:1-replaceable shape, previously not nudged at all. (1) and (3) are a
+# true 1:1 `tk def <Symbol>` replacement; (2) is not (tk takes one symbol per call),
+# so it gets a distinct, more honest message below.
 SYMBOL_KEYWORD_RE='(class|record|interface|enum|struct)[[:space:]]+[A-Z]'
 SYMBOL_ALT_RE='[A-Z][A-Za-z0-9_]*\\?\|[A-Z]'
-if [[ "$trimmed" =~ ^(grep|egrep|fgrep|ugrep|rg)[[:space:]] ]] && \
-   { [[ "$cmd" =~ $SYMBOL_KEYWORD_RE ]] || [[ "$cmd" =~ $SYMBOL_ALT_RE ]]; }; then
-  # Throttle: skip if this session was already nudged within the last 300s, so a
-  # grep-heavy loop doesn't get re-nudged on every call.
-  _nudge=1
-  _recently_nudged "nudge" && _nudge=0
+SYMBOL_PASCAL_BARE_RE='^[A-Z][A-Za-z0-9]+$'
+if [[ "$trimmed" =~ ^(grep|egrep|fgrep|ugrep|rg)[[:space:]] ]]; then
+  _symbol_grep_shape=""
+  if [[ "$cmd" =~ $SYMBOL_KEYWORD_RE ]]; then
+    _symbol_grep_shape="single"
+  elif [[ "$cmd" =~ $SYMBOL_ALT_RE ]]; then
+    _symbol_grep_shape="alt"
+  else
+    # Bare single-pattern PascalCase lookup (mirrors tkstats' _PASCAL_PATTERN),
+    # e.g. `grep -n PaymentService file.cs`. Skipped for -l/-r/-R (files-with-matches
+    # or recursive) invocations: those are repo-wide file-discovery sweeps (rename
+    # refactors, non-symbol text search), which tk cannot help with either way.
+    _shell_words "$cmd"
+    _sg_seen_bin=0 _sg_sweep=0 _sg_pattern=""
+    for _sg_word in "${_words[@]}"; do
+      if [[ "$_sg_seen_bin" -eq 0 ]]; then
+        [[ "$_sg_word" =~ ^(grep|egrep|fgrep|ugrep|rg)$ ]] && _sg_seen_bin=1
+        continue
+      fi
+      if [[ "$_sg_word" == -* ]]; then
+        case "$_sg_word" in
+          --recursive|--files-with-matches|--files-without-match) _sg_sweep=1 ;;
+          --*) ;;
+          *[lrR]*) _sg_sweep=1 ;;
+        esac
+        continue
+      fi
+      [[ -z "$_sg_pattern" ]] && _sg_pattern="$_sg_word"
+    done
+    if [[ "$_sg_sweep" -eq 0 && "$_sg_pattern" =~ $SYMBOL_PASCAL_BARE_RE ]]; then
+      _symbol_grep_shape="single"
+    fi
+  fi
 
-  if [[ "$_nudge" -eq 1 ]]; then
-    _log_decision "nudge" "$cmd"
-    _emit_nudge "Symbol lookup via grep detected. Prefer codebase-memory MCP (search_graph/trace_path) for symbol definitions/references/callers; if MCP is unavailable or the repo is not indexed, use \`tk def|refs|callers <Symbol>\` (lsp module). Text grep for \`class X\` misses cross-file references and interface dispatch."
-    exit 0
+  if [[ -n "$_symbol_grep_shape" ]]; then
+    # Throttle: skip if this session was already nudged within the last 300s, so a
+    # grep-heavy loop doesn't get re-nudged on every call.
+    _nudge=1
+    _recently_nudged "nudge" && _nudge=0
+
+    if [[ "$_nudge" -eq 1 ]]; then
+      _log_decision "nudge" "$cmd"
+      if [[ "$_symbol_grep_shape" == "alt" ]]; then
+        _emit_nudge "Multi-pattern grep across several identifiers detected. \`tk def\`/\`refs\`/\`callers\` take one symbol per call — if these are separate symbols, a \`tk def <Symbol>\` per identifier replaces this in most cases; tk has no single-call multi-pattern equivalent yet."
+      else
+        _emit_nudge "Symbol lookup via grep detected. Prefer codebase-memory MCP (search_graph/trace_path) for symbol definitions/references/callers; if MCP is unavailable or the repo is not indexed, use \`tk def|refs|callers <Symbol>\` (lsp module). Text grep for \`class X\` misses cross-file references and interface dispatch."
+      fi
+      exit 0
+    fi
   fi
 fi
 

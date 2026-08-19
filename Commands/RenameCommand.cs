@@ -34,14 +34,14 @@ public sealed class RenameCommand : ICommand
             return 1;
         }
 
-        var workspaceRoot = LspCommandHelpers.ResolveWorkspaceRoot();
+        var fullPath = Path.GetFullPath(filePath);
+
+        var workspaceRoot = LspCommandHelpers.ResolveWorkspaceRoot(fullPath);
         if (workspaceRoot is null)
         {
             ctx.Err.WriteLine("tk rename: could not find workspace root (.sln or .csproj)");
             return 1;
         }
-
-        var fullPath = Path.GetFullPath(filePath);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
         try

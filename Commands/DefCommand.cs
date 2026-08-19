@@ -17,21 +17,23 @@ public sealed class DefCommand : ICommand
 
         var arg = ctx.Args[0];
 
-        var workspaceRoot = LspCommandHelpers.ResolveWorkspaceRoot();
-        if (workspaceRoot is null)
-        {
-            ctx.Err.WriteLine("tk def: could not find workspace root (.sln or .csproj)");
-            return 1;
-        }
-
         DaemonRequest request;
+        string? workspaceRoot;
         if (LspCommandHelpers.TryParsePosition(arg, out var filePath, out var line, out var col))
         {
+            workspaceRoot = LspCommandHelpers.ResolveWorkspaceRoot(filePath);
             request = new DaemonRequest("def", Path.GetFullPath(filePath), line, col, null);
         }
         else
         {
+            workspaceRoot = LspCommandHelpers.ResolveWorkspaceRoot();
             request = new DaemonRequest("def", null, 0, 0, arg);
+        }
+
+        if (workspaceRoot is null)
+        {
+            ctx.Err.WriteLine("tk def: could not find workspace root (.sln or .csproj)");
+            return 1;
         }
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));

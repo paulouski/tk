@@ -23,6 +23,7 @@ public sealed class DiagCommand : ICommand
 
         List<string> files;
         int totalCount;
+        string? workspaceRoot;
 
         if (changed)
         {
@@ -41,6 +42,8 @@ public sealed class DiagCommand : ICommand
                 ctx.Out.WriteLine("ok diag --changed: no changed .cs files");
                 return 0;
             }
+
+            workspaceRoot = LspCommandHelpers.ResolveWorkspaceRoot();
         }
         else
         {
@@ -68,9 +71,10 @@ public sealed class DiagCommand : ICommand
                 ctx.Err.WriteLine($"tk diag: {pathArg}: no .cs files found in scope");
                 return 1;
             }
+
+            workspaceRoot = LspCommandHelpers.ResolveWorkspaceRoot(fullPath);
         }
 
-        var workspaceRoot = LspCommandHelpers.ResolveWorkspaceRoot();
         if (workspaceRoot is null)
         {
             ctx.Err.WriteLine("tk diag: could not find workspace root (.sln or .csproj)");

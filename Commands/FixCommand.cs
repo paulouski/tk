@@ -24,7 +24,7 @@ public sealed class FixCommand : ICommand
             return 1;
         }
 
-        var workspaceRoot = LspCommandHelpers.ResolveWorkspaceRoot();
+        var workspaceRoot = LspCommandHelpers.ResolveWorkspaceRoot(fullPath);
         if (workspaceRoot is null)
         {
             ctx.Err.WriteLine("tk fix: could not find workspace root (.sln or .csproj)");

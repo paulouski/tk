@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Tk.Commands;
 using Tk.Modules;
 
@@ -104,13 +105,16 @@ public static class NamespaceFixer
 
         var newProjectDirForScope = Path.GetDirectoryName(
             NamespaceConvention.FindOwningProject(Path.GetDirectoryName(newPath)!) ?? oldProjectCsproj)!;
-        var (scopeFiles, _) = DiagCommand.ResolveScope(newProjectDirForScope, DiagCommand.DefaultMaxFiles);
-        if (!scopeFiles.Contains(newPath, StringComparer.OrdinalIgnoreCase))
-            scopeFiles.Add(newPath);
+        var (candidateFiles, _) = DiagCommand.ResolveScope(newProjectDirForScope, DiagCommand.DefaultMaxFiles);
+        if (!candidateFiles.Contains(newPath, StringComparer.OrdinalIgnoreCase))
+            candidateFiles.Add(newPath);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
         try
         {
+            var scopeFiles = await NarrowScopeToReferencingFilesAsync(
+                workspaceRoot, newPath, candidateFiles, cts.Token).ConfigureAwait(false);
+
             var (editedFiles, patchError) = await PatchBrokenReferencesAsync(
                 workspaceRoot, scopeFiles, newPath, actualNamespace, targetNamespace, cts.Token).ConfigureAwait(false);
             if (patchError is not null)
@@ -138,6 +142,113 @@ public static class NamespaceFixer
                 "references via the LSP daemon — run `tk diag` manually.");
         }
     }
+
+    /// <summary>
+    /// Narrows <paramref name="candidateFiles"/> (the full project-scope file list) down to
+    /// files that could plausibly reference the moved file's declared symbols, so the
+    /// expensive per-file diag pull doesn't have to touch every file in the project. Fetches
+    /// the moved file's outline and keeps any candidate file containing at least one declared
+    /// name as a whole word (a cheap local text scan — no further daemon round trips), plus the
+    /// moved file itself unconditionally. Find-references is deliberately not used here: by
+    /// this point the moved file's namespace has already been rewritten, so extension-method
+    /// call sites in files still missing the new `using` can no longer bind semantically and
+    /// would be invisible to a reference search. If the outline call fails, falls back to the
+    /// full, unfiltered <paramref name="candidateFiles"/> list so a transient failure can't
+    /// cause a real broken reference to be missed.
+    /// </summary>
+    internal static async Task<List<string>> NarrowScopeToReferencingFilesAsync(
+        string workspaceRoot, string movedFilePath, List<string> candidateFiles, CancellationToken ct)
+    {
+        var request = new DaemonRequest("outline", movedFilePath, 0, 0, null);
+        var resp = await DaemonClient.SendAsync(workspaceRoot, request, ct).ConfigureAwait(false);
+        if (!resp.Success || resp.Outline is null)
+            return candidateFiles;
+
+        var names = CollectDeclaredNames(resp.Outline);
+        if (names.Count == 0)
+            return candidateFiles;
+
+        return await FilterCandidatesByNamesAsync(candidateFiles, movedFilePath, names, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Keeps a candidate file if it contains any of <paramref name="names"/> as a whole-word
+    /// text match, or if it is <paramref name="movedFilePath"/> itself (always kept
+    /// unconditionally). Pure text scan — no daemon involved — so it's directly testable.
+    /// </summary>
+    internal static async Task<List<string>> FilterCandidatesByNamesAsync(
+        List<string> candidateFiles, string movedFilePath, HashSet<string> names, CancellationToken ct)
+    {
+        // \b must be inside the alternation (not applied externally after the fact): the regex
+        // engine only tries the next alternative at a given start position if the current one
+        // fails to match at all, so an external post-match boundary check would let a shorter
+        // name that happens to be a prefix of a longer one (e.g. "Foo" vs "FooBar") consume the
+        // match position and never let "FooBar" itself be tried there.
+        var pattern = new Regex(
+            @"\b(?:" + string.Join('|', names.Select(Regex.Escape)) + @")\b",
+            RegexOptions.Compiled);
+
+        var narrowed = new List<string>();
+        foreach (var file in candidateFiles)
+        {
+            if (string.Equals(Path.GetFullPath(file), Path.GetFullPath(movedFilePath), StringComparison.Ordinal))
+            {
+                narrowed.Add(file);
+                continue;
+            }
+
+            var text = await File.ReadAllTextAsync(file, ct).ConfigureAwait(false);
+            if (pattern.IsMatch(text))
+                narrowed.Add(file);
+        }
+
+        return narrowed;
+    }
+
+    /// <summary>
+    /// Flattens a <see cref="DocumentSymbolInfo"/> outline tree (walking <c>Children</c> too)
+    /// into the set of distinct declared bare identifier names — types, methods, properties,
+    /// nested members, etc. The server's <c>name</c> field for methods carries a signature
+    /// suffix (e.g. <c>"Gross(Payment) : decimal"</c> rather than plain <c>"Gross"</c>), which
+    /// would never text-match a real call site, so each name is trimmed down to its leading
+    /// identifier run before being added. Namespace nodes (Kind falls through
+    /// <see cref="LspResultParser.SymbolKindName"/>'s default, "symbol") are walked for their
+    /// children but their own name is skipped: it's the file's root namespace segment (e.g.
+    /// "Smoke" from "Smoke.New"), which would spuriously text-match every other file's own
+    /// `namespace Smoke.*` declaration and defeat the narrowing entirely. May still include
+    /// names irrelevant to reference-narrowing (e.g. private members); that only ever widens
+    /// the candidate file list, never narrows it incorrectly.
+    /// </summary>
+    internal static HashSet<string> CollectDeclaredNames(DocumentSymbolInfo[] symbols)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        void Walk(DocumentSymbolInfo[] nodes)
+        {
+            foreach (var node in nodes)
+            {
+                if (node.Kind != "symbol")
+                {
+                    var bareName = LeadingIdentifier(node.Name);
+                    if (bareName.Length > 0)
+                        names.Add(bareName);
+                }
+                if (node.Children is { Length: > 0 } children)
+                    Walk(children);
+            }
+        }
+        Walk(symbols);
+        return names;
+    }
+
+    private static string LeadingIdentifier(string name)
+    {
+        var i = 0;
+        while (i < name.Length && IsIdentifierChar(name[i]))
+            i++;
+        return name[..i];
+    }
+
+    private static bool IsIdentifierChar(char c) => char.IsLetterOrDigit(c) || c == '_';
 
     /// <summary>
     /// Pulls diagnostics for <paramref name="scopeFiles"/>, and for every file reporting a

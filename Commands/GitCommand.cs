@@ -30,6 +30,8 @@ public sealed class GitCommand : ICommand
     private static async Task<int> RunStatusAsync(CommandContext ctx, int subcommandIndex)
     {
         var userArgs = ctx.Args[(subcommandIndex + 1)..];
+        if (userArgs.Any(IsPorcelainFlag))
+            return await RunFilteredAsync(ctx.OriginalCommandArgs, new PassthroughFilter(), ctx);
         if (userArgs.Length > 0)
             return await RunFilteredAsync(ctx.OriginalCommandArgs, new GitStatusFilter(ctx.DetailLevel), ctx);
 
@@ -167,6 +169,9 @@ public sealed class GitCommand : ICommand
     private static bool GitOptionNeedsValue(string arg) => arg is
         "-c" or "-C" or "--git-dir" or "--work-tree" or "--namespace"
         or "--super-prefix" or "--config-env";
+
+    private static bool IsPorcelainFlag(string arg) =>
+        arg == "--porcelain" || arg.StartsWith("--porcelain=", StringComparison.Ordinal) || arg == "-z";
 
     private static bool IsDiffPassthroughFlag(string arg) =>
         arg is "--stat" or "--numstat" or "--shortstat" or "--no-compact";

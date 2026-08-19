@@ -115,8 +115,12 @@ def _parse_session(jsonl_path: Path, projects_dir: Path) -> dict | None:
                 except json.JSONDecodeError:
                     continue
 
-                # Harvest session-level fields from any line
-                if cwd is None and line.get("cwd"):
+                # Harvest session-level fields from any line. cwd is tracked
+                # per-line, not captured once: a file can span multiple cwds
+                # (parallel subagent turns, monorepo sibling switches), and
+                # freezing on the first value stales ws-hash own-log matching
+                # for later tk invocations in that cwd.
+                if line.get("cwd"):
                     cwd = line["cwd"]
                 if git_branch is None and line.get("gitBranch"):
                     git_branch = line["gitBranch"]

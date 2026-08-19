@@ -20,6 +20,9 @@ _PRICES: dict[str, tuple[float, float, float, float, float]] = {
     "claude-sonnet-4-5": (3.00, 15.00, 0.30, 3.75,  6.00),
     # Fable
     "claude-fable-5":    (10.00, 50.00, 1.00, 12.50, 20.00),
+    # 5th-gen Claude — unverified id, assumed same tier as 4-8/4-6 counterpart
+    "claude-opus-5":     (5.00, 25.00, 0.50, 6.25, 10.00),
+    "claude-sonnet-5":   (3.00, 15.00, 0.30, 3.75,  6.00),
 
     # --- Open-model / opencode-router models (OpenCode Zen / Go rates) ---
     # OpenCode Zen publishes no separate cache-write rate, and opencode's
@@ -31,6 +34,14 @@ _PRICES: dict[str, tuple[float, float, float, float, float]] = {
     "glm-5.2":           (1.40,  4.40, 0.26, 1.40,  1.40),
     "glm-5.1":           (1.40,  4.40, 0.26, 1.40,  1.40),  # unverified id
     "glm-5":             (1.00,  3.20, 0.20, 1.00,  1.00),  # unverified id
+    "glm-5.3":           (1.40,  4.40, 0.26, 1.40,  1.40),  # unverified id, same tier as glm-5.2
+    # gpt-5.x router ids: no pricing source found in repo; placeholder rate
+    # in line with neighboring router-model tiers.
+    "gpt-5.4":           (2.50, 10.00, 0.25, 2.50,  2.50),  # unverified id, no rate confirmed
+    "gpt-5.5":           (2.50, 10.00, 0.25, 2.50,  2.50),  # unverified id, no rate confirmed
+    "gpt-5.6-luna":      (2.50, 10.00, 0.25, 2.50,  2.50),  # unverified id, no rate confirmed
+    "gpt-5.6-sol":       (2.50, 10.00, 0.25, 2.50,  2.50),  # unverified id, no rate confirmed
+    "gpt-5.6-terra":     (2.50, 10.00, 0.25, 2.50,  2.50),  # unverified id, no rate confirmed
     "kimi-k2.7-code":    (0.95,  4.00, 0.19, 0.95,  0.95),  # unverified id
     "kimi-k2.6":         (0.95,  4.00, 0.16, 0.95,  0.95),  # unverified id
     "kimi-k2.5":         (0.60,  3.00, 0.10, 0.60,  0.60),  # unverified id

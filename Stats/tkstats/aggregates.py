@@ -115,7 +115,7 @@ def aggregate_events(sessions: list[dict]) -> dict:
 
             if ev.get("empty_result"):
                 cs["empty_n"] += 1
-            if ev.get("fallback"):
+            if ev.get("fallback_same_target"):
                 cs["fallback_n"] += 1
             if ev.get("result_used"):
                 cs["result_used_n"] += 1
@@ -133,7 +133,7 @@ def aggregate_events(sessions: list[dict]) -> dict:
 
             # agent-type tallies
             agent_stats[at]["n_tk"] += 1
-            if ev.get("fallback"):
+            if ev.get("fallback_same_target"):
                 agent_stats[at]["fallback_n"] += 1
             if ev.get("result_used"):
                 agent_stats[at]["result_used_n"] += 1

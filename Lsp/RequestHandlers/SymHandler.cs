@@ -17,6 +17,11 @@ internal sealed class SymHandler : IRequestHandler
         ctx.Log($"sym query: {request.Symbol}");
         var symMatches = await SymbolResolver.ResolveSymbolAsync(ctx.Loop, request.Symbol, ct, exactMatchOnly: false).ConfigureAwait(false);
         ctx.Log($"sym query done, {symMatches.Count} matches");
+        if (symMatches.Count == 0)
+            return new DaemonResponse(false,
+                $"symbol '{request.Symbol}' not found in workspace sources — external (NuGet/BCL) " +
+                "symbols aren't indexed by workspace/symbol search; 'tk sym' has no position-form fallback",
+                null);
         return new DaemonResponse(true, null, null) with { Candidates = symMatches.ToArray() };
     }
 }

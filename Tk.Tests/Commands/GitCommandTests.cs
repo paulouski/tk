@@ -47,6 +47,50 @@ public class GitCommandTests
     }
 
     [Fact]
+    public async Task Status_porcelain_is_passed_through_without_compact_filter()
+    {
+        var runner = new FakeProcessRunner().Returns(stdout: " M file.txt\n?? new.txt\n");
+
+        var (_, output, _) = await RunAsync(["status", "--porcelain"], runner);
+
+        Assert.Equal(" M file.txt\n?? new.txt\n", output);
+        Assert.Equal(["git", "status", "--porcelain"], runner.Calls[0]);
+    }
+
+    [Fact]
+    public async Task Status_porcelain_v1_is_passed_through_without_compact_filter()
+    {
+        var runner = new FakeProcessRunner().Returns(stdout: " M file.txt\n");
+
+        var (_, output, _) = await RunAsync(["status", "--porcelain=v1"], runner);
+
+        Assert.Equal(" M file.txt\n", output);
+        Assert.Equal(["git", "status", "--porcelain=v1"], runner.Calls[0]);
+    }
+
+    [Fact]
+    public async Task Status_dash_z_is_passed_through_without_compact_filter()
+    {
+        var runner = new FakeProcessRunner().Returns(stdout: " M file.txt\0");
+
+        var (_, output, _) = await RunAsync(["status", "-z"], runner);
+
+        Assert.Equal(" M file.txt\0", output);
+        Assert.Equal(["git", "status", "-z"], runner.Calls[0]);
+    }
+
+    [Fact]
+    public async Task Status_short_flag_still_gets_compact_filter()
+    {
+        var runner = new FakeProcessRunner().Returns(stdout: " M file.txt\n");
+
+        var (_, output, _) = await RunAsync(["status", "-s"], runner);
+
+        Assert.DoesNotContain(" M file.txt", output);
+        Assert.Equal(["git", "status", "-s"], runner.Calls[0]);
+    }
+
+    [Fact]
     public async Task Diff_inserts_path_separator_for_existing_path_args()
     {
         var temp = Directory.CreateTempSubdirectory();

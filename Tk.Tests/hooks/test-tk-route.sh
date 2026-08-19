@@ -236,6 +236,22 @@ expect_nudge() {
   assert_true "$desc: decision-log line present" "$([[ "$LOG_CONTENT" == *$'\t'"nudge"$'\t'* ]] && echo 1 || echo 0)"
 }
 
+# expect_nudge_containing <desc> <command> <substring> [cwd]
+# Like expect_nudge, but also asserts additionalContext contains <substring> -- used to
+# distinguish the two symbol-grep nudge messages (1:1-replaceable vs multi-pattern).
+expect_nudge_containing() {
+  local desc="$1" cmd="$2" substring="$3" cwd="${4:-/repo}"
+  hook_run_keep_home "$FAKE_BIN" "$cmd" "$cwd"
+
+  assert_eq "$desc: exit 0" "0" "$RC"
+  local got_ctx
+  got_ctx="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty')"
+  assert_true "$desc: additionalContext present" "$([[ -n "$got_ctx" ]] && echo 1 || echo 0)"
+  assert_true "$desc: additionalContext contains '$substring'" \
+    "$([[ "$got_ctx" == *"$substring"* ]] && echo 1 || echo 0)"
+  assert_true "$desc: decision-log line present" "$([[ "$LOG_CONTENT" == *$'\t'"nudge"$'\t'* ]] && echo 1 || echo 0)"
+}
+
 # expect_no_nudge <desc> <command> [cwd]
 # Like expect_nudge's negative: no stdout at all, no new decision-log entry. Uses
 # hook_run_keep_home so it composes with the throttle test (which needs shared state).
@@ -335,16 +351,16 @@ expect_passthrough "already tk -> pass, no log" "tk git status"
 expect_passthrough "already rtk -> pass, no log" "rtk rewrite git status"
 
 # ── compound commands: quote-aware segment rewrites, native helpers preserved ─────────────
-expect_rewrite "pipe -> route supported left segment only" \
-  "dotnet build | cat" "tk dotnet build | cat" "route-tk"
+expect_rewrite "pipe -> tier 1: whole pipeline replaced, trailing cat dropped" \
+  "dotnet build | cat" "tk dotnet build" "route-tk"
 expect_rewrite "&& chain -> route supported segment only" \
   "git status && echo done" "tk git status && echo done" "route-tk"
 expect_rewrite "; separator -> route supported segment only" \
   "git status; echo done" "tk git status; echo done" "route-tk"
-expect_rewrite "cd chain and pipe -> preserve cd/head, route dotnet build" \
-  "cd x && dotnet build | head -50" "cd x && tk dotnet build | head -50" "route-tk"
-expect_rewrite "pipeline and later chain -> route both supported git segments" \
-  "git log | head -5 && git status" "tk git log | head -5 && tk git status" "route-tk"
+expect_rewrite "cd chain and pipe -> preserve cd, route dotnet build, drop trailing head" \
+  "cd x && dotnet build | head -50" "cd x && tk dotnet build" "route-tk"
+expect_rewrite "pipeline and later chain -> route both supported git segments, drop trailing head" \
+  "git log | head -5 && git status" "tk git log && tk git status" "route-tk"
 expect_rewrite "quoted operator text in compound -> do not split inside quotes" \
   'echo "git status && no split" && git status' \
   'echo "git status && no split" && tk git status' "route-tk"
@@ -382,10 +398,10 @@ expect_rewrite 'quoted "&&" in git log --grep -> safe, routed to tk' \
 # (c) unbalanced quote: stripping can't reason past a lone survivor quote -> unsafe.
 expect_passthrough 'unbalanced quote -> pass (unsafe)' 'echo "a && b'
 
-# (d) a real, unquoted pipe is a compound operator. The supported git segment is routed
-# and the native head segment is preserved.
-expect_rewrite 'unquoted pipe -> route supported left segment only' \
-  'git status | head -5' 'tk git status | head -5' "route-tk"
+# (d) a real, unquoted pipe is a compound operator. Tier 1: the supported git segment is
+# routed and the trailing head is dropped (whole pipeline replaced).
+expect_rewrite 'unquoted pipe -> tier 1: whole pipeline replaced, trailing head dropped' \
+  'git status | head -5' 'tk git status' "route-tk"
 
 # (e) backslash-escaped pipe outside quotes: the shell sees a literal "|", so this is a safe
 # single command, but grep-family stays excluded from the rtk fallback -> passthrough
@@ -478,11 +494,29 @@ expect_passthrough "for loop control flow -> pass (unsafe)" \
   "$(printf 'for f in a b; do git status; done')"
 
 # ── three-tier downstream guard for pipelines ────────────────────────────────────────────────
-# Tier 1: every downstream consumer is a display modifier (head/tail/cat) -> LHS routed, rest
-# of the pipeline preserved verbatim. (dotnet build | cat and git status | head -5 above already
-# cover this; one more shape here for a routed dotnet test.)
-expect_rewrite "tier 1: dotnet test | head -> route LHS only" \
-  "dotnet test | head -50" "tk dotnet test | head -50" "route-tk"
+# Tier 1: every downstream consumer is a display modifier (head/tail/cat) -> WHOLE pipeline
+# replaced with the routed LHS, dropping the display modifier, hint attached. (dotnet build |
+# cat and git status | head -5 above already cover the rewrite shape; here we also check the
+# hint.)
+hook_run "$FAKE_BIN" "dotnet test | head -50"
+assert_eq "tier 1: dotnet test | head -> exit 0" "0" "$RC"
+got_new="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.updatedInput.command // empty')"
+assert_eq "tier 1: whole pipeline replaced with tk dotnet test" "tk dotnet test" "$got_new"
+got_ctx="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty')"
+assert_true "tier 1: additionalContext hint present" "$([[ -n "$got_ctx" ]] && echo 1 || echo 0)"
+assert_true "tier 1: decision-log line present" \
+  "$([[ "$LOG_CONTENT" == *$'\t'"route-tk"$'\t'* ]] && echo 1 || echo 0)"
+
+expect_rewrite "tier 1: dotnet build | tail -20 -> whole pipeline replaced, trailing tail dropped" \
+  "dotnet build | tail -20" "tk dotnet build" "route-tk"
+expect_rewrite "tier 1: git status | head -5 -> whole pipeline replaced, trailing head dropped" \
+  "git status | head -5" "tk git status" "route-tk"
+
+# Not a pure display-modifier pipeline -> must NOT hit tier 1 (would broaden the tier 1 match).
+# `dotnet build | grep foo | tail -5` has a grep segment in the middle, which is a content
+# filter -> falls through to tier 3 (grep pattern "foo" is not problem-shaped) -> untouched.
+expect_passthrough "not tier 1: dotnet build | grep foo | tail -5 -> pass (tier 3, untouched)" \
+  "dotnet build | grep foo | tail -5"
 
 # Tier 2: dotnet test filtered by a problem-shaped grep, then head -> WHOLE pipeline replaced
 # with `tk dotnet test ...`, filters dropped, additionalContext hint attached.
@@ -548,11 +582,33 @@ rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
 
 # Symbol grep via quoted alternation ("class Foo\|class Bar" shape, not one of the fake
 # rtk's two reserved exact-match grep commands) -> safe, unrecognized by rtk -> nudge.
-expect_nudge 'symbol grep (quoted alternation) -> nudge' \
-  'grep -rn "class Alpha\|class Beta" other_src'
+# Keyword-prefixed, so it's still the "single" shape -> original message.
+expect_nudge_containing 'symbol grep (quoted alternation, keyword-prefixed) -> nudge, original message' \
+  'grep -rn "class Alpha\|class Beta" other_src' 'Symbol lookup via grep detected'
 
 # Plain free-text grep, no symbol shape -> no nudge (and no rewrite either).
 expect_no_nudge 'plain free-text grep -> no nudge' 'grep -rn "TODO" src'
+
+# Multi-pattern OR-alternation with NO keyword prefix -> "alt" shape -> reworded
+# multi-pattern message (tk has no single-call multi-pattern equivalent).
+rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
+expect_nudge_containing 'multi-pattern OR grep (no keyword) -> nudge, multi-pattern message' \
+  'grep -n "FooService\|BarService" src/Foo.cs' 'Multi-pattern grep across several identifiers'
+
+# Bare single PascalCase pattern, no keyword, no OR -> new "single" shape, genuinely a
+# 1:1 tk def <Symbol> replacement -> original message.
+rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
+expect_nudge_containing 'bare PascalCase grep pattern -> nudge, original message' \
+  'grep -n "PaymentService" src/Foo.cs' 'Symbol lookup via grep detected'
+
+# Bare lowercase/non-PascalCase pattern -> no nudge (must still require leading-cap +
+# at least 2 chars).
+rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
+expect_no_nudge 'bare lowercase grep pattern -> no nudge' 'grep -n "todo" src/Foo.cs'
+
+# File-discovery sweep (-l/-r, no OR): tk cannot help with non-symbol text/file
+# discovery -> no nudge, unchanged.
+expect_no_nudge 'file-discovery sweep (-rl) -> no nudge' 'grep -rln "Foo" src/'
 
 # Group 3: the nudge throttle is keyed by session_id -- a nudge in one session must not
 # throttle a nudge in a DIFFERENT session (e.g. a freshly spawned subagent), but a second
@@ -579,42 +635,16 @@ assert_true "log rotation: dated log file contains the route-tk line" \
 assert_true "log rotation: legacy flat tk-hook.log is NOT created" \
   "$([[ ! -f "$FAKE_HOME/.claude/tk-hook.log" ]] && echo 1 || echo 0)"
 
-# ── Read-tool cap: whole-file .cs reads (no offset/limit) over a 2000-char budget are
-# character-capped (not line-capped) to however many leading lines fit that budget, clamped
-# to a 500-line ceiling; non-C# files pass through; silent for files under the budget,
+# ── Read-tool cap: whole-file .cs reads (no offset/limit) over READ_CAP_LINES (120) lines are
+# capped to exactly 120 lines; non-C# files pass through; silent for files at/under the cap,
 # missing files, or when offset/limit is given; deterministic (not throttled). ──────────────
 BIG_FILE="$WORK/big_file.cs"
-seq 1 500 > "$BIG_FILE"
+seq 1 200 > "$BIG_FILE"
 SMALL_FILE="$WORK/small_file.cs"
-seq 1 10 > "$SMALL_FILE"
+seq 1 50 > "$SMALL_FILE"
 MISSING_FILE="$WORK/does_not_exist.cs"
-# Char-dense but SHORT file: 50 lines of 800 chars each (40050 bytes) -- well over the 2000-
-# char budget despite having far fewer than 500 lines. This is exactly the case a line-only
-# cap misses.
-DENSE_FILE="$WORK/dense_file.cs"
-line800="$(printf 'x%.0s' $(seq 1 800))"
-yes "$line800" | head -50 > "$DENSE_FILE"
-DENSE_MARKDOWN_FILE="$WORK/dense_file.md"
-cp "$DENSE_FILE" "$DENSE_MARKDOWN_FILE"
-DENSE_TEXT_FILE="$WORK/dense_file.txt"
-cp "$DENSE_FILE" "$DENSE_TEXT_FILE"
-# Large file with short, uniform lines (1500 lines x 2 bytes) so the computed limit exceeds
-# the 500-line ceiling and gets clamped.
-LARGE_FILE="$WORK/large_file.cs"
-yes a | head -1500 > "$LARGE_FILE"
-
-# compute_expected_cap_limit <file> — mirrors the hook's own awk formula (see
-# hooks/tk-route.sh, _emit_read_cap call site) plus the READ_CAP_LINES clamp, so expected
-# limits stay correct without hand-computing byte arithmetic per fixture.
-compute_expected_cap_limit() {
-  local file="$1"
-  local lim
-  lim=$(awk -v cap="2000" '{b+=length($0)+1; c++; if(b>=cap){print c; exit}} END{if(b<cap)print c+0}' "$file")
-  (( lim > 500 )) && lim=500
-  printf '%s' "$lim"
-}
-DENSE_EXPECTED_LIMIT="$(compute_expected_cap_limit "$DENSE_FILE")"
-LARGE_EXPECTED_LIMIT="$(compute_expected_cap_limit "$LARGE_FILE")"
+BIG_MARKDOWN_FILE="$WORK/big_file.md"
+cp "$BIG_FILE" "$BIG_MARKDOWN_FILE"
 
 # hook_run_read <path> <file> <offset> <limit> [cwd]
 # offset/limit empty string means "absent from tool_input" (not merely null).
@@ -685,28 +715,20 @@ expect_read_cap() {
     "$([[ "$LOG_CONTENT" == *$'\t'"cap-read"$'\t'* ]] && echo 1 || echo 0)"
 }
 
-# Group 1: char-dense but short file (well over 2000 chars, far under 500 lines) caps -- the
-# case a line-only cap misses entirely. Deterministic: fires again on an immediate repeat.
+# Group 1: a >120-line file caps to exactly 120. Deterministic: fires again on an immediate
+# repeat.
 rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
-expect_read_cap "char-dense short file, no offset/limit -> capped" "$DENSE_FILE" "" "" "$DENSE_EXPECTED_LIMIT"
-expect_read_cap "cap fires again immediately after -> still capped (no throttle)" "$DENSE_FILE" "" "" "$DENSE_EXPECTED_LIMIT"
+expect_read_cap "big file (200 lines), no offset/limit -> capped to 120" "$BIG_FILE" "" "" "120"
+expect_read_cap "cap fires again immediately after -> still capped (no throttle)" "$BIG_FILE" "" "" "120"
 
-# Group 2: a large file with short lines still caps, and the computed limit is clamped to
-# the 500-line ceiling.
+# Group 2: silent cases -- no stdout at all, including a non-C# file over the line count.
 rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
-expect_read_cap "large file, no offset/limit -> capped, limit clamped to 500" "$LARGE_FILE" "" "" "$LARGE_EXPECTED_LIMIT"
-assert_eq "large file expected limit is clamped to the 500-line ceiling" "500" "$LARGE_EXPECTED_LIMIT"
-
-# Group 3: silent cases -- no stdout at all, including non-C# files over the budget.
-rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
-expect_no_read_cap "dense markdown file -> no cap" "$DENSE_MARKDOWN_FILE" "" ""
-expect_no_read_cap "dense text file -> no cap" "$DENSE_TEXT_FILE" "" ""
-expect_no_read_cap "small file (<2000 chars), no offset/limit -> no cap" "$SMALL_FILE" "" ""
-expect_no_read_cap "big file (500 lines, <2000 chars), no offset/limit -> no cap" "$BIG_FILE" "" ""
+expect_no_read_cap "big markdown file (200 lines) -> no cap (scoped to .cs)" "$BIG_MARKDOWN_FILE" "" ""
+expect_no_read_cap "small file (<=120 lines), no offset/limit -> no cap" "$SMALL_FILE" "" ""
 expect_no_read_cap "missing file -> no cap" "$MISSING_FILE" "" ""
-expect_no_read_cap "dense file with offset given -> untouched (no cap)" "$DENSE_FILE" "100" ""
-expect_no_read_cap "dense file with limit given -> untouched (no cap)" "$DENSE_FILE" "" "10"
-expect_no_read_cap "dense file with offset and limit given -> untouched (no cap)" "$DENSE_FILE" "10" "10"
+expect_no_read_cap "big file with offset given -> untouched (no cap)" "$BIG_FILE" "100" ""
+expect_no_read_cap "big file with limit given -> untouched (no cap)" "$BIG_FILE" "" "10"
+expect_no_read_cap "big file with offset and limit given -> untouched (no cap)" "$BIG_FILE" "10" "10"
 
 # expect_stealth_rewrite_nudge <desc> <command> <expected_new_command>
 # .cs stealth read that the fake rtk DOES recognize (cat/head/tail, mirroring real rtk):
@@ -766,6 +788,81 @@ rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
 expect_no_nudge "cat a .txt file -> no nudge, and rtk doesn't recognize it either (scoped to .cs only)" \
   "cat foo.txt"
 expect_no_nudge "unrelated passthrough command -> no stealth-read nudge" "kubectl get pods"
+
+# ── Bash: whole-file .cs cat/sed/head/tail cap. Closes the loophole where a Read-capped agent
+# falls back to cat/sed/head/tail via Bash, which was previously only advisory-nudged. Real
+# fixture files (not just literal command text) are needed here because the cap logic itself
+# stats the file. Fires deterministically (not throttled, like cap-read); the pre-existing
+# rtk-rewrite/stealth-nudge behavior above is left untouched for anything the cap doesn't
+# match. ────────────────────────────────────────────────────────────────────────────────────
+CS_CAP_BIG="$WORK/cap_big.cs"
+seq 1 200 > "$CS_CAP_BIG"
+CS_CAP_SMALL="$WORK/cap_small.cs"
+seq 1 50 > "$CS_CAP_SMALL"
+CS_CAP_BIG_TXT="$WORK/cap_big.txt"
+cp "$CS_CAP_BIG" "$CS_CAP_BIG_TXT"
+
+# expect_bash_cap <desc> <command> <expected_new_command>
+expect_bash_cap() {
+  local desc="$1" cmd="$2" expected_new="$3"
+  hook_run "$FAKE_BIN" "$cmd"
+
+  assert_eq "$desc: exit 0" "0" "$RC"
+  local got_new
+  got_new="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.updatedInput.command // empty')"
+  assert_eq "$desc: updatedInput.command" "$expected_new" "$got_new"
+  local got_ctx
+  got_ctx="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty')"
+  assert_true "$desc: additionalContext present" "$([[ -n "$got_ctx" ]] && echo 1 || echo 0)"
+  assert_true "$desc: additionalContext mentions total line count (200)" \
+    "$([[ "$got_ctx" == *"200"* ]] && echo 1 || echo 0)"
+  assert_true "$desc: additionalContext mentions tk view" \
+    "$([[ "$got_ctx" == *"tk view"* ]] && echo 1 || echo 0)"
+  assert_true "$desc: decision-log line present (cap-bash)" \
+    "$([[ "$LOG_CONTENT" == *$'\t'"cap-bash"$'\t'* ]] && echo 1 || echo 0)"
+}
+
+# expect_no_bash_cap <desc> <command>
+# No cap fires: no NEW "cap-bash" decision logged (a prior test in the same kept-home group
+# may already have one). Does not assert on updatedInput/nudge, since an unrelated
+# pre-existing rtk-rewrite or stealth-nudge may still legitimately fire.
+expect_no_bash_cap() {
+  local desc="$1" cmd="$2"
+  local before_log="$LOG_CONTENT"
+  hook_run_keep_home "$FAKE_BIN" "$cmd"
+
+  assert_eq "$desc: exit 0" "0" "$RC"
+  local new_log="${LOG_CONTENT#"$before_log"}"
+  assert_true "$desc: no new cap-bash decision logged" \
+    "$([[ "$new_log" != *$'\t'"cap-bash"$'\t'* ]] && echo 1 || echo 0)"
+}
+
+rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
+expect_bash_cap "cat >120-line .cs file -> capped to head -n 120" \
+  "cat $CS_CAP_BIG" "head -n 120 $CS_CAP_BIG"
+
+rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
+expect_stealth_rewrite_nudge "head (no -n) on >120-line .cs file -> untouched by cap, still rtk-read rewritten & nudged" \
+  "head $CS_CAP_BIG" "rtk read $CS_CAP_BIG"
+
+rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
+expect_bash_cap "head -n 300 on >120-line .cs file -> capped to head -n 120" \
+  "head -n 300 $CS_CAP_BIG" "head -n 120 $CS_CAP_BIG"
+
+expect_no_bash_cap "head -n 50 on >120-line .cs file -> no cap (small, deliberate ask)" \
+  "head -n 50 $CS_CAP_BIG"
+
+expect_no_bash_cap "sed -n '200,230p' (small targeted range) -> no cap" \
+  "sed -n '200,230p' $CS_CAP_BIG"
+
+rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME/.claude"; LOG_CONTENT=""
+expect_bash_cap "bare sed on >120-line .cs file -> capped to sed -n '1,120p'" \
+  "sed $CS_CAP_BIG" "sed -n '1,120p' $CS_CAP_BIG"
+
+expect_no_bash_cap "cat on <=120-line .cs file -> no cap" "cat $CS_CAP_SMALL"
+
+expect_passthrough "cat on >120-line non-.cs file -> passthrough, cap scoped to .cs only" \
+  "cat $CS_CAP_BIG_TXT"
 
 # ── Edit tool: large native replacements nudge toward `tk write`. Never blocks/rewrites the
 # Edit itself (no updatedInput ever produced for this tool). Throttled like the other nudges,

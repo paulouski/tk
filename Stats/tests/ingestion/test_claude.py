@@ -158,6 +158,49 @@ class TkInvocationParsing(unittest.TestCase):
         self.assertEqual(session["events"][0]["shown_chars"], len("combined output"))
         self.assertEqual(session["events"][0]["tk_invocation_count"], 2)
 
+    def test_cwd_is_tracked_per_line_not_frozen_on_first_seen(self) -> None:
+        # A session file can legitimately switch cwd mid-file (parallel
+        # subagent turns, monorepo sibling switches). A later tk invocation
+        # must get the cwd active at its own line, not the file's first cwd
+        # — a stale cwd breaks own-log ws-hash matching and silently drops
+        # exit/duration_ms for that invocation (bug #9/#13 root cause).
+        with tempfile.TemporaryDirectory() as tmp:
+            projects_dir = Path(tmp)
+            transcript = projects_dir / "session.jsonl"
+            lines = [
+                {
+                    "sessionId": "s1",
+                    "timestamp": "2026-07-10T10:00:00Z",
+                    "cwd": "/repo/parent",
+                    "message": {
+                        "role": "assistant",
+                        "content": [{
+                            "type": "tool_use", "id": "u1", "name": "Bash",
+                            "input": {"command": "echo hi"},
+                        }],
+                    },
+                },
+                {
+                    "sessionId": "s1",
+                    "timestamp": "2026-07-10T10:00:05Z",
+                    "cwd": "/repo/parent/sub",
+                    "message": {
+                        "role": "assistant",
+                        "content": [{
+                            "type": "tool_use", "id": "u2", "name": "Bash",
+                            "input": {"command": "rm f.txt && tk diag Foo.cs && dotnet build"},
+                        }],
+                    },
+                },
+            ]
+            transcript.write_text("\n".join(json.dumps(line) for line in lines))
+
+            session = claude._parse_session(transcript, projects_dir)
+
+        tk_event = next(e for e in session["events"] if e.get("is_tk"))
+        self.assertEqual(tk_event["cwd"], "/repo/parent/sub")
+        self.assertEqual(tk_event["effective_cwd"], "/repo/parent/sub")
+
     def test_top_commands_counts_every_structured_invocation(self) -> None:
         events = [{
             "is_tk": True,
